@@ -1,8 +1,8 @@
 /* Vela service worker — the app opens with no internet.
    VERSION and PRECACHE are filled in by scripts/postbuild.mjs on every build. */
-const VERSION = "84bc5dbfc063";
+const VERSION = "2bb845a7b364";
 const CACHE = `vela-${VERSION}`;
-const PRECACHE = ["/Vela/","/Vela/assets/dist-CTOaXH3b.js","/Vela/assets/index-DA5gW4pz.css","/Vela/assets/index-DYunCu-r.js","/Vela/assets/leaflet-src-BEW6CtIp.js","/Vela/assets/leaflet-vh-t_kPv.css","/Vela/favicon.svg","/Vela/icon-180.png","/Vela/icon-192.png","/Vela/icon-512.png","/Vela/index.html","/Vela/manifest.webmanifest"];
+const PRECACHE = ["/Vela/","/Vela/assets/dist-CTOaXH3b.js","/Vela/assets/index-CLOAiRHY.css","/Vela/assets/index-Ta_PsO_k.js","/Vela/assets/leaflet-src-BgBWJBw5.js","/Vela/assets/leaflet-vh-t_kPv.css","/Vela/favicon.svg","/Vela/fonts/fraunces-italic-latin-ext.woff2","/Vela/fonts/fraunces-italic-latin.woff2","/Vela/fonts/fraunces-latin-ext.woff2","/Vela/fonts/fraunces-latin.woff2","/Vela/fonts/outfit-latin-ext.woff2","/Vela/fonts/outfit-latin.woff2","/Vela/icon-180.png","/Vela/icon-192.png","/Vela/icon-512.png","/Vela/index.html","/Vela/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -18,7 +18,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       for (const key of await caches.keys()) {
-        if (key.startsWith("vela-") && key !== CACHE && key !== "vela-fonts") await caches.delete(key);
+        if (key.startsWith("vela-") && key !== CACHE) await caches.delete(key);
       }
       await self.clients.claim();
     })(),
@@ -31,22 +31,6 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   // Never cache account or sync traffic, maps or address lookups.
   if (url.hostname.endsWith("supabase.co") || url.hostname.endsWith("supabase.in")) return;
-  if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") {
-    event.respondWith(
-      (async () => {
-        const cache = await caches.open("vela-fonts");
-        const hit = await cache.match(req);
-        const net = fetch(req)
-          .then((res) => {
-            if (res.ok || res.type === "opaque") cache.put(req, res.clone());
-            return res;
-          })
-          .catch(() => hit);
-        return hit || net;
-      })(),
-    );
-    return;
-  }
   if (url.origin !== self.location.origin) return;
   const scope = new URL(self.registration.scope).pathname;
   if (!url.pathname.startsWith(scope)) return;

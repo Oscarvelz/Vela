@@ -1,5 +1,5 @@
 // Cycle tracker visual check. FAKE data only. Serves: e2e build (store hook) at 8132, real docs at 8131.
-// Usage: LD_LIBRARY_PATH=... node tests/cycle-shots.mjs <self|partner|empty|real> [es]
+// Usage: LD_LIBRARY_PATH=... node tests/cycle-shots.mjs <self|partner|learning|empty|real> [es]
 import { chromium } from "/workspace/work/browser-test/node_modules/playwright-core/index.mjs";
 import { mkdirSync } from "node:fs";
 
@@ -37,6 +37,8 @@ if (MODE === "real") {
   await page.waitForSelector('[data-testid="cycle-card"]');
   await page.click('[data-testid="cycle-primary"]');
   await page.waitForTimeout(300);
+  await page.keyboard.press("Escape"); // "Log today" opens the day sheet
+  await page.waitForTimeout(300);
   for (const tab of ["Calendar", "History", "Insights", "Home"]) {
     await page.click(`.ag-tabbar button:has-text("${tab}")`);
     await page.waitForTimeout(400);
@@ -60,7 +62,9 @@ await page.evaluate(
       store.setCycle({ enabled: true });
       return;
     }
-    const startOffsets = [-181, -150, -124, -95, -68, -39, -11];
+    // learning: two measured cycles (lower-chance days stay hidden); the drag hint is already dismissed.
+    if (mode === "learning") localStorage.setItem("vela-cy-scrub", "1");
+    const startOffsets = mode === "learning" ? [-68, -39, -11] : [-181, -150, -124, -95, -68, -39, -11];
     const starts = startOffsets.map(day);
     const ends = { [day(-124)]: day(-120), [day(-95)]: day(-90), [day(-68)]: day(-64), [day(-39)]: day(-35), [day(-11)]: day(-7) };
     const days = {
@@ -129,6 +133,17 @@ for (const mode of ["night", "day"]) {
   }
   await page.screenshot({ path: `${OUT}/${tag}-header-${mode}.png`, clip: { x: 0, y: 0, width: 412, height: 82 } });
   await shot(page.locator('#cycle-card'), `${tag}-home-card-${mode}`);
+  // Scrubbed: four days back with the keyboard (same state a drag gives), then back to today.
+  await page.addStyleTag({ content: ".ag-tabbar,.ag-header{visibility:hidden!important}" }).then((h) => h.evaluate((el) => el.setAttribute("data-shot", "1")));
+  await page.locator(".cy-dial").focus();
+  for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowLeft");
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.waitForTimeout(700);
+  await page.locator('#cycle-card').screenshot({ path: `${OUT}/${tag}-home-card-scrub-${mode}.png` });
+  await page.click('[data-testid="cycle-back"]');
+  await page.evaluate(() => document.querySelectorAll("style[data-shot]").forEach((el) => el.remove()));
+  await page.waitForTimeout(300);
+  if (MODE === "learning") continue;
   // Session form phase chip
   const chip = page.locator('[data-testid="session-phase"]').first();
   if (await chip.count()) {

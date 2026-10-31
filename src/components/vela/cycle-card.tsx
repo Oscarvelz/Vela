@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from "react";
-import { Check, Droplet, RotateCcw, Settings2, X } from "lucide-react";
+import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { Check, Droplet, NotebookPen, RotateCcw, Settings2, X } from "lucide-react";
 import {
   cycleMarks,
   cycleSnapshot,
@@ -7,6 +7,7 @@ import {
   dayInfo,
   libidoByPhase,
   lowChanceDays,
+  lowChanceReady,
   pastCycles,
   periodContaining,
   sessionsByPhase,
@@ -21,6 +22,7 @@ import { useLang, useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
 import { Button, Card, fieldClass } from "./ui";
+import { CycleSky } from "./cycle-sky";
 
 const PHASE_KEY: Record<CyclePhase, CopyKey> = {
   period: "cyclePeriod",
@@ -53,6 +55,15 @@ function markClass(mark: DayMark | undefined) {
 export { markClass as cycleMarkClass };
 
 /* ── Home card ──────────────────────────────────────────────────────────── */
+
+type Snap = ReturnType<typeof cycleSnapshot>;
+type Act = { key: string; label: string; icon?: "drop" | "log"; run: () => void; testId?: string };
+
+/** The period is close enough that "Period started" is the likely next action: 3 days before it is due, through late. */
+function nearPeriod(snap: Snap, date: string) {
+  if (!snap.cycleStart) return false;
+  return date >= addDays(snap.cycleStart, snap.length - 3);
+}
 
 export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onClose?: () => void }) {
   const { t, w, partner } = useCycleWords();
@@ -87,21 +98,47 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
 
   const keyLine = dialLine(snap, today, t);
   const stats = cycleStats(cycle);
-  const primary = snap.periodOpen
-    ? {
-        label: w("cyPeriodEnded"),
-        run: () => {
-          if (snap.cycleStart) setPeriodEnd(snap.cycleStart, today);
-          showToast(t("cyEndToast"));
-        },
-      }
-    : {
-        label: w("cyPeriodStarted"),
-        run: () => {
-          logPeriodStart(today);
-          showToast(t("cyStartToast"));
-        },
-      };
+  const started: Act = {
+    key: "start",
+    label: w("cyPeriodStarted"),
+    icon: "drop",
+    testId: "cycle-start",
+    run: () => {
+      logPeriodStart(today);
+      showToast(t("cyStartToast"));
+    },
+  };
+  const ended: Act = {
+    key: "end",
+    label: w("cyPeriodEnded"),
+    icon: "drop",
+    run: () => {
+      if (snap.cycleStart) setPeriodEnd(snap.cycleStart, today);
+      showToast(t("cyEndToast"));
+    },
+  };
+  const logToday: Act = { key: "log", label: t("cyLogToday"), icon: "log", run: () => openCycleDay(today) };
+  // One amber action for what today most likely needs; the other stays one tap away, outlined.
+  let primary: Act | null;
+  let secondary: Act | null;
+  if (snap.periodOpen) {
+    // Early in the period the day log matters most; near its usual end, "Period ended" leads.
+    const ending = (snap.periodDay ?? 0) >= Math.max(3, snap.periodLength - 1);
+    primary = ending ? ended : partner ? null : logToday;
+    secondary = ending ? (partner ? null : logToday) : ended;
+  } else if (nearPeriod(snap, today)) {
+    primary = started;
+    secondary = partner ? null : logToday;
+  } else {
+    primary = partner ? null : logToday;
+    secondary = started;
+  }
+  const idle = (
+    <div className="cy-row flex h-12 gap-2">
+      {primary ? <ActButton act={primary} testId="cycle-primary" /> : null}
+      {secondary ? <ActButton act={secondary} ghost testId={primary ? "cycle-secondary" : "cycle-primary"} /> : null}
+    </div>
+  );
 
   return (
     <div className={cn(!inSheet && "ag-panel rounded-card border border-border px-4 py-4")} id={inSheet ? undefined : "cycle-card"} data-testid="cycle-card">
@@ -123,18 +160,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
           </button>
         ) : null}
       </div>
-      <CycleDial snap={snap} keyLine={keyLine} />
-      <div className={cn("mt-4 grid gap-2", partner ? "grid-cols-1" : "grid-cols-[1fr_auto]")}>
-        <Button className="w-full" onClick={primary.run} data-testid="cycle-primary">
-          <Droplet className="size-4" aria-hidden />
-          {primary.label}
-        </Button>
-        {!partner ? (
-          <Button variant="ghost" className="px-4" onClick={() => openCycleDay(today)}>
-            {t("cyLogToday")}
-          </Button>
-        ) : null}
-      </div>
+      <CycleDial snap={snap} keyLine={keyLine} idle={idle} />
       <WeekStrip
         picked={picked}
         onPick={(ds) => {
@@ -148,14 +174,8 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
           <PeriodDateActions date={picked} />
         </div>
       ) : null}
-      <p className="mt-3 text-center text-xs leading-relaxed text-dim">
-        {snap.nextPeriod && snap.late === 0 ? (
-          <>
-            {t("cyNextOn")} · <b className="font-semibold text-fg">{fmtShort(snap.nextPeriod, lang)}</b>
-            {snap.window ? ` ${fill(t("cyWindowPm"), { n: snap.window })}` : ""}
-            {" · "}
-          </>
-        ) : null}
+      <p className="mt-3 text-center text-[11px] leading-relaxed text-dim" data-testid="cycle-footnote">
+        {snap.window && snap.late === 0 ? `${fill(t("cyFcShift"), { n: snap.window })} · ` : ""}
         {t("cyEstimate")}
       </p>
       {tune ? <CycleTune /> : null}
@@ -163,7 +183,18 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
   );
 }
 
-function dialLine(snap: ReturnType<typeof cycleSnapshot>, today: string, t: (key: CopyKey) => string) {
+function ActButton({ act, ghost = false, testId }: { act: Act; ghost?: boolean; testId?: string }) {
+  // Only the amber action carries an icon; the outlined one stays quiet (and leaves room for Spanish).
+  const Icon = ghost ? null : act.icon === "drop" ? Droplet : act.icon === "log" ? NotebookPen : null;
+  return (
+    <Button variant={ghost ? "ghost" : "primary"} className={cn("cy-btn min-w-0 px-3", !ghost && "cy-main")} onClick={act.run} data-testid={testId} data-act={act.key}>
+      {Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
+      <span className="min-w-0 truncate">{act.label}</span>
+    </Button>
+  );
+}
+
+function dialLine(snap: Snap, today: string, t: (key: CopyKey) => string) {
   if (snap.late > 0) return snap.late === 1 ? t("cyLate1") : fill(t("cyLateN"), { n: snap.late });
   if (snap.stage === "period" && snap.periodDay) return fill(t("cyPeriodDayN"), { n: snap.periodDay });
   if (snap.stage === "ovulation") return t("cyOvulationToday");
@@ -180,19 +211,44 @@ function daysUntil(from: string, to: string) {
   return Math.round((parseDate(to).getTime() - parseDate(from).getTime()) / 86_400_000);
 }
 
+/**
+ * The one-line forecast in the middle of the dial (two short lines so it never wraps mid-phrase):
+ * what this phase is about, then the next period. "~" marks dates that are still a first guess.
+ */
+function useForecast(snap: Snap, today: string): { lead: string; next: string; late: boolean } {
+  const { t, partner } = useCycleWords();
+  const lang = useLang();
+  const name = useJournal((s) => s.journal.settings.cycle.partnerName).trim();
+  const loc = lang === "es" ? "es" : "en";
+  const weekday = (ds: string) => parseDate(ds).toLocaleDateString(loc, { weekday: "short" }).replace(/\.$/, "");
+  const soon = (ds: string) => (daysUntil(today, ds) <= 6 ? weekday(ds) : fmtShort(ds, lang));
+  const guess = snap.regularity === "learning" ? "~" : "";
+  const nextDate = snap.nextPeriod ? `${guess}${fmtShort(snap.nextPeriod, lang)}` : "";
+  const nextKey: CopyKey = partner ? (name && name.length <= 10 ? "cyFcNextN" : "cyFcNextP") : "cyFcNext";
+  const next = nextDate ? fill(t(nextKey), { d: nextDate, name }) : "";
+  if (snap.late > 0) return { lead: dialLine(snap, today, t), next: t("cyFcLate"), late: true };
+  const fertileFrom = snap.fertileStart && snap.fertileStart > today ? `${guess}${soon(snap.fertileStart)}` : null;
+  if (snap.stage === "period") {
+    return { lead: dialLine(snap, today, t), next: fertileFrom ? fill(t("cyFcFertileFrom"), { d: fertileFrom }) : next, late: false };
+  }
+  if (snap.stage === "ovulation") return { lead: t("cyOvulationToday"), next, late: false };
+  if (snap.ovulation && snap.ovulation > today && (snap.stage === "fertile" || snap.stage === "follicular")) {
+    const peakFrom = addDays(snap.ovulation, -2);
+    if (snap.stage === "follicular" && fertileFrom) return { lead: fill(t("cyFcFertileFrom"), { d: fertileFrom }), next, late: false };
+    let lead: string;
+    if (peakFrom <= today) lead = daysUntil(today, snap.ovulation) === 1 ? t("cyFcPeakTomorrow") : fill(t("cyFcPeakUntil"), { d: weekday(snap.ovulation) });
+    else lead = fill(t("cyFcPeakRange"), { a: weekday(peakFrom), b: weekday(snap.ovulation) });
+    return { lead, next, late: false };
+  }
+  if (snap.stage === "fertile") return { lead: t("cyFcLastFertile"), next, late: false };
+  // Luteal: the countdown, then the date.
+  return { lead: dialLine(snap, today, t), next, late: false };
+}
+
 function RegularityBadge({ regularity }: { regularity: "learning" | "regular" | "irregular" }) {
   const t = useT();
   const key: CopyKey = regularity === "regular" ? "cyRegular" : regularity === "irregular" ? "cyIrregular" : "cyLearning";
-  return (
-    <span
-      className={cn(
-        "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide",
-        regularity === "regular" ? "border-[color:var(--cy-fertile)] cy-text-fertile" : regularity === "irregular" ? "border-[color:var(--cy-period)] cy-text-period" : "border-border text-dim",
-      )}
-    >
-      {t(key)}
-    </span>
-  );
+  return <span className="cy-badge shrink-0">{t(key)}</span>;
 }
 
 /* ── Dial ───────────────────────────────────────────────────────────────── */
@@ -214,35 +270,103 @@ function arcPathR(from: number, to: number, radius: number) {
 }
 
 function arcPath(from: number, to: number) {
-  const [x1, y1] = polar(from);
-  const [x2, y2] = polar(to);
-  const large = to - from > 180 ? 1 : 0;
-  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+  return arcPathR(from, to, R);
 }
 
-export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnapshot>; keyLine: string }) {
+function prefersStill() {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Tiny haptic detents (Android / supporting browsers); silent elsewhere and with reduced motion. */
+function buzz(ms: number) {
+  if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function" || prefersStill()) return;
+  try {
+    navigator.vibrate(ms);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Knob angle that follows the finger while dragging and springs onto the chosen day when released. */
+function useKnobSpring(target: number, dragging: boolean, finger: number | null) {
+  const state = useRef({ angle: target, vel: 0 });
+  const raf = useRef(0);
+  const [, force] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    cancelAnimationFrame(raf.current);
+    if (dragging && finger !== null) {
+      state.current = { angle: finger, vel: 0 };
+      force();
+      return;
+    }
+    if (prefersStill()) {
+      state.current = { angle: target, vel: 0 };
+      force();
+      return;
+    }
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.032, Math.max(0.001, (now - last) / 1000));
+      last = now;
+      const k = state.current;
+      const diff = ((((target - k.angle) % 360) + 540) % 360) - 180;
+      // Spring: stiffness 300, damping 26 (a touch under critical, so it settles with a soft overshoot).
+      k.vel += (300 * diff - 26 * k.vel) * dt;
+      k.angle += k.vel * dt;
+      if (Math.abs(diff) < 0.04 && Math.abs(k.vel) < 0.6) {
+        state.current = { angle: target, vel: 0 };
+        force();
+        return;
+      }
+      force();
+      raf.current = requestAnimationFrame(tick);
+    };
+    raf.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf.current);
+  }, [target, dragging, finger]);
+  return { angle: state.current.angle, reset: (angle: number) => (state.current = { angle, vel: 0 }) };
+}
+
+export function CycleDial({ snap, keyLine, idle }: { snap: Snap; keyLine: string; idle?: ReactNode }) {
   const { t, partner } = useCycleWords();
   const lang = useLang();
   const cycle = useJournal((s) => s.journal.settings.cycle);
   const sessions = useJournal((s) => s.journal.sessions);
   const openCycleDay = useJournal((s) => s.openCycleDay);
+  const logPeriodStart = useJournal((s) => s.logPeriodStart);
+  const removePeriodStart = useJournal((s) => s.removePeriodStart);
+  const setPeriodEnd = useJournal((s) => s.setPeriodEnd);
+  const showToast = useJournal((s) => s.showToast);
+  const name = cycle.partnerName.trim();
   const today = todayStr();
   const start = snap.cycleStart ?? today;
   const length = Math.max(snap.ringLength, 14);
+  const step = 360 / length;
+  const gap = Math.min(1.6, step * 0.18);
+  const todayIndex = snap.day ? Math.min(snap.day, length) - 1 : 0;
+  const marks = useMemo(() => cycleMarks(cycle, start, addDays(start, length - 1), today), [cycle, start, length, today]);
+  // Arcs by phase. Only segments wholly in the future are drawn as predictions (dimmer): the phase that
+  // holds today, and the days already lived, stay at full strength.
   const runs = useMemo(() => {
-    const marks = cycleMarks(cycle, start, addDays(start, length - 1), today);
     const out: { from: number; to: number; phase: CyclePhase; predicted: boolean }[] = [];
     for (let index = 0; index < length; index += 1) {
-      const ds = addDays(start, index);
-      const mark = marks[ds];
+      const mark = marks[addDays(start, index)];
       if (!mark || mark.phase === "quiet") continue;
-      const predicted = ds > today || mark.predicted;
       const last = out[out.length - 1];
-      if (last && last.phase === mark.phase && last.predicted === predicted && last.to === index) last.to = index + 1;
-      else out.push({ from: index, to: index + 1, phase: mark.phase, predicted });
+      if (last && last.phase === mark.phase && last.to === index) last.to = index + 1;
+      else out.push({ from: index, to: index + 1, phase: mark.phase, predicted: false });
     }
+    // The fertile window and its ovulation dot count as one segment: a segment that has begun (today is
+    // in it, or it is past) is drawn at full strength; only segments that start after today are dimmed.
+    const group = (phase: CyclePhase) => (phase === "ovulation" ? "fertile" : phase);
+    let groupFrom = 0;
+    out.forEach((run, index) => {
+      const prev = out[index - 1];
+      if (!prev || group(prev.phase) !== group(run.phase) || prev.to !== run.from) groupFrom = run.from;
+      run.predicted = groupFrom > todayIndex;
+    });
     return out;
-  }, [cycle, start, length, today]);
+  }, [marks, start, length, todayIndex]);
   // Moments (sessions) inside this cycle, by ring index: shows where they fell against the window.
   const moments = useMemo(() => {
     const end = addDays(start, length - 1);
@@ -254,42 +378,53 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
     }
     return out;
   }, [sessions, start, length]);
-  const step = 360 / length;
-  const gap = Math.min(1.6, step * 0.18);
-  const todayIndex = snap.day ? Math.min(snap.day, length) - 1 : 0;
   const [sel, setSel] = useState<number | null>(null);
+  const selRef = useRef<number | null>(null);
+  selRef.current = sel;
   const [dragging, setDragging] = useState(false);
+  const [finger, setFinger] = useState<number | null>(null);
   const [hinted, setHinted] = useState(() => {
-    try { return localStorage.getItem("vela-cy-scrub") === "1"; } catch { return true; }
+    try {
+      return localStorage.getItem("vela-cy-scrub") === "1";
+    } catch {
+      return true;
+    }
   });
   const svgRef = useRef<SVGSVGElement | null>(null);
   const shown = sel ?? todayIndex;
   const scrubbing = sel !== null && sel !== todayIndex;
   const shownDate = addDays(start, shown);
+  // The scrub layer keeps showing its last day while it fades out.
+  const lastScrub = useRef(shown);
+  if (scrubbing) lastScrub.current = shown;
+  const phaseAt = (index: number): CyclePhase => marks[addDays(start, index)]?.phase ?? "quiet";
 
   function choose(index: number) {
     const next = ((index % length) + length) % length;
-    setSel((current) => {
-      if (current !== next && typeof navigator !== "undefined") navigator.vibrate?.(4);
-      return next;
-    });
+    const current = selRef.current ?? todayIndex;
+    if (next !== current) buzz(phaseAt(next) !== phaseAt(current) ? 10 : 4);
+    selRef.current = next;
+    setSel(next);
     if (!hinted) {
       setHinted(true);
-      try { localStorage.setItem("vela-cy-scrub", "1"); } catch { /* ignore */ }
+      try {
+        localStorage.setItem("vela-cy-scrub", "1");
+      } catch {
+        /* ignore */
+      }
     }
   }
-  function indexAt(clientX: number, clientY: number) {
+  function pointAt(clientX: number, clientY: number) {
     const box = svgRef.current?.getBoundingClientRect();
     if (!box) return null;
     const dx = clientX - (box.left + box.width / 2);
     const dy = clientY - (box.top + box.height / 2);
     const dist = Math.hypot(dx, dy) / (box.width / 240);
     if (!dragging && (dist < R - 30 || dist > R + 30)) return null; // taps start on the ring only
-    const angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
-    return Math.floor((((angle % 360) + 360) % 360) / step);
+    const angle = ((((Math.atan2(dy, dx) * 180) / Math.PI + 90) % 360) + 360) % 360;
+    return { angle, index: Math.floor(angle / step) };
   }
 
-  const marks = useMemo(() => cycleMarks(cycle, start, addDays(start, length - 1), today), [cycle, start, length, today]);
   const info = scrubbing ? dayInfo(cycle, shownDate, today) : null;
   const stage: CycleStage = info?.stage ?? snap.stage;
   const offset = daysUntil(today, shownDate);
@@ -298,14 +433,15 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
   const phaseNote = info ? (info.stage === "ovulation" ? t("cyOvulationNote") : info.stage === "fertile" ? t("cyFertileNote") : "") : "";
   const count = moments.get(shown) ?? 0;
   // Lower-chance days (solid: after ovulation; dashed: after the period, before any possibly fertile day).
-  // Bounds come from the engine so they stay conservative and never touch the fertile window.
-  const { low, early } = useMemo(() => lowChanceDays(cycle, today, length), [cycle, today, length]);
-  const tiles = useMemo(() => {
+  // Bounds come from the engine; nothing is drawn until enough cycles are measured to trust them.
+  const lowGate = useMemo(() => lowChanceReady(cycle), [cycle]);
+  const { low, early } = useMemo(() => (lowGate.ready ? lowChanceDays(cycle, today, length) : { low: null, early: null }), [cycle, today, length, lowGate.ready]);
+  const chips = useMemo(() => {
     const out: { key: string; label: CopyKey; dot: string; from: number; to: number }[] = [];
     const first = (phase: CyclePhase) => runs.find((run) => run.phase === phase);
     const period = first("period");
     const fertileRuns = runs.filter((run) => run.phase === "fertile");
-    // The window spans the ovulation dot (it includes the day after ovulation): one tile from first to last day.
+    // The window spans the ovulation dot (it includes the day after ovulation): one chip from first to last day.
     const fertile = fertileRuns.length ? { from: fertileRuns[0].from, to: fertileRuns[fertileRuns.length - 1].to } : undefined;
     const ov = first("ovulation");
     if (period) out.push({ key: "period", label: "cyLegendPeriod", dot: "cy-bg-period", from: period.from, to: period.to });
@@ -314,14 +450,88 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
     if (low) out.push({ key: "low", label: "cyLowTile", dot: "cy-bg-low", from: low.from, to: low.to });
     return out;
   }, [runs, low]);
+  const fertileSpan = chips.find((chip) => chip.key === "fertile") ?? null;
+  const ovIndex = chips.find((chip) => chip.key === "ovulation")?.from ?? null;
   const inLow = Boolean(low && shown >= low.from && shown < low.to);
   const inEarly = Boolean(early && shown >= early.from && shown < early.to);
-  const lowNote = scrubbing && !phaseNote ? (inLow ? t("cyLowNote") : inEarly ? t("cyLowEarlyNote") : "") : "";
+  const forecast = useForecast(snap, today);
 
+  // Hint slot: always the same height, so nothing below it moves while scrubbing.
+  let hint = "";
+  let hintTone = "";
+  if (scrubbing) {
+    if (phaseNote) {
+      hint = phaseNote;
+      hintTone = "cy-bg-fertile";
+    } else if (inLow) {
+      hint = t("cyLowNote");
+      hintTone = "cy-bg-low";
+    } else if (inEarly) {
+      hint = t("cyLowEarlyNote");
+      hintTone = "cy-bg-low";
+    } else if (!lowGate.ready) hint = t("cyLowLearning");
+  } else if (!hinted) hint = t("cyScrubHint");
+  else if (lowGate.ready && (low || early)) hint = t("cyLowWhyShort");
+  else if (!lowGate.ready) hint = t("cyLowLearning");
+
+  // Scrub actions: the main slot becomes the action for the chosen day, the second is the way back.
+  const scrubDay = addDays(start, lastScrub.current);
+  const dayLabel = fmtShort(scrubDay, lang);
+  let scrubAct: Act | null = null;
+  if (scrubDay <= today) {
+    const isStart = cycle.starts.includes(scrubDay);
+    const container = periodContaining(cycle, scrubDay);
+    // Inside the period: up to its logged last day, or a couple of days past the estimate while it is still open.
+    const insidePeriod = Boolean(container && scrubDay > container.start && scrubDay <= (container.end ?? addDays(container.estimatedEnd, 2)));
+    const isEnd = Boolean(container && cycle.ends[container.start] === scrubDay);
+    const startKey: CopyKey = partner ? (name ? "cyStartOnN" : "cyStartOnP") : "cyStartOn";
+    const startAct: Act = {
+      key: "start",
+      icon: "drop",
+      label: fill(t(startKey), { d: dayLabel, name }),
+      run: () => {
+        logPeriodStart(scrubDay);
+        showToast(t("cyStartToast"));
+        setSel(null);
+      },
+    };
+    if (!partner) {
+      const logAct: Act = { key: "log", icon: "log", label: `${cycle.days[scrubDay] ? t("cyEditDay") : t("cyLogDay")} · ${dayLabel}`, run: () => openCycleDay(scrubDay) };
+      scrubAct = !isStart && !insidePeriod && nearPeriod(snap, scrubDay) ? startAct : logAct;
+    } else if (isStart) {
+      scrubAct = { key: "unstart", label: `${t("cycleUnmarkDay")} · ${dayLabel}`, run: () => removePeriodStart(scrubDay) };
+    } else if (container && insidePeriod && scrubDay <= today) {
+      scrubAct = isEnd
+        ? { key: "unend", label: `${t("cyUnmarkEnd")} · ${dayLabel}`, run: () => setPeriodEnd(container.start, null) }
+        : {
+            key: "end",
+            icon: "drop",
+            label: fill(t("cyEndOn"), { d: dayLabel }),
+            run: () => {
+              setPeriodEnd(container.start, scrubDay);
+              showToast(t("cyEndToast"));
+            },
+          };
+    } else scrubAct = startAct;
+  }
+  const scrubLayer = (
+    <div className="cy-row flex h-12 gap-2">
+      {scrubAct ? <ActButton act={scrubAct} testId="cycle-scrub-act" /> : null}
+      <Button variant="ghost" className={cn("cy-btn px-4", scrubAct ? "cy-fixed" : "flex-1")} onClick={() => setSel(null)} aria-label={t("cyBackToday")} data-testid="cycle-back">
+        <RotateCcw className="size-4 shrink-0" aria-hidden />
+        <span className="truncate">{scrubAct ? t("cyTodayShort") : t("cyBackToday")}</span>
+      </Button>
+    </div>
+  );
+
+  const knobTarget = shown * step + step / 2;
+  const knob = useKnobSpring(knobTarget, dragging, finger);
+  const showKnob = scrubbing || dragging;
   const [tx, ty] = polar(todayIndex * step + step / 2);
-  const [sx, sy] = polar(shown * step + step / 2);
+  const [sx, sy] = polar(knob.angle);
   const ticks = Array.from({ length }, (_, index) => index);
   const shownMark = marks[shownDate];
+  const weekdayDate = parseDate(shownDate).toLocaleDateString(lang === "es" ? "es" : "en", { weekday: "short", month: "short", day: "numeric" });
   return (
     <div className="mt-1">
       <div
@@ -334,43 +544,73 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
         aria-valuenow={shown + 1}
         aria-valuetext={`${fmtShort(shownDate, lang)} · ${t("cycleDay")} ${shown + 1} · ${t(stageKey(stage))} · ${scrubbing ? relative : keyLine}`}
         onKeyDown={(event) => {
-          if (event.key === "ArrowRight" || event.key === "ArrowUp") { event.preventDefault(); choose(shown + 1); }
-          else if (event.key === "ArrowLeft" || event.key === "ArrowDown") { event.preventDefault(); choose(shown - 1); }
-          else if (event.key === "Home" || event.key === "Escape") { event.preventDefault(); setSel(null); }
+          if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+            event.preventDefault();
+            choose(shown + 1);
+          } else if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+            event.preventDefault();
+            choose(shown - 1);
+          } else if (event.key === "Home" || event.key === "Escape") {
+            event.preventDefault();
+            setSel(null);
+          }
         }}
       >
+        <CycleSky length={length} today={todayIndex} fertile={fertileSpan} ovulation={ovIndex} />
         <svg
           ref={svgRef}
           viewBox="0 0 240 240"
           aria-hidden
           className="cy-dial-svg"
           onPointerDown={(event) => {
-            const index = indexAt(event.clientX, event.clientY);
-            if (index === null) return;
+            const hit = pointAt(event.clientX, event.clientY);
+            if (!hit) return;
             event.currentTarget.setPointerCapture(event.pointerId);
+            if (!scrubbing) knob.reset(todayIndex * step + step / 2);
             setDragging(true);
-            choose(index);
+            setFinger(hit.angle);
+            choose(hit.index);
           }}
           onPointerMove={(event) => {
             if (!dragging) return;
-            const index = indexAt(event.clientX, event.clientY);
-            if (index !== null) choose(index);
+            const hit = pointAt(event.clientX, event.clientY);
+            if (!hit) return;
+            setFinger(hit.angle);
+            choose(hit.index);
           }}
-          onPointerUp={() => setDragging(false)}
-          onPointerCancel={() => setDragging(false)}
+          onPointerUp={() => {
+            setDragging(false);
+            setFinger(null);
+          }}
+          onPointerCancel={() => {
+            setDragging(false);
+            setFinger(null);
+          }}
         >
+          <defs>
+            <radialGradient id="cy-moon" cx="38%" cy="34%" r="70%">
+              <stop offset="0%" stopColor="var(--cy-moon-hi)" />
+              <stop offset="55%" stopColor="var(--ag-accent)" />
+              <stop offset="100%" stopColor="var(--cy-moon-lo)" />
+            </radialGradient>
+            <radialGradient id="cy-moon-halo">
+              <stop offset="0%" stopColor="var(--ag-accent)" stopOpacity=".55" />
+              <stop offset="45%" stopColor="var(--ag-accent)" stopOpacity=".18" />
+              <stop offset="100%" stopColor="var(--ag-accent)" stopOpacity="0" />
+            </radialGradient>
+          </defs>
           <circle cx={C} cy={C} r={R} fill="none" stroke="var(--cy-track)" strokeWidth={STROKE} />
           {ticks.map((index) => {
             const [x1, y1] = polar(index * step, R - STROKE / 2 - 5);
             const [x2, y2] = polar(index * step, R - STROKE / 2 - (index % 7 === 0 ? 10 : 7));
-            return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--ag-dim)" strokeOpacity={index % 7 === 0 ? 0.55 : 0.22} strokeWidth={1} strokeLinecap="round" />;
+            return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--ag-dim)" strokeOpacity={index % 7 === 0 ? 0.5 : 0.2} strokeWidth={1} strokeLinecap="round" />;
           })}
           <g className="cy-arcs">
             {runs
               .filter((run) => run.phase !== "ovulation")
               .map((run) => (
                 <path
-                  key={`${run.from}-${run.phase}-${run.predicted}`}
+                  key={`${run.from}-${run.phase}`}
                   d={arcPath(run.from * step + gap / 2, run.to * step - gap / 2)}
                   fill="none"
                   strokeWidth={STROKE}
@@ -382,121 +622,109 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
               .filter((run) => run.phase === "ovulation")
               .map((run) => {
                 const [ox, oy] = polar(run.from * step + step / 2);
-                return <circle key={`ov-${run.from}`} cx={ox} cy={oy} r={STROKE / 2 + 2.5} className={cn("cy-ov-dot", run.predicted && "cy-ov-pred")} />;
+                return <circle key={`ov-${run.from}`} cx={ox} cy={oy} r={STROKE / 2 + 2} className={cn("cy-ov-dot", run.predicted && "cy-ov-pred")} />;
               })}
           </g>
           {low ? (
-            <path d={arcPathR(low.from * step + gap / 2, low.to * step, R + STROKE / 2 + 2.6)} fill="none" strokeWidth={2.4} strokeLinecap="round" className={cn("cy-arc-low", inLow && scrubbing && "is-lit")} />
+            <path d={arcPathR(low.from * step + gap / 2, low.to * step, R + STROKE / 2 + 2.6)} fill="none" strokeWidth={2.4} strokeLinecap="round" className={cn("cy-arc-low", inLow && scrubbing && "is-lit")} data-testid="cycle-low-arc" />
           ) : null}
           {early ? (
-            <path d={arcPathR(early.from * step + gap / 2, early.to * step - gap / 2, R + STROKE / 2 + 2.6)} fill="none" strokeWidth={2.4} strokeLinecap="round" className={cn("cy-arc-low cy-arc-early", inEarly && scrubbing && "is-lit")} />
+            <path d={arcPathR(early.from * step + gap / 2, early.to * step - gap / 2, R + STROKE / 2 + 2.6)} fill="none" strokeWidth={2.4} strokeLinecap="round" className={cn("cy-arc-low cy-arc-early", inEarly && scrubbing && "is-lit")} data-testid="cycle-early-arc" />
           ) : null}
           <g className="cy-moments">
             {[...moments.keys()].map((index) => {
               const [mx, my] = polar(index * step + step / 2, R + STROKE / 2 + 8.5);
-              return <circle key={`m-${index}`} cx={mx} cy={my} r={moments.get(index)! > 1 ? 2.6 : 2} className="cy-moment" />;
+              return <circle key={`m-${index}`} cx={mx} cy={my} r={moments.get(index)! > 1 ? 2.4 : 1.8} className="cy-moment" />;
             })}
           </g>
           {snap.day ? (
-            <>
-              <circle cx={tx} cy={ty} r={13} className="cy-today-halo" />
-              <circle cx={tx} cy={ty} r={7.5} className="cy-today-dot" />
-            </>
+            <g className="cy-today">
+              <circle cx={tx} cy={ty} r={17} fill="url(#cy-moon-halo)" className="cy-today-halo" />
+              <circle cx={tx} cy={ty} r={7.5} fill="url(#cy-moon)" className="cy-today-dot" />
+            </g>
           ) : null}
-          {scrubbing ? (
+          {showKnob ? (
             <g className="cy-knob">
               <circle cx={sx} cy={sy} r={11.5} className={cn("cy-knob-ring", shownMark && shownMark.phase !== "quiet" && `cy-knob-${shownMark.phase}`)} />
-              <circle cx={sx} cy={sy} r={4} className="cy-knob-core" />
+              <circle cx={sx} cy={sy} r={3.6} className="cy-knob-core" />
             </g>
           ) : null}
         </svg>
-        <button
-          type="button"
-          className={cn("cy-center", scrubbing && "is-scrub")}
-          tabIndex={-1}
-          aria-hidden
-          onClick={() => setSel(null)}
-        >
+        <button type="button" className={cn("cy-center", scrubbing && "is-scrub")} tabIndex={-1} aria-hidden onClick={() => setSel(null)}>
           <span key={scrubbing ? shownDate : "today"} className="cy-center-in">
-            <span className={cn("text-[10px] font-semibold text-dim uppercase", scrubbing ? "tracking-[0.1em]" : "tracking-[0.22em]")}>
-              {scrubbing ? `${t("cycleDay")} · ${parseDate(shownDate).toLocaleDateString(lang === "es" ? "es" : "en", { weekday: "short", month: "short", day: "numeric" })}` : t("cycleDay")}
+            <span className={cn("max-w-full truncate text-[10px] font-semibold text-dim uppercase", scrubbing ? "tracking-[0.08em]" : "tracking-[0.22em]")}>
+              {scrubbing ? weekdayDate : t("cycleDay")}
             </span>
-            <span className={cn("font-display leading-[0.95] tabular-nums", scrubbing ? "text-[3rem]" : "text-[3.4rem]")} data-testid="cycle-day">
+            <span className="cy-num font-display tabular-nums" data-testid="cycle-day">
               {scrubbing ? shown + 1 : (snap.day ?? "—")}
             </span>
-            <span className="mt-1 flex items-center gap-1.5 text-sm font-semibold">
-              <span className={cn("size-2 rounded-full", stageDot(stage))} />
-              {t(stageKey(stage))}
+            <span className="flex max-w-full items-center gap-1.5 text-[13px] font-semibold">
+              <span className={cn("size-2 shrink-0 rounded-full", stageDot(stage))} />
+              <span className="truncate">{t(stageKey(stage))}</span>
             </span>
-            <span className={cn("mt-1 max-w-[11rem] text-xs leading-snug", !scrubbing && snap.late > 0 ? "cy-text-period font-semibold" : "text-dim")}>
+            <span className={cn("cy-forecast", forecast.late && !scrubbing && "is-late")} data-testid="cycle-forecast">
               {scrubbing ? (
                 <>
-                  {relative}
-                  {offset > 0 ? ` · ${t("cyLegendPredicted").toLowerCase()}` : ""}
+                  <span>{relative}</span>
+                  <span className="text-dim">{offset > 0 ? t("cyLegendPredicted").toLowerCase() : count > 0 ? (count === 1 ? t("cyMoment1") : fill(t("cyMomentsN"), { n: count })) : "\u00a0"}</span>
                 </>
               ) : (
-                keyLine
+                <>
+                  <span>{forecast.lead}</span>
+                  <span className="text-dim">{forecast.next || "\u00a0"}</span>
+                </>
               )}
             </span>
-            {count > 0 ? (
-              <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
-                <span className="cy-moment-dot" />
-                {count === 1 ? t("cyMoment1") : fill(t("cyMomentsN"), { n: count })}
-              </span>
-            ) : null}
           </span>
         </button>
       </div>
-      <div className={cn("cy-tiles mt-3 grid gap-1.5", tiles.length === 4 ? "grid-cols-4" : "grid-cols-3")} data-testid="cycle-phase-chips">
-        {tiles.map((tile) => {
-          const on = scrubbing && shown >= tile.from && shown < tile.to;
+      <div className="cy-legend" data-testid="cycle-phase-chips">
+        {chips.map((chip) => {
+          const on = scrubbing && shown >= chip.from && shown < chip.to;
           return (
             <button
-              key={tile.key}
+              key={chip.key}
               type="button"
-              onClick={() => choose(tile.from)}
-              className={cn("cy-tile", on && "is-on", tile.key === "low" && "is-low")}
-              aria-label={`${t("cyJumpTo")} ${t(tile.label)}`}
+              onClick={() => choose(chip.from)}
+              className={cn("cy-chip", on && "is-on")}
+              data-chip={chip.key}
+              aria-label={`${t("cyJumpTo")} ${t(chip.label)}`}
               aria-pressed={on}
             >
-              <span className="flex items-center gap-1">
-                <span className={cn("size-2 shrink-0 rounded-full", tile.dot)} />
-                <span className="tabular-nums text-dim">{tile.to - tile.from > 1 ? `${tile.from + 1}–${tile.to}` : tile.from + 1}</span>
-              </span>
-              <span className="w-full font-semibold leading-tight [overflow-wrap:anywhere]">{t(tile.label)}</span>
+              <span className={cn("cy-chip-dot", chip.dot)} />
+              <span>{t(chip.label)}</span>
+              <span className="cy-chip-num tabular-nums text-dim">{chip.to - chip.from > 1 ? `${chip.from + 1}–${chip.to}` : chip.from + 1}</span>
             </button>
           );
         })}
       </div>
-      <div className="cy-actions mt-2 min-h-[37px]">
-        {scrubbing ? (
-          <div className="cy-rise space-y-2">
-            {phaseNote || lowNote ? <p className={cn("text-center text-xs font-semibold", phaseNote ? "cy-text-fertile" : "cy-text-low")}>{phaseNote || lowNote}</p> : null}
-            <div className="flex items-center justify-center gap-2">
-              <button type="button" className="cy-act shrink-0" onClick={() => setSel(null)} aria-label={t("cyBackToday")}>
-                <RotateCcw className="size-3.5" aria-hidden />
-                {t("cyTodayShort")}
-              </button>
-              {shownDate <= today ? (
-                partner ? (
-                  <PeriodDateActions date={shownDate} compact />
-                ) : (
-                  <button type="button" className="cy-act is-accent" onClick={() => openCycleDay(shownDate)}>
-                    {cycle.days[shownDate] ? t("cyEditDay") : t("cyLogDay")}
-                  </button>
-                )
-              ) : null}
-            </div>
-          </div>
-        ) : (
-          <p className="pt-2 text-center text-[11px] leading-snug text-dim">{hinted && low ? t("cyLowWhy") : t("cyScrubHint")}</p>
-        )}
+      <p className="cy-hint" data-testid="cycle-hint" aria-live="polite">
+        <span key={hint} className="cy-hint-in">
+          {hintTone ? <span className={cn("cy-hint-dot", hintTone)} aria-hidden /> : null}
+          {hint}
+        </span>
+      </p>
+      <div className="cy-slot" data-scrub={scrubbing ? "1" : "0"}>
+        <div className="cy-layer" data-on={!scrubbing} inert={scrubbing || undefined} aria-hidden={scrubbing || undefined}>
+          {idle}
+        </div>
+        <div className="cy-layer" data-on={scrubbing} inert={!scrubbing || undefined} aria-hidden={!scrubbing || undefined}>
+          {scrubLayer}
+        </div>
       </div>
     </div>
   );
 }
 
 /* ── 7-day strip ────────────────────────────────────────────────────────── */
+
+function weekMark(mark: DayMark | undefined) {
+  if (!mark) return "";
+  if (mark.phase === "period") return mark.predicted ? "cy-wk-period-pred" : "cy-wk-period";
+  if (mark.phase === "ovulation") return "cy-wk-ovulation";
+  if (mark.phase === "fertile") return "cy-wk-fertile";
+  return "";
+}
 
 function WeekStrip({ picked, onPick }: { picked: string | null; onPick: (ds: string) => void }) {
   const lang = useLang();
@@ -506,7 +734,7 @@ function WeekStrip({ picked, onPick }: { picked: string | null; onPick: (ds: str
   const days = Array.from({ length: 7 }, (_, index) => addDays(today, index - 3));
   const marks = cycleMarks(cycle, days[0], days[6], today);
   return (
-    <div className="mt-4 grid grid-cols-7 gap-1" data-testid="cycle-week">
+    <div className="mt-4 grid grid-cols-7 gap-1 border-t border-border pt-3" data-testid="cycle-week">
       {days.map((ds) => {
         const parsed = parseDate(ds);
         const mark = marks[ds];
@@ -520,18 +748,12 @@ function WeekStrip({ picked, onPick }: { picked: string | null; onPick: (ds: str
             onClick={() => onPick(ds)}
             aria-pressed={picked === ds}
             aria-label={ds}
-            className={cn("cy-week-day flex flex-col items-center gap-1 rounded-xl py-1.5", picked === ds && "bg-surface-2", future && "opacity-80")}
+            className={cn("cy-week-day flex flex-col items-center gap-1 rounded-xl py-1", picked === ds && "bg-surface-2")}
           >
-            <span className={cn("text-[10px] font-semibold uppercase", ds === today ? "text-accent" : "text-dim")}>
+            <span className={cn("text-[10px] font-semibold uppercase", ds === today ? "text-accent" : "text-dim", future && "opacity-60")}>
               {parsed.toLocaleDateString(lang === "es" ? "es" : "en", { weekday: "narrow" })}
             </span>
-            <span
-              className={cn(
-                "cy-week-num grid size-9 place-items-center rounded-full text-sm font-semibold tabular-nums",
-                markClass(mark),
-                ds === today && "cy-today-ring",
-              )}
-            >
+            <span className={cn("cy-wk grid size-8 place-items-center rounded-full text-[13px] font-semibold tabular-nums", weekMark(mark), ds === today && "cy-wk-today", future && "is-future")}>
               {parsed.getDate()}
             </span>
             <span className={cn("size-1 rounded-full", logged ? "bg-accent" : "bg-transparent")} />
@@ -807,8 +1029,8 @@ export function CycleStats() {
             {history.map((row) => (
               <div key={row.start} className="flex min-w-0 flex-1 flex-col items-center gap-1">
                 <span className="text-[11px] font-semibold tabular-nums">{row.length}</span>
-                <span className="relative flex w-full max-w-9 flex-col justify-end overflow-hidden rounded-[10px] bg-surface-2" style={{ height: `${Math.round((row.length / longest) * 96)}px` }}>
-                  <span className={cn("block w-full", row.periodLogged ? "cy-bg-period" : "cy-bg-period opacity-60")} style={{ height: `${Math.round((row.period / row.length) * 100)}%` }} />
+                <span className="cy-cbar relative flex w-full max-w-9 flex-col overflow-hidden rounded-[10px]" style={{ height: `${Math.round((row.length / longest) * 96)}px` }}>
+                  <span className={cn("block w-full cy-bg-period", !row.periodLogged && "opacity-60")} style={{ height: `${Math.round((row.period / row.length) * 100)}%` }} />
                 </span>
                 <span className="w-full truncate text-center text-[10px] text-dim">{fmtShort(row.start, lang)}</span>
               </div>
@@ -828,7 +1050,7 @@ export function CycleStats() {
               <span className="shrink-0 text-sm tabular-nums text-dim">{row.value}</span>
             </span>
             <span className="block h-2.5 w-full overflow-hidden rounded-full bg-surface-2">
-              <span className="ag-liquid block h-full max-w-full rounded-full" style={{ width: `${Math.max(row.value > 0 ? 8 : 0, Math.round((row.value / max) * 100))}%` }} />
+              <span className={cn("cy-mbar block h-full max-w-full rounded-full", `is-${row.phase}`)} style={{ width: `${Math.max(row.value > 0 ? 8 : 0, Math.round((row.value / max) * 100))}%` }} />
             </span>
           </button>
         ))}

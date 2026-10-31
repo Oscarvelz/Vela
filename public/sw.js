@@ -18,7 +18,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       for (const key of await caches.keys()) {
-        if (key.startsWith("vela-") && key !== CACHE && key !== "vela-fonts") await caches.delete(key);
+        if (key.startsWith("vela-") && key !== CACHE) await caches.delete(key);
       }
       await self.clients.claim();
     })(),
@@ -31,22 +31,6 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   // Never cache account or sync traffic, maps or address lookups.
   if (url.hostname.endsWith("supabase.co") || url.hostname.endsWith("supabase.in")) return;
-  if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") {
-    event.respondWith(
-      (async () => {
-        const cache = await caches.open("vela-fonts");
-        const hit = await cache.match(req);
-        const net = fetch(req)
-          .then((res) => {
-            if (res.ok || res.type === "opaque") cache.put(req, res.clone());
-            return res;
-          })
-          .catch(() => hit);
-        return hit || net;
-      })(),
-    );
-    return;
-  }
   if (url.origin !== self.location.origin) return;
   const scope = new URL(self.registration.scope).pathname;
   if (!url.pathname.startsWith(scope)) return;

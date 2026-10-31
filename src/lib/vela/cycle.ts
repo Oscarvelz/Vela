@@ -483,6 +483,20 @@ export function lowChanceDays(cycle: CycleSettings, today: string, ringLength?: 
   };
 }
 
+/** Measured cycles needed before the dial shows lower-chance days at all. */
+export const LOW_CHANCE_MIN_CYCLES = 6;
+
+/**
+ * Whether lower-chance days may be shown. Calendar bounds are only as good as the measured spread, so
+ * they stay hidden while the rhythm is still learning: fewer than LOW_CHANCE_MIN_CYCLES measured cycles.
+ * `missing` is how many more measured cycles are needed (0 when ready).
+ */
+export function lowChanceReady(cycle: CycleSettings): { ready: boolean; measured: number; missing: number } {
+  const measured = cycleStats(cycle).gaps.length;
+  const missing = Math.max(0, LOW_CHANCE_MIN_CYCLES - measured);
+  return { ready: cycle.enabled && missing === 0, measured, missing };
+}
+
 /** The logged period (start and end, logged or estimated) that contains this date, if any. */
 export function periodContaining(cycle: CycleSettings, ds: string) {
   const starts = sortedStarts(cycle.starts);

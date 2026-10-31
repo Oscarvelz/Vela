@@ -1,7 +1,7 @@
 // Sanity checks for the cycle engine. Fake data only. Run: node tests/run-cycle-check.mjs
 import {
   cleanCycle, cycleStats, cycleSnapshot, cycleMarks, pastCycles, withStart, withEnd, withDayLog, withoutStart,
-  libidoByPhase, sessionsByPhase, periodContaining, defaultCycle, dayInfo, lowChanceDays, phaseOn,
+  libidoByPhase, sessionsByPhase, periodContaining, defaultCycle, dayInfo, lowChanceDays, lowChanceReady, LOW_CHANCE_MIN_CYCLES, phaseOn,
 } from "../src/lib/vela/cycle";
 import { addDays } from "../src/lib/vela/dates";
 
@@ -128,6 +128,18 @@ ok("dayInfo ov+1 stage fertile", dayInfo(c, "2026-06-08", today)?.stage === "fer
   const one = cleanCycle({ enabled: true, starts: ["2026-06-01"] });
   const oneLow = lowChanceDays(one, "2026-06-10");
   ok("learning (1 start): one extra day of margin each side", oneLow.low?.from === 18 && oneLow.early?.to === 8, oneLow);
+}
+// 8c2. Lower-chance days stay hidden while learning: they need LOW_CHANCE_MIN_CYCLES measured cycles.
+{
+  ok("min cycles is 6", LOW_CHANCE_MIN_CYCLES === 6);
+  const startsN = (n: number) => Array.from({ length: n }, (_, i) => addDays("2026-01-01", i * 28));
+  ok("1 start: not ready, 6 missing", JSON.stringify(lowChanceReady(cleanCycle({ enabled: true, starts: startsN(1) }))) === JSON.stringify({ ready: false, measured: 0, missing: 6 }));
+  ok("4 starts (3 cycles, regular): still hidden", lowChanceReady(c).ready === false && lowChanceReady(c).missing === 3, lowChanceReady(c));
+  ok("6 starts (5 cycles): not ready", !lowChanceReady(cleanCycle({ enabled: true, starts: startsN(6) })).ready);
+  ok("7 starts (6 cycles): ready", lowChanceReady(cleanCycle({ enabled: true, starts: startsN(7) })).ready);
+  ok("disabled: never ready", !lowChanceReady(cleanCycle({ enabled: false, starts: startsN(9) })).ready);
+  const gappy = cleanCycle({ enabled: true, starts: ["2026-01-01", "2026-01-05", "2026-02-02", "2026-03-02", "2026-03-30", "2026-04-27", "2026-05-25"] });
+  ok("implausible gaps (<15 days) do not count as measured cycles", !lowChanceReady(gappy).ready && lowChanceReady(gappy).measured === 5, lowChanceReady(gappy));
 }
 // 8d. A cycle left open for months (no new start): the calendar day panel still counts days right.
 {
