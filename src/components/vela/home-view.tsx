@@ -131,8 +131,7 @@ export function HomeView() {
             }}
           />
         </Card>
-        <Card className={showBatch ? "" : "hidden"}>
-          <h2 className="mb-4 font-display text-2xl">{t("batchTitle")}</h2>
+        <Card className={cn("vb-card-shell relative isolate overflow-hidden px-5 pb-5 pt-6", showBatch ? "" : "hidden")} aria-label={t("batchTitle")}>
           <BatchLog
             onSaved={() => {
               setShowBatch(false);

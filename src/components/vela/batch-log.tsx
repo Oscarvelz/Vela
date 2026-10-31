@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { Minus, Plus, Sparkles } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { CalendarClock, Check, ChevronDown, Eraser, Feather, HeartPulse, MapPin, Minus, Plus, Repeat, Shield, Shuffle, Smile, Sparkles, Tag, UserPlus, WandSparkles } from "lucide-react";
 import { parseBatch, type BatchEntry } from "@/lib/vela/batch";
 import { useBatchT } from "@/lib/vela/batch-copy";
 import { NAMED_PLACES, PLACES, POSITIONS, PROBLEMS, knownProblem, placeLabel, positionLabel } from "@/lib/vela/catalog";
@@ -29,6 +29,17 @@ function keyOf(entry: BatchEntry, index: number) {
   return `${index}:${entry.source}`;
 }
 
+const KNOWS = [
+  ["kDates", CalendarClock],
+  ["kRounds", Repeat],
+  ["kPlaces", MapPin],
+  ["kPositions", Shuffle],
+  ["kProtection", Shield],
+  ["kProblems", HeartPulse],
+  ["kFelt", Smile],
+  ["kBubbles", Tag],
+] as const;
+
 export function BatchLog({ onSaved }: { onSaved: () => void }) {
   const t = useT();
   const b = useBatchT();
@@ -39,8 +50,12 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
   const [text, setText] = useState("");
   const [picked, setPicked] = useState(defaultPartner);
   const [typed, setTyped] = useState("");
+  const [naming, setNaming] = useState(false);
+  const [knows, setKnows] = useState(false);
   const [edits, setEdits] = useState<Record<string, Edit>>({});
   const [open, setOpen] = useState<string | null>(null);
+  const area = useRef<HTMLTextAreaElement>(null);
+  const nameField = useRef<HTMLInputElement>(null);
 
   const parsed = useMemo(
     () =>
@@ -61,59 +76,163 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
   const kept = cards.filter((card) => !card.skip);
   const missingPartner = kept.some((card) => !card.entry.partnerName && !batchPartner);
   const sessionTotal = kept.reduce((sum, card) => sum + card.entry.count, 0);
+  const showName = naming || partners.length === 0 || typed.length > 0;
+  const blocked = kept.length === 0 || missingPartner;
+  const saveHint =
+    cards.length === 0 ? b("saveHintEmpty") : kept.length === 0 ? b("saveHintSkipped") : missingPartner ? b("saveHintPartner") : "";
+  const partnerLine = typed.trim()
+    ? ""
+    : batchPartner
+      ? defaultPartner && picked === defaultPartner
+        ? b("presetHint")
+        : ""
+      : b("partnerHint");
+
+  // The journal page grows with the words (and shrinks back), never a scroll box inside a scroll.
+  useLayoutEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [text]);
+
+  useEffect(() => {
+    if (naming) nameField.current?.focus();
+  }, [naming]);
 
   function patch(key: string, change: Edit) {
     setEdits((current) => ({ ...current, [key]: { ...current[key], ...change } }));
   }
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm leading-relaxed text-dim">{b("hint")}</p>
-      <div>
-        <p className="mb-2 text-sm font-semibold">{t("batchWith")}</p>
-        <div className="flex flex-wrap gap-2">
-          {partners.map((name) => (
-            <button
-              key={name}
-              type="button"
-              aria-pressed={!typed && picked === name}
-              className={cn(
-                "min-h-10 rounded-full border px-3 text-sm font-semibold",
-                !typed && picked === name ? "ag-chip-on" : "border-border text-fg",
-              )}
-              onClick={() => {
-                setPicked(name);
-                setTyped("");
-              }}
-            >
-              {name}
-            </button>
-          ))}
+    <div className="vb">
+      <div className="vb-sky" aria-hidden />
+      <header className="vb-head">
+        <p className="vb-eyebrow">
+          <Feather className="size-3.5" strokeWidth={2} aria-hidden />
+          {b("eyebrow")}
+        </p>
+        <h2 className="vb-title font-display">{b("title")}</h2>
+        <p className="vb-sub">{b("sub")}</p>
+      </header>
+
+      <div className="vb-knows" data-open={knows}>
+        <button type="button" className="vb-knows-btn" aria-expanded={knows} onClick={() => setKnows((v) => !v)}>
+          <span className="vb-knows-dots" aria-hidden>
+            <i />
+            <i />
+            <i />
+          </span>
+          <span className="flex-1 text-left">{b("knowsTitle")}</span>
+          <ChevronDown className="vb-knows-chev size-4" strokeWidth={2} aria-hidden />
+        </button>
+        <div className="vb-fold" data-open={knows}>
+          <div className="vb-fold-in">
+            <ul className="vb-knows-list">
+              {KNOWS.map(([key, Icon]) => (
+                <li key={key} className="vb-knows-chip">
+                  <Icon className="size-3.5" strokeWidth={2} aria-hidden />
+                  {b(key)}
+                </li>
+              ))}
+            </ul>
+            <p className="vb-knows-note">{b("knowsExample")}</p>
+          </div>
         </div>
-        <input
-          className={cn(fieldClass, "mt-3")}
-          value={typed}
-          placeholder={t("newPartnerPh")}
-          aria-label={t("batchWith")}
-          onChange={(event) => setTyped(event.target.value)}
-        />
-        <p className="mt-2 text-sm leading-relaxed text-dim">{batchPartner || t("batchNeedPartner")}</p>
       </div>
-      <textarea
-        className={cn(fieldClass, "min-h-44 resize-y leading-relaxed")}
-        value={text}
-        placeholder={b("placeholder")}
-        aria-label={t("batchTitle")}
-        onChange={(event) => setText(event.target.value)}
-      />
-      {cards.length === 0 ? (
-        <p className="text-sm text-dim">{t("batchEmpty")}</p>
-      ) : (
+
+      <div className="vb-section">
+        <p className="vb-label">{b("pickPartner")}</p>
+        <div className="flex flex-wrap gap-2" role="group" aria-label={t("batchWith")}>
+          {partners.map((name) => {
+            const on = !typed.trim() && picked === name;
+            return (
+              <button
+                key={name}
+                type="button"
+                aria-pressed={on}
+                className={cn("vb-chip", on ? "ag-chip-on" : "vb-chip-off")}
+                onClick={() => {
+                  setPicked(name);
+                  setTyped("");
+                  setNaming(false);
+                }}
+              >
+                {on ? <Check className="size-3.5" strokeWidth={2.6} aria-hidden /> : null}
+                {name}
+              </button>
+            );
+          })}
+          {showName ? (
+            <label className={cn("vb-name", typed.trim() && "is-on")}>
+              <UserPlus className="size-3.5 shrink-0" strokeWidth={2} aria-hidden />
+              <input
+                ref={nameField}
+                value={typed}
+                placeholder={partners.length ? b("newNamePh") : t("newPartnerPh")}
+                aria-label={t("batchWith")}
+                onChange={(event) => setTyped(event.target.value)}
+                onBlur={() => {
+                  if (!typed.trim()) setNaming(false);
+                }}
+              />
+            </label>
+          ) : (
+            <button type="button" className="vb-chip vb-chip-new" onClick={() => setNaming(true)}>
+              <Plus className="size-3.5" strokeWidth={2.4} aria-hidden />
+              {b("newName")}
+            </button>
+          )}
+        </div>
+        {partnerLine ? <p className="vb-hint">{partnerLine}</p> : null}
+      </div>
+
+      <div className="vb-page">
+        <textarea
+          ref={area}
+          className="vb-page-text"
+          value={text}
+          rows={4}
+          placeholder={b("placeholder")}
+          aria-label={t("batchTitle")}
+          onChange={(event) => setText(event.target.value)}
+        />
+        <div className="vb-page-foot">
+          {text ? (
+            <button type="button" className="vb-mini" onClick={() => { setText(""); setEdits({}); setOpen(null); area.current?.focus(); }}>
+              <Eraser className="size-3.5" strokeWidth={2} aria-hidden />
+              {b("clear")}
+            </button>
+          ) : (
+            <button type="button" className="vb-mini vb-mini-accent" data-testid="batch-example" onClick={() => setText(b("sample"))}>
+              <WandSparkles className="size-3.5" strokeWidth={2} aria-hidden />
+              {b("example")}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className={cn("vb-status", cards.length > 0 && "is-found")} data-testid="batch-status" aria-live="polite">
+        <span className="vb-stars" aria-hidden>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <i key={i} className={i < Math.min(5, kept.length) ? "is-lit" : ""} />
+          ))}
+        </span>
+        {cards.length === 0 ? (
+          <span className="vb-status-text">{b("listening")}</span>
+        ) : (
+          <span className="vb-status-text">
+            {b("foundLead")}{" "}
+            <span key={cards.length} className="vb-count">
+              {cards.length} {cards.length === 1 ? b("moment") : b("moments")}
+            </span>
+            {kept.length === 0 ? <span className="text-dim"> · {b("allSkipped")}</span> : null}
+          </span>
+        )}
+      </div>
+
+      {cards.length > 0 ? (
         <>
-          <p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-fg/70 uppercase">
-            <Sparkles className="size-3.5 text-accent" strokeWidth={1.75} />
-            {b("found")}
-          </p>
           <ul className="space-y-3">
             {cards.map((card, index) => (
               <EntryCard
@@ -129,35 +248,45 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
               />
             ))}
           </ul>
-          {cards.some((card) => card.edited) ? <p className="text-xs leading-relaxed text-fg/60">{b("resetEdits")}</p> : null}
+          {cards.some((card) => card.edited) ? <p className="vb-hint">{b("resetEdits")}</p> : null}
         </>
-      )}
-      <Button
-        variant="save"
-        className="w-full rounded-control text-base"
-        data-testid="batch-save"
-        disabled={kept.length === 0 || missingPartner}
-        onClick={(event) => {
-          if (kept.length === 0 || missingPartner) return;
-          saveBurst(event.currentTarget);
-          saveBatch(
-            kept.map((card) => card.entry),
-            batchPartner,
-          );
-          setText("");
-          setTyped("");
-          setEdits({});
-          setOpen(null);
-          onSaved();
-        }}
-      >
-        <span className="ag-save-ico" aria-hidden>
-          <Sparkles className="size-[18px]" strokeWidth={2.2} />
-        </span>
-        {kept.length > 0
-          ? `${t("batchSave")} · ${sessionTotal} ${sessionTotal === 1 ? b("sessionWord") : b("sessionsWord")}`
-          : t("batchSave")}
-      </Button>
+      ) : null}
+
+      <div className="vb-save-wrap">
+        <Button
+          variant="save"
+          className="vb-save w-full rounded-control text-base"
+          data-testid="batch-save"
+          disabled={blocked}
+          aria-describedby={saveHint ? "vb-save-hint" : undefined}
+          onClick={(event) => {
+            if (blocked) return;
+            saveBurst(event.currentTarget);
+            saveBatch(
+              kept.map((card) => card.entry),
+              batchPartner,
+            );
+            setText("");
+            setTyped("");
+            setNaming(false);
+            setEdits({});
+            setOpen(null);
+            onSaved();
+          }}
+        >
+          <span className="ag-save-ico" aria-hidden>
+            <Sparkles className="size-[18px]" strokeWidth={2.2} />
+          </span>
+          {kept.length > 0
+            ? `${t("batchSave")} · ${sessionTotal} ${sessionTotal === 1 ? b("sessionWord") : b("sessionsWord")}`
+            : t("batchSave")}
+        </Button>
+        {saveHint ? (
+          <p id="vb-save-hint" className="vb-save-hint">
+            {saveHint}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -203,26 +332,28 @@ function EntryCard({
   const anything = tags.length > 0 || feelings.length > 0 || entry.overall > 0 || entry.durationMins > 0;
 
   return (
-    <li className={cn("rounded-2xl border border-l-4 bg-surface px-3 py-3", skip ? "border-fg/15 border-l-fg/25 opacity-60" : "border-fg/22 border-l-accent")}>
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="rounded-full bg-accent px-2.5 py-1 text-[11px] font-semibold tracking-wide text-on-accent">
-          {entry.title || `${b("entryN")} ${index + 1}`}
+    <li className={cn("vb-card", skip && "is-skip")} data-testid="batch-card">
+      <div className="vb-card-head">
+        <span className="vb-card-num font-display" aria-hidden>
+          {String(index + 1).padStart(2, "0")}
         </span>
-        <span className="text-sm font-semibold">{fmtDate(entry.date, lang)}</span>
-        <span className="text-sm text-dim">
-          · {fmtTime(entry.time, lang)}
-          {entry.timeStated ? "" : ` (${b("assumedTime")})`}
-        </span>
-        <span className="text-sm text-dim">
-          · {entry.count} {entry.count === 1 ? b("round") : b("rounds")}
-          {entry.nextDay ? ` · ${t("throughTomorrow")}` : ""}
-        </span>
+        <div className="min-w-0 flex-1">
+          <p className="vb-card-kicker">{entry.title || `${b("entryN")} ${index + 1}`}</p>
+          <p className="vb-card-date font-display">{fmtDate(entry.date, lang)}</p>
+          <p className="vb-card-meta">
+            {fmtTime(entry.time, lang)}
+            {entry.timeStated ? "" : ` (${b("assumedTime")})`}
+            {" · "}
+            {entry.count} {entry.count === 1 ? b("round") : b("rounds")}
+            {entry.nextDay ? ` · ${t("throughTomorrow")}` : ""}
+          </p>
+        </div>
       </div>
-      {!entry.dateStated ? <p className="mt-1 text-xs font-semibold text-accent">{b("assumedDate")}</p> : null}
-      <p className="mt-1 text-sm text-fg/80">
+      {!entry.dateStated ? <p className="vb-card-warn">{b("assumedDate")}</p> : null}
+      <p className="vb-card-who">
         {t("withWhom")}{" "}
         <span className="font-semibold text-fg">{partner || b("noPartner")}</span>
-        {partner ? <span className="text-xs text-fg/60"> · {entry.partnerName ? b("partnerFromText") : b("partnerFallback")}</span> : null}
+        {partner ? <span className="vb-card-src"> · {entry.partnerName ? b("partnerFromText") : b("partnerFallback")}</span> : null}
       </p>
 
       {skip ? (
@@ -230,24 +361,20 @@ function EntryCard({
       ) : (
         <>
           {anything ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               {tags.map((tag, i) => (
-                <span key={`${tag.label}-${tag.value}-${i}`} className="ag-chip-on inline-flex min-h-8 items-center rounded-full border px-3 text-[0.78rem] font-semibold" title={tag.label}>
+                <span key={`${tag.label}-${tag.value}-${i}`} className="vb-tag" title={tag.label}>
                   {tag.value}
                 </span>
               ))}
               {feelings.map((key) => (
-                <span key={key} className="ag-chip-on inline-flex min-h-8 items-center rounded-full border px-3 text-[0.78rem] font-semibold">
+                <span key={key} className="vb-tag">
                   {t(key)} · {ratingLabel(lang, key, entry[key])}
                 </span>
               ))}
-              {entry.durationMins > 0 ? (
-                <span className="ag-chip-on inline-flex min-h-8 items-center rounded-full border px-3 text-[0.78rem] font-semibold">
-                  {fmtDuration(entry.durationMins)}
-                </span>
-              ) : null}
+              {entry.durationMins > 0 ? <span className="vb-tag">{fmtDuration(entry.durationMins)}</span> : null}
               {entry.overall > 0 ? (
-                <span className="ag-chip-on inline-flex min-h-8 items-center gap-0.5 rounded-full border px-3 text-[0.78rem] font-semibold" aria-label={`${t("overall")} ${entry.overall} ${t("of5")}`}>
+                <span className="vb-tag vb-tag-rate" aria-label={`${t("overall")} ${entry.overall} ${t("of5")}`}>
                   {[1, 2, 3, 4, 5].map((level) => (
                     <RatingIcon key={level} style={ratingStyle} className="size-3.5" active={entry.overall >= level} />
                   ))}
@@ -257,15 +384,15 @@ function EntryCard({
           ) : (
             <p className="mt-2 text-sm text-dim">{b("nothingFound")}</p>
           )}
-          <div className="mt-2 rounded-xl border border-fg/18 bg-bg/50 px-3 py-2">
-            <p className="text-[11px] font-semibold tracking-wide text-fg/60 uppercase">{b("note")}</p>
-            <p className="mt-0.5 text-sm leading-relaxed">{entry.notes || <span className="text-dim">{b("noteEmpty")}</span>}</p>
+          <div className="vb-note">
+            <p className="vb-note-label">{b("note")}</p>
+            <p className="vb-note-text">{entry.notes || <span className="vb-note-empty">{b("noteEmpty")}</span>}</p>
           </div>
           {open ? <EntryEditor entry={entry} onChange={onChange} /> : null}
         </>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="vb-card-actions">
         {!skip ? (
           <Button variant={open ? "soft" : "ghost"} className="min-h-10 px-4" aria-expanded={open} onClick={onToggle}>
             {open ? b("done") : b("adjust")}
