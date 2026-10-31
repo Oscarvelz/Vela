@@ -1,6 +1,6 @@
 /* Vela service worker — the app opens with no internet.
    VERSION and PRECACHE are filled in by scripts/postbuild.mjs on every build. */
-const VERSION = "1b0fcb03c169";
+const VERSION = "68b54153c44c";
 const CACHE = `vela-${VERSION}`;
 const PRECACHE = ["/Vela/","/Vela/assets/dist-CTOaXH3b.js","/Vela/assets/index-6Sr7J7zv.js","/Vela/assets/index-BhJYitwj.css","/Vela/assets/leaflet-src-CLzx6dcO.js","/Vela/assets/leaflet-vh-t_kPv.css","/Vela/favicon.svg","/Vela/icon-180.png","/Vela/icon-192.png","/Vela/icon-512.png","/Vela/index.html","/Vela/manifest.webmanifest"];
 
