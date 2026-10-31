@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { Check, Droplet, NotebookPen, RotateCcw, Settings2, X } from "lucide-react";
+import { Check, ChevronDown, Droplet, NotebookPen, RotateCcw, Settings2, X } from "lucide-react";
 import {
   cycleMarks,
   cycleSnapshot,
@@ -115,6 +115,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
   const openCycleDay = useJournal((s) => s.openCycleDay);
   const showToast = useJournal((s) => s.showToast);
   const [tune, setTune] = useState(false);
+  const [regInfo, setRegInfo] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const today = todayStr();
 
@@ -185,7 +186,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
       <TrackerSwitch className="mb-3" />
       <div className="flex items-center gap-2">
         <p className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.16em] text-dim uppercase">{w("cyTitle")}</p>
-        <RegularityBadge regularity={stats.regularity} />
+        <RegularityBadge regularity={stats.regularity} open={regInfo} onToggle={() => setRegInfo((open) => !open)} />
         <button
           type="button"
           className={cn("grid size-8 shrink-0 place-items-center rounded-full text-dim", tune && "text-accent")}
@@ -201,6 +202,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
           </button>
         ) : null}
       </div>
+      {regInfo ? <RegularityInfo stats={stats} measured={lowChanceReady(cycle).measured} /> : null}
       <CycleDial snap={snap} keyLine={keyLine} idle={idle} />
       <WeekStrip
         picked={picked}
@@ -286,10 +288,51 @@ function useForecast(snap: Snap, today: string): { lead: string; next: string; l
   return { lead: dialLine(snap, today, t), next, late: false };
 }
 
-function RegularityBadge({ regularity }: { regularity: "learning" | "regular" | "irregular" }) {
+function RegularityBadge({ regularity, open, onToggle }: { regularity: "learning" | "regular" | "irregular"; open: boolean; onToggle: () => void }) {
   const t = useT();
   const key: CopyKey = regularity === "regular" ? "cyRegular" : regularity === "irregular" ? "cyIrregular" : "cyLearning";
-  return <span className="cy-badge shrink-0">{t(key)}</span>;
+  return (
+    <button
+      type="button"
+      className={cn("cy-badge cy-badge-btn shrink-0", open && "is-open")}
+      aria-expanded={open}
+      aria-label={`${t(key)} · ${t("cyRegInfoOpen")}`}
+      onClick={onToggle}
+      data-testid="cycle-regularity"
+    >
+      {t(key)}
+      <ChevronDown className="cy-badge-chev size-3" aria-hidden />
+    </button>
+  );
+}
+
+function RegularityInfo({ stats, measured }: { stats: ReturnType<typeof cycleStats>; measured: number }) {
+  const t = useT();
+  const n = stats.gaps.length;
+  const main =
+    stats.regularity === "learning"
+      ? fill(t("cyRegInfoLearning"), { usual: Math.round(stats.cycle) })
+      : fill(t(stats.regularity === "regular" ? "cyRegInfoRegular" : "cyRegInfoIrregular"), {
+          n,
+          a: stats.min ?? "",
+          b: stats.max ?? "",
+          avg: Math.round(stats.cycle),
+          w: stats.window,
+        });
+  const progress = measured >= 6 ? fill(t("cyRegInfoReady"), { n: measured }) : fill(t("cyRegInfoProgress"), { n: measured });
+  const filled = Math.min(6, measured);
+  return (
+    <div className="cy-rise cy-reginfo mt-3 rounded-card border border-border bg-surface-2/60 px-3.5 py-3" data-testid="cycle-reginfo">
+      <p className="text-[13px] leading-relaxed text-fg">{main}</p>
+      <div className="mt-3 flex items-center gap-1.5" aria-hidden>
+        {Array.from({ length: 6 }, (_, index) => (
+          <span key={index} className={cn("cy-reg-step", index < filled && "is-on")} />
+        ))}
+      </div>
+      <p className="mt-2 text-[12px] leading-relaxed text-dim">{progress}</p>
+      <p className="mt-1 text-[12px] leading-relaxed text-dim">{t("cyRegInfoTip")}</p>
+    </div>
+  );
 }
 
 /* ── Dial ───────────────────────────────────────────────────────────────── */
@@ -460,9 +503,37 @@ export function CycleDial({ snap, keyLine, idle }: { snap: Snap; keyLine: string
     if (!box) return null;
     const dx = clientX - (box.left + box.width / 2);
     const dy = clientY - (box.top + box.height / 2);
-    const dist = Math.hypot(dx, dy) / (box.width / 240);
+    const scale = box.width / 240;
+    const vx = C + dx / scale;
+    const vy = C + dy / scale;
+    const dist = Math.hypot(dx, dy) / scale;
     if (!dragging && (dist < R - 30 || dist > R + 30)) return null; // taps start on the ring only
     const angle = ((((Math.atan2(dy, dx) * 180) / Math.PI + 90) % 360) + 360) % 360;
+    if (!dragging) {
+      // A tap lands on whatever the finger covers: the today moon, the ovulation dot or the knob win
+      // over the raw angle, so a fingertip slightly off-centre still picks the day it was aimed at.
+      const targets: number[] = [];
+      if (snap.day) targets.push(todayIndex);
+      if (ovIndex !== null) targets.push(ovIndex);
+      if (selRef.current !== null) targets.push(selRef.current);
+      let best: { index: number; d: number } | null = null;
+      for (const index of targets) {
+        const [px, py] = polar(index * step + step / 2);
+        const d = Math.hypot(vx - px, vy - py);
+        if (d <= 18 && (!best || d < best.d)) best = { index, d };
+      }
+      if (best) return { angle: best.index * step + step / 2, index: best.index };
+      // Otherwise round to the nearest day centre.
+      return { angle, index: Math.floor(angle / step) };
+    }
+    // While dragging, hold the current day until the finger is clearly into the next one (no jitter at edges).
+    const current = selRef.current;
+    if (current !== null) {
+      const centre = current * step + step / 2;
+      let delta = Math.abs(angle - centre);
+      if (delta > 180) delta = 360 - delta;
+      if (delta < step * 0.7) return { angle, index: current };
+    }
     return { angle, index: Math.floor(angle / step) };
   }
 
@@ -1036,6 +1107,7 @@ export function CycleStats() {
   const sessions = useJournal((s) => s.journal.sessions);
   const cycles = useJournal((s) => s.journal.settings.cycles);
   const openPhase = useJournal((s) => s.openHistPhase);
+  const [regInfo, setRegInfo] = useState(false);
   if (!cycle.enabled || cycle.starts.length === 0) return null;
   const today = todayStr();
   const snap = cycleSnapshot(cycle, today);
@@ -1061,8 +1133,9 @@ export function CycleStats() {
       <TrackerSwitch className="mb-3" />
       <div className="flex items-center gap-2">
         <h2 className="min-w-0 flex-1 truncate font-display text-2xl">{w("cyTitle")}</h2>
-        <RegularityBadge regularity={stats.regularity} />
+        <RegularityBadge regularity={stats.regularity} open={regInfo} onToggle={() => setRegInfo((open) => !open)} />
       </div>
+      {regInfo ? <RegularityInfo stats={stats} measured={lowChanceReady(cycle).measured} /> : null}
       <div className="mt-3 grid grid-cols-3 gap-2">
         <Mini value={`${stats.cycle}`} unit={t("cycleDaysWord")} label={t("cycleAvgLen")} />
         <Mini value={`${stats.period}`} unit={t("cycleDaysWord")} label={t("cyAvgPeriod")} />

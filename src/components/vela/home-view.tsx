@@ -42,9 +42,9 @@ export function HomeView() {
     <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-5">
       <div className="space-y-4">
         <Card className="ag-hero px-5 py-5">
-          <div className="flex items-start gap-3">
-            <Constellation className="mt-1 size-16" />
-            <h2 className="font-display text-[1.85rem] leading-tight">
+          <div className="ag-hero-head">
+            <Constellation className="ag-hero-mark" />
+            <h2 className="ag-hero-title font-display">
               {total > 0 ? t("homeWelcome") : t("homeEmptyTitle")}
             </h2>
           </div>

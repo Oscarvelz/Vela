@@ -1153,3 +1153,17 @@ input[type="range"].ag-range::-moz-range-thumb {
 
 .ag-bio-btn > span { color: var(--ag-accent); border: 1px solid color-mix(in srgb, var(--ag-accent) 45%, transparent); background: color-mix(in srgb, var(--ag-accent) 8%, transparent); box-shadow: 0 0 22px color-mix(in srgb, var(--ag-accent) 18%, transparent); transition: transform .15s, box-shadow .3s; }
 .ag-bio-btn:active > span { transform: scale(.94); box-shadow: 0 0 30px color-mix(in srgb, var(--ag-accent) 35%, transparent); }
+
+/* Regularity chip opens an explainer */
+.cy-badge-btn { gap: 4px; cursor: pointer; transition: color .18s, border-color .18s, background .18s; -webkit-tap-highlight-color: transparent; min-height: 30px; height: 26px; }
+.cy-badge-btn:hover, .cy-badge-btn.is-open { color: var(--ag-accent); border-color: color-mix(in srgb, var(--ag-accent) 45%, transparent); background: color-mix(in srgb, var(--ag-accent) 8%, transparent); }
+.cy-badge-chev { opacity: .7; transition: transform .2s; }
+.cy-badge-btn.is-open .cy-badge-chev { transform: rotate(180deg); }
+.cy-reg-step { flex: 1; height: 4px; border-radius: 999px; background: color-mix(in srgb, var(--ag-dim) 22%, transparent); }
+.cy-reg-step.is-on { background: var(--cy-low, var(--ag-accent)); box-shadow: 0 0 6px color-mix(in srgb, var(--cy-low, var(--ag-accent)) 45%, transparent); }
+
+/* Home hero heading: the constellation crowns the title; the title gets the full width and balanced lines. */
+.ag-hero-head { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: .55rem; }
+.ag-hero-mark { width: 3.25rem; height: 3.25rem; margin-left: -.25rem; }
+.ag-hero-title { font-size: clamp(1.75rem, 7.2vw, 2.15rem); line-height: 1.12; letter-spacing: -.012em; text-wrap: balance; max-width: 17ch; }
+@media (min-width: 1024px) { .ag-hero-title { max-width: 20ch; } }
