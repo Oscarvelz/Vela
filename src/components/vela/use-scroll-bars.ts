@@ -57,12 +57,16 @@ export function useScrollBars({ scroller, header, dock, pinned = false, resetKey
       dockVisual += (dockTarget - dockVisual) * glide;
       if (Math.abs(headerTarget - headerVisual) < 0.2) headerVisual = headerTarget;
       if (Math.abs(dockTarget - dockVisual) < 0.2) dockVisual = dockTarget;
+      // Slide and fade together, so nothing of a bar (blur, border, glow) lingers at the screen edge.
+      const fade = (visual: number, travel: number) => (visual > 0.2 && travel > 0 ? Math.max(0, 1 - visual / (travel * 0.85)).toFixed(3) : "");
       if (header) {
         header.style.transform = headerVisual > 0.2 ? `translate3d(0,${(-headerVisual).toFixed(2)}px,0)` : "";
+        header.style.opacity = fade(headerVisual, H);
         header.classList.toggle("is-away", H > 0 && headerVisual >= H - 0.5);
       }
       if (dock) {
         dock.style.transform = dockVisual > 0.2 ? `translate3d(0,${dockVisual.toFixed(2)}px,0)` : "";
+        dock.style.opacity = fade(dockVisual, T);
         dock.classList.toggle("is-away", T > 0 && dockVisual >= T - 0.5);
       }
       if (Math.abs(headerTarget - headerVisual) > 0.2 || Math.abs(dockTarget - dockVisual) > 0.2) {
@@ -109,8 +113,10 @@ export function useScrollBars({ scroller, header, dock, pinned = false, resetKey
       window.removeEventListener("orientationchange", forget);
       if (raf) cancelAnimationFrame(raf);
       header?.style.removeProperty("transform");
+      header?.style.removeProperty("opacity");
       header?.classList.remove("is-away");
       dock?.style.removeProperty("transform");
+      dock?.style.removeProperty("opacity");
       dock?.classList.remove("is-away");
     };
   }, [scroller, header, dock, pinned, resetKey]);

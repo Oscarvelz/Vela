@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode, type TransitionEvent } from "react";
 import { Check, ChevronDown, Droplet, NotebookPen, RotateCcw, Settings2, X } from "lucide-react";
 import {
   cycleMarks,
@@ -117,6 +117,8 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
   const [tune, setTune] = useState(false);
   const [regInfo, setRegInfo] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
+  const fold = useFold(cycle.id, !inSheet);
+  const foldId = useId();
   const today = todayStr();
 
   if (!cycle.enabled) {
@@ -181,28 +183,9 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
     </div>
   );
 
-  return (
-    <div className={cn(!inSheet && "ag-panel rounded-card border border-border px-4 py-4")} id={inSheet ? undefined : "cycle-card"} data-testid="cycle-card">
-      <TrackerSwitch className="mb-3" />
-      <div className="flex items-center gap-2">
-        <p className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.16em] text-dim uppercase">{w("cyTitle")}</p>
-        <RegularityBadge regularity={stats.regularity} open={regInfo} onToggle={() => setRegInfo((open) => !open)} />
-        <button
-          type="button"
-          className={cn("grid size-8 shrink-0 place-items-center rounded-full text-dim", tune && "text-accent")}
-          aria-label={t("cyAdjustCycle")}
-          aria-expanded={tune}
-          onClick={() => setTune((open) => !open)}
-        >
-          <Settings2 className="size-4" />
-        </button>
-        {onClose ? (
-          <button type="button" className="grid size-8 shrink-0 place-items-center rounded-full text-dim" aria-label={t("closeEdit")} onClick={onClose}>
-            <X className="size-5" />
-          </button>
-        ) : null}
-      </div>
-      {regInfo ? <RegularityInfo stats={stats} measured={lowChanceReady(cycle).measured} /> : null}
+  const folded = fold.folded;
+  const body = (
+    <>
       <CycleDial snap={snap} keyLine={keyLine} idle={idle} />
       <WeekStrip
         picked={picked}
@@ -221,7 +204,208 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
         {snap.window && snap.late === 0 ? `${fill(t("cyFcShift"), { n: snap.window })} · ` : ""}
         {t("cyEstimate")}
       </p>
+    </>
+  );
+
+  return (
+    <div
+      className={cn(!inSheet && "ag-panel rounded-card border border-border px-4 py-4", fold.enabled && "cy-foldcard")}
+      id={inSheet ? undefined : "cycle-card"}
+      data-testid="cycle-card"
+      data-folded={fold.enabled ? String(folded) : undefined}
+    >
+      <TrackerSwitch className="mb-3" />
+      <div className="flex items-center gap-2">
+        {fold.enabled ? (
+          // The whole title row folds too; the chevron is the labelled control for assistive tech.
+          <button type="button" className="cy-fold-title min-w-0 flex-1 truncate text-left text-xs font-semibold tracking-[0.16em] text-dim uppercase" tabIndex={-1} aria-hidden onClick={fold.toggle} data-testid="cycle-title">
+            {w("cyTitle")}
+          </button>
+        ) : (
+          <p className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.16em] text-dim uppercase">{w("cyTitle")}</p>
+        )}
+        <RegularityBadge regularity={stats.regularity} open={regInfo} onToggle={() => setRegInfo((open) => !open)} />
+        <button
+          type="button"
+          className={cn("grid size-8 shrink-0 place-items-center rounded-full text-dim", tune && "text-accent")}
+          aria-label={t("cyAdjustCycle")}
+          aria-expanded={tune}
+          onClick={() => setTune((open) => !open)}
+        >
+          <Settings2 className="size-4" />
+        </button>
+        {fold.enabled ? (
+          <button
+            type="button"
+            className="cy-fold-btn grid size-8 shrink-0 place-items-center rounded-full text-dim"
+            aria-label={folded ? t("cyExpand") : t("cyFold")}
+            aria-expanded={!folded}
+            aria-controls={foldId}
+            onClick={fold.toggle}
+            data-testid="cycle-fold"
+          >
+            <ChevronDown className="cy-fold-chev size-[18px]" aria-hidden />
+          </button>
+        ) : null}
+        {onClose ? (
+          <button type="button" className="grid size-8 shrink-0 place-items-center rounded-full text-dim" aria-label={t("closeEdit")} onClick={onClose}>
+            <X className="size-5" />
+          </button>
+        ) : null}
+      </div>
+      {regInfo ? <RegularityInfo stats={stats} measured={lowChanceReady(cycle).measured} /> : null}
+      {fold.enabled ? (
+        <>
+          <div className="cy-fold" data-open={folded} data-settled={fold.settled} onTransitionEnd={fold.onEnd} inert={!folded || undefined} aria-hidden={!folded || undefined}>
+            <div className="cy-fold-in">
+              <CycleMini snap={snap} onOpen={fold.toggle} />
+            </div>
+          </div>
+          <div className="cy-fold" id={foldId} data-open={!folded} data-settled={fold.settled} onTransitionEnd={fold.onEnd} inert={folded || undefined}>
+            <div className="cy-fold-in">{body}</div>
+          </div>
+        </>
+      ) : (
+        body
+      )}
       {tune ? <CycleTune /> : null}
+    </div>
+  );
+}
+
+/* ── Fold: a UI preference per tracker (never diary data) ───────────────── */
+
+const FOLD_KEY = "vela-cy-folded";
+
+function readFolds(): Record<string, boolean> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FOLD_KEY) || "{}");
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function useFold(id: string, enabled: boolean) {
+  const [folds, setFolds] = useState(readFolds);
+  // "Settled" lets the open body overflow its box (glows, knob halo) once the height animation is done.
+  const [settled, setSettled] = useState(true);
+  const folded = enabled && Boolean(folds[id]);
+  const toggle = () => {
+    const next = { ...readFolds(), [id]: !folded };
+    if (!next[id]) delete next[id];
+    try {
+      localStorage.setItem(FOLD_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+    setFolds(next);
+    setSettled(prefersStill());
+  };
+  const onEnd = (event: TransitionEvent) => {
+    if (event.target === event.currentTarget && event.propertyName === "grid-template-rows") setSettled(true);
+  };
+  // Switching trackers is not a fold animation: settle at once.
+  useEffect(() => setSettled(true), [id]);
+  return { enabled, folded, toggle, settled, onEnd };
+}
+
+/** Folded summary: mini ring with today, cycle day, phase, and the one forecast line that matters most. */
+function CycleMini({ snap, onOpen }: { snap: Snap; onOpen: () => void }) {
+  const { t } = useCycleWords();
+  const cycle = useJournal(selectActiveCycle);
+  const today = todayStr();
+  const forecast = useForecast(snap, today);
+  const start = snap.cycleStart ?? today;
+  const length = Math.max(snap.ringLength, 14);
+  const step = 360 / length;
+  const todayIndex = snap.day ? Math.min(snap.day, length) - 1 : 0;
+  const marks = useMemo(() => cycleMarks(cycle, start, addDays(start, length - 1), today), [cycle, start, length, today]);
+  const runs = useMemo(() => {
+    const out: { from: number; to: number; phase: CyclePhase }[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const mark = marks[addDays(start, index)];
+      if (!mark || mark.phase === "quiet") continue;
+      const phase = mark.phase === "ovulation" ? "fertile" : mark.phase;
+      const last = out[out.length - 1];
+      if (last && last.phase === phase && last.to === index) last.to = index + 1;
+      else out.push({ from: index, to: index + 1, phase });
+    }
+    return out;
+  }, [marks, start, length]);
+  const ov = Object.entries(marks).find(([, mark]) => mark.phase === "ovulation")?.[0];
+  const ovIndex = ov ? daysUntil(start, ov) : null;
+  const MR = 24;
+  const MC = 30;
+  const at = (angle: number, radius = MR) => {
+    const rad = ((angle - 90) * Math.PI) / 180;
+    return [MC + radius * Math.cos(rad), MC + radius * Math.sin(rad)] as const;
+  };
+  const arc = (from: number, to: number) => {
+    const [x1, y1] = at(from);
+    const [x2, y2] = at(to);
+    return `M ${x1} ${y1} A ${MR} ${MR} 0 ${to - from > 180 ? 1 : 0} 1 ${x2} ${y2}`;
+  };
+  const gap = Math.min(2.4, step * 0.25);
+  const [tx, ty] = at(todayIndex * step + step / 2);
+  const late = snap.late > 0;
+  // The most useful single line: during the period the countdown already reads as "Period · day N", so lead with what comes next.
+  const line = late ? forecast.next || forecast.lead : snap.stage === "period" ? forecast.next || forecast.lead : forecast.lead;
+  const stageWord = t(stageKey(snap.stage));
+  return (
+    <div className="cy-mini" onClick={onOpen} data-testid="cycle-mini">
+      <div className="cy-mini-ring">
+        <svg viewBox="0 0 60 60" aria-hidden>
+          <circle cx={MC} cy={MC} r={MR} fill="none" stroke="var(--cy-track)" strokeWidth={5} />
+          {runs.map((run) => (
+            <path
+              key={`${run.from}-${run.phase}`}
+              d={arc(run.from * step + gap / 2, run.to * step - gap / 2)}
+              fill="none"
+              strokeWidth={5}
+              className={cn(`cy-arc-${run.phase}`, run.from > todayIndex && "cy-mini-pred")}
+            />
+          ))}
+          {ovIndex !== null && ovIndex >= 0 && ovIndex < length ? (
+            <circle cx={at(ovIndex * step + step / 2)[0]} cy={at(ovIndex * step + step / 2)[1]} r={3.3} className="cy-ov-dot cy-mini-ov" />
+          ) : null}
+          {snap.day ? (
+            <g className="cy-today">
+              <circle cx={tx} cy={ty} r={8} fill="url(#cy-mini-halo)" />
+              <circle cx={tx} cy={ty} r={4.2} fill="url(#cy-mini-moon)" className="cy-mini-moon" />
+            </g>
+          ) : null}
+          <defs>
+            <radialGradient id="cy-mini-moon" cx="38%" cy="34%" r="70%">
+              <stop offset="0%" stopColor="var(--cy-moon-hi)" />
+              <stop offset="55%" stopColor="var(--ag-accent)" />
+              <stop offset="100%" stopColor="var(--cy-moon-lo)" />
+            </radialGradient>
+            <radialGradient id="cy-mini-halo">
+              <stop offset="0%" stopColor="var(--ag-accent)" stopOpacity=".5" />
+              <stop offset="100%" stopColor="var(--ag-accent)" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+        </svg>
+        <span className="cy-mini-num font-display tabular-nums" data-testid="cycle-mini-day">
+          <span className="sr-only">{t("cycleDay")} </span>
+          {snap.day ?? "—"}
+        </span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="flex min-w-0 items-center gap-2">
+          <span className={cn("size-2 shrink-0 rounded-full", stageDot(snap.stage))} />
+          <span className="truncate text-[15px] font-semibold" data-testid="cycle-mini-phase">{stageWord}</span>
+        </p>
+        <p className={cn("cy-mini-line", late && "is-late")} data-testid="cycle-mini-line">
+          {line}
+        </p>
+      </div>
+      {late ? (
+        <span className="cy-mini-late shrink-0" data-testid="cycle-mini-late">
+          {t("cyShortLate")} +{snap.late}
+        </span>
+      ) : null}
     </div>
   );
 }
