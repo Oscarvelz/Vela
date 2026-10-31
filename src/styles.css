@@ -1620,3 +1620,86 @@ input[type="range"].ag-range::-moz-range-thumb {
   .vp-count, .vp-opt-check { animation: none; }
   .vp-opt:active, .vp-add-save:not(:disabled):active { transform: none; }
 }
+
+/* ── "Keep me signed in" (cloud session only) ─────────────────────────────── */
+.vela-keep {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 2.75rem;
+  margin: 0.1rem 0 0.15rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ag-text);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.vela-keep input {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin: 0;
+  border-radius: 0.42rem;
+  border: 1.5px solid color-mix(in srgb, var(--ag-accent) 55%, var(--ag-border));
+  background: var(--ag-surface-2);
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.vela-keep input::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 0.36rem;
+  height: 0.66rem;
+  border: solid var(--ag-on-accent);
+  border-width: 0 2.25px 2.25px 0;
+  transform: translate(-50%, -50%) rotate(45deg) scale(0.4);
+  opacity: 0;
+  transition: transform 0.2s cubic-bezier(0.3, 1.5, 0.5, 1), opacity 0.15s ease;
+}
+.vela-keep input:checked {
+  background: var(--ag-accent);
+  border-color: var(--ag-accent);
+  box-shadow: 0 0 0 4px var(--ag-accent-soft), 0 0 14px color-mix(in srgb, var(--ag-accent) 35%, transparent);
+}
+.vela-keep input:checked::after {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(45deg) scale(1);
+}
+.vela-keep input:focus-visible {
+  outline: 2px solid var(--ag-accent);
+  outline-offset: 3px;
+}
+[data-mode="day"] .vela-keep input:checked {
+  box-shadow: 0 0 0 4px var(--ag-accent-soft);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vela-keep input,
+  .vela-keep input::after { transition: none; }
+}
+
+/* Kept signed in, but the account session ran out: a gentle note, never a wall. */
+.vela-relogin {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius-control);
+  border: 1px solid color-mix(in srgb, var(--ag-accent) 38%, transparent);
+  background: linear-gradient(135deg, var(--ag-accent-soft), transparent 75%), var(--ag-surface-2);
+}
+.vela-relogin-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  color: var(--ag-accent);
+  background: var(--ag-accent-soft);
+}

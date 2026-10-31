@@ -5,7 +5,7 @@
    pull, merge, retry. Offline edits wait in the dirty flag until reconnect. */
 
 import { create } from "zustand";
-import { getClient, pullVault, pushVault, userFromSession, type CloudUser, type RemoteVault } from "./cloud";
+import { forgetUser, getClient, keepSignedIn, lastUser, pullVault, pushVault, rememberUser, userFromSession, type CloudUser, type RemoteVault } from "./cloud";
 import { cloudConfigured } from "./supabase-config";
 import { currentKey, journalFromUnknown, mergeJournals, useJournal, type CloudPhase } from "./store";
 import type { Journal } from "./types";
@@ -19,6 +19,11 @@ type CloudState = {
   /** undefined: not checked yet · null: no row in the account. */
   remote: RemoteVault | undefined;
   pendingRemote: RemoteVault;
+  /** Kept signed in, but the cloud session ended by itself (expired refresh token, password
+      changed elsewhere…). The diary stays open (behind its own lock); settings offer "Sign in again". */
+  sessionGone: boolean;
+  /** Email of that last account, to prefill the sign-in form. */
+  lastEmail: string;
 };
 
 export const useCloud = create<CloudState>(() => ({
@@ -26,7 +31,24 @@ export const useCloud = create<CloudState>(() => ({
   user: null,
   remote: undefined,
   pendingRemote: null,
+  sessionGone: false,
+  lastEmail: "",
 }));
+
+let signingOut = false;
+
+/** No session now: was it an account kept on this device whose session ran out? */
+function noteNoSession() {
+  const last = keepSignedIn() && !signingOut ? lastUser() : null;
+  useCloud.setState(last ? { sessionGone: true, lastEmail: last.email } : { sessionGone: false });
+}
+
+function noteSession(user: CloudUser | null) {
+  if (user) {
+    rememberUser(user);
+    useCloud.setState({ sessionGone: false, lastEmail: user.email });
+  } else noteNoSession();
+}
 
 const setPhase = (p: CloudPhase) => {
   if (useJournal.getState().cloudPhase !== p) useJournal.getState().setCloudPhase(p);
@@ -98,6 +120,7 @@ export async function initAuth() {
   }
   sb.auth.onAuthStateChange((_event, session) => {
     const user = userFromSession(session);
+    noteSession(user);
     const prev = useCloud.getState().user;
     if (prev?.id !== user?.id) {
       useCloud.setState({ user, remote: undefined, pendingRemote: null });
@@ -106,7 +129,9 @@ export async function initAuth() {
   });
   try {
     const { data } = await sb.auth.getSession();
-    useCloud.setState({ user: userFromSession(data.session) });
+    const user = userFromSession(data.session);
+    useCloud.setState({ user });
+    noteSession(user);
   } catch {
     /* offline: no session info */
   }
@@ -267,11 +292,15 @@ export async function adoptRemotePassphrase(passphrase: string): Promise<boolean
 
 export async function signOut() {
   const sb = await getClient();
+  signingOut = true;
+  forgetUser();
   try {
     await sb?.auth.signOut({ scope: "local" });
   } catch {
     /* offline: the local session is still cleared */
+  } finally {
+    signingOut = false;
   }
-  useCloud.setState({ user: null, remote: undefined, pendingRemote: null });
+  useCloud.setState({ user: null, remote: undefined, pendingRemote: null, sessionGone: false });
   setPhase("signed-out");
 }

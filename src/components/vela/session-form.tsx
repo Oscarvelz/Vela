@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, CloudDrizzle, DoorOpen, Feather, HeartPulse, Plus, Sparkles, UserRound, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, CloudDrizzle, DoorOpen, Feather, Flame, HeartPulse, Plus, Sparkles, UserRound, X } from "lucide-react";
 import { NAMED_PLACES, PLACES, POSITIONS, PROBLEMS, knownProblem, placeLabel, positionLabel } from "@/lib/vela/catalog";
 import { addDays, fmtDate, fmtDuration, fmtShort, fmtTime, monthTitle, pad, todayStr } from "@/lib/vela/dates";
 import { coveringEncounter, weekendOf } from "@/lib/vela/encounters";
@@ -10,6 +10,8 @@ import { ratingLabel, ratingSentence } from "@/lib/vela/notes";
 import { blankDraft, useJournal } from "@/lib/vela/store";
 import { trackerForPartner } from "@/lib/vela/cycle-trackers";
 import { RATING_KEYS, type Draft, type RatingKey } from "@/lib/vela/types";
+import { toneFor, toneVars } from "@/lib/vela/rating-tones";
+import "./rating-colors.css";
 import { cn } from "@/lib/cn";
 import { MonthDays } from "./month-days";
 import { SessionPhaseChip } from "./cycle-card";
@@ -1277,8 +1279,10 @@ function RatingBlock({
     else window.scrollBy(0, delta);
   });
 
+  const current = toneFor(ratingKey, value);
+
   return (
-    <div className="rounded-card border border-border bg-surface-2/60 p-3">
+    <div className="vr rounded-card border p-3" data-rated={value > 0 ? "" : undefined} style={toneVars(current)}>
       <button
         ref={head}
         type="button"
@@ -1289,19 +1293,34 @@ function RatingBlock({
           onToggle();
         }}
       >
-        <RatingIcon style="flame" className="size-5 shrink-0" />
+        <span className="vr-icon" aria-hidden>
+          <Flame className="size-[1.15rem]" strokeWidth={1.75} />
+        </span>
         <span className="min-w-0 flex-1">
           <span className="block font-semibold">{t(ratingKey)}</span>
           <span className="block text-sm text-dim">
-            {value > 0 ? `${ratingLabel(lang, ratingKey, value)} — ${t("tapToChange")}` : t(hintFor(ratingKey))}
+            {value > 0 ? (
+              <>
+                <span className="vr-chip">{ratingLabel(lang, ratingKey, value)}</span>
+{" "}
+                <span className="vr-tail">
+                  <span className="vr-sep">— </span>
+                  {t("tapToChange")}
+                </span>
+              </>
+            ) : (
+              t(hintFor(ratingKey))
+            )}
           </span>
         </span>
         {value > 0 ? (
-          <span className="flex shrink-0 gap-1" aria-hidden>
+          <span className="vr-dots flex shrink-0 gap-1" aria-hidden>
             {[1, 2, 3, 4, 5].map((level) => (
               <span
                 key={level}
-                className={cn("size-2 rounded-full", level <= value ? "bg-accent" : "bg-fg/20")}
+                className="vr-dot"
+                data-on={level <= value ? "" : undefined}
+                style={toneVars(toneFor(ratingKey, level))}
               />
             ))}
           </span>
@@ -1317,24 +1336,27 @@ function RatingBlock({
                 key={level}
                 type="button"
                 onClick={() => onPick(level)}
-                className={cn(
-                  "flex w-full gap-3 rounded-control border px-3 py-3 text-left",
-                  selected ? "border-accent bg-chip" : "border-border bg-surface",
-                )}
+                data-level={level}
+                data-selected={selected ? "" : undefined}
+                style={toneVars(toneFor(ratingKey, level))}
+                className="vr-opt flex w-full items-start gap-3 rounded-control border px-3 py-3 text-left"
               >
-                <span
-                  className={cn(
-                    "grid size-8 shrink-0 place-items-center rounded-full border text-sm font-semibold",
-                    selected ? "border-accent bg-accent text-on-accent" : "border-border",
-                  )}
-                >
+                <span className="vr-num grid size-8 shrink-0 place-items-center rounded-full text-sm font-semibold">
                   {level}
+                  {selected ? (
+                    <span className="vr-check" aria-hidden>
+                      <Check className="size-2.5" strokeWidth={3.5} />
+                    </span>
+                  ) : null}
                 </span>
-                <span>
-                  <span className="block font-semibold">{ratingLabel(lang, ratingKey, level)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="vr-name block font-semibold">{ratingLabel(lang, ratingKey, level)}</span>
                   <span className="mt-0.5 block text-sm leading-relaxed text-dim">
                     {ratingSentence(lang, ratingKey, level)}
                   </span>
+                </span>
+                <span className="vr-heat" aria-hidden>
+                  <Flame style={{ width: `${0.62 + level * 0.12}rem`, height: `${0.62 + level * 0.12}rem` }} strokeWidth={2} />
                 </span>
               </button>
             );

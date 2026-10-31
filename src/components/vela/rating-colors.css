@@ -1,0 +1,228 @@
+/* Rating sections (Intensity, Connection, Satisfaction, Energy): each level carries its own colour.
+   --va / --vb are the level's gradient, --vi its deep ink for day mode. Set inline per element. */
+
+.vr {
+  --va: var(--ag-accent);
+  --vb: var(--ag-accent);
+  --vi: var(--ag-accent);
+  border-color: var(--ag-border);
+  background: color-mix(in srgb, var(--ag-surface-2) 60%, transparent);
+  transition: border-color 0.35s ease, background 0.35s ease, box-shadow 0.35s ease;
+}
+.vr[data-rated] {
+  border-color: color-mix(in srgb, var(--va) 38%, transparent);
+  background:
+    radial-gradient(130% 120% at 0% 0%, color-mix(in srgb, var(--va) 15%, transparent), transparent 62%),
+    color-mix(in srgb, var(--ag-surface-2) 60%, transparent);
+  box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--va) 70%, transparent);
+}
+
+/* Header medallion: takes the chosen level's colour. */
+.vr-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  color: var(--ag-accent);
+  background: color-mix(in srgb, var(--ag-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ag-accent) 26%, transparent);
+  transition: color 0.35s ease, background 0.35s ease, box-shadow 0.35s ease;
+}
+.vr[data-rated] .vr-icon {
+  color: color-mix(in srgb, var(--va) 82%, white);
+  background:
+    radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--va) 34%, transparent), color-mix(in srgb, var(--vb) 16%, transparent));
+  border-color: color-mix(in srgb, var(--va) 55%, transparent);
+  box-shadow: 0 0 16px -2px color-mix(in srgb, var(--va) 55%, transparent);
+}
+
+/* Collapsed summary chip: "Soulful" in its own colour. */
+.vr-chip {
+  display: inline-block;
+  padding: 0.05rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--va) 72%, white);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--va) 22%, transparent), color-mix(in srgb, var(--vb) 12%, transparent));
+  border: 1px solid color-mix(in srgb, var(--va) 45%, transparent);
+}
+.vr-sep { opacity: 0.6; }
+.vr-tail { white-space: nowrap; }
+
+/* Summary dots: each lit dot shows its own level's colour, so the run reads as a warmth ramp. */
+.vr-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ag-text) 16%, transparent);
+}
+.vr-dot[data-on] {
+  background: linear-gradient(135deg, var(--va), var(--vb));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--va) 60%, transparent);
+}
+
+/* Level cards: a soft tinted wash, a warmth bar on the left, a coloured medallion and title. */
+.vr-opt {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-color: color-mix(in srgb, var(--va) 24%, var(--ag-border));
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--va) 16%, transparent), color-mix(in srgb, var(--vb) 4%, transparent) 75%),
+    var(--ag-surface);
+  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, transform 0.18s ease;
+}
+.vr-opt::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.7rem;
+  bottom: 0.7rem;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--va), var(--vb));
+  opacity: 0.55;
+  transition: opacity 0.25s ease, top 0.25s ease, bottom 0.25s ease;
+}
+.vr-opt:active { transform: scale(0.985); }
+.vr-opt:focus-visible {
+  outline: 2px solid var(--va);
+  outline-offset: 2px;
+}
+
+.vr-num {
+  position: relative;
+  color: color-mix(in srgb, var(--va) 70%, white);
+  background: color-mix(in srgb, var(--va) 14%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--va) 55%, transparent);
+  transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+}
+.vr-name { color: color-mix(in srgb, var(--va) 62%, white); }
+
+.vr-heat {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.4rem;
+  height: 2rem;
+  color: var(--va);
+  opacity: 0.5;
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+/* Chosen level lights up. */
+.vr-opt[data-selected] {
+  border-color: color-mix(in srgb, var(--va) 85%, transparent);
+  background:
+    radial-gradient(90% 130% at 0% 0%, color-mix(in srgb, var(--vb) 34%, transparent), transparent 72%),
+    radial-gradient(70% 120% at 100% 100%, color-mix(in srgb, var(--va) 12%, transparent), transparent 70%),
+    linear-gradient(100deg, color-mix(in srgb, var(--vb) 14%, var(--ag-surface)), var(--ag-surface));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--va) 55%, transparent),
+    0 10px 30px -10px color-mix(in srgb, var(--va) 65%, transparent);
+}
+.vr-opt[data-selected]::before { opacity: 1; top: 0; bottom: 0; width: 4px; border-radius: 0; }
+.vr-opt[data-selected] .vr-num {
+  color: #1a1330;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--va), var(--vb));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--va) 22%, transparent), 0 0 16px color-mix(in srgb, var(--va) 70%, transparent);
+  animation: vr-pop 0.42s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.vr-opt[data-selected] .vr-name { color: color-mix(in srgb, var(--va) 55%, white); }
+.vr-opt[data-selected] .vr-heat {
+  opacity: 1;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--va) 80%, transparent));
+  animation: vr-flicker 2.6s ease-in-out infinite;
+}
+.vr-check {
+  position: absolute;
+  right: -0.42rem;
+  top: -0.36rem;
+  display: grid;
+  place-items: center;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  color: #1a1330;
+  background: #fff;
+  box-shadow: 0 0 0 2px var(--ag-surface), 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes vr-pop {
+  0% { transform: scale(0.7); }
+  100% { transform: scale(1); }
+}
+@keyframes vr-flicker {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  30% { transform: scale(1.08) rotate(-3deg); }
+  60% { transform: scale(0.96) rotate(2deg); }
+}
+
+/* Day mode: lighter washes, deep ink for text so every level keeps its contrast. */
+[data-mode="day"] .vr[data-rated] {
+  border-color: color-mix(in srgb, var(--vi) 30%, transparent);
+  background:
+    radial-gradient(130% 120% at 0% 0%, color-mix(in srgb, var(--va) 16%, transparent), transparent 62%),
+    color-mix(in srgb, var(--ag-surface-2) 60%, transparent);
+  box-shadow: 0 10px 26px -20px color-mix(in srgb, var(--vi) 70%, transparent);
+}
+[data-mode="day"] .vr[data-rated] .vr-icon {
+  color: var(--vi);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--va) 40%, white), color-mix(in srgb, var(--vb) 26%, white));
+  border-color: color-mix(in srgb, var(--vi) 35%, transparent);
+  box-shadow: 0 2px 10px -2px color-mix(in srgb, var(--vi) 45%, transparent);
+}
+[data-mode="day"] .vr-chip {
+  color: var(--vi);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--va) 26%, white), color-mix(in srgb, var(--vb) 16%, white));
+  border-color: color-mix(in srgb, var(--vi) 32%, transparent);
+}
+[data-mode="day"] .vr-dot[data-on] { box-shadow: none; }
+[data-mode="day"] .vr-opt {
+  border-color: color-mix(in srgb, var(--vi) 20%, var(--ag-border));
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--va) 15%, transparent), color-mix(in srgb, var(--vb) 4%, transparent) 72%),
+    var(--ag-surface);
+}
+[data-mode="day"] .vr-opt::before { background: linear-gradient(180deg, var(--va), var(--vi)); opacity: 0.7; }
+[data-mode="day"] .vr-num {
+  color: var(--vi);
+  background: color-mix(in srgb, var(--va) 18%, white);
+  border-color: color-mix(in srgb, var(--vi) 40%, transparent);
+}
+[data-mode="day"] .vr-name { color: var(--vi); }
+[data-mode="day"] .vr-heat { color: var(--vi); opacity: 0.45; }
+[data-mode="day"] .vr-opt[data-selected] {
+  border-color: color-mix(in srgb, var(--vi) 70%, transparent);
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--va) 34%, transparent), transparent 70%),
+    linear-gradient(100deg, color-mix(in srgb, var(--va) 16%, transparent), color-mix(in srgb, var(--vb) 10%, transparent)),
+    var(--ag-surface);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--vi) 45%, transparent),
+    0 10px 24px -12px color-mix(in srgb, var(--vi) 60%, transparent);
+}
+[data-mode="day"] .vr-opt[data-selected] .vr-num {
+  color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--vb) 55%, var(--vi)), var(--vi));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--va) 35%, transparent), 0 3px 12px color-mix(in srgb, var(--vi) 45%, transparent);
+}
+[data-mode="day"] .vr-opt[data-selected] .vr-name { color: color-mix(in srgb, var(--vi) 85%, black); }
+[data-mode="day"] .vr-opt[data-selected] .vr-heat {
+  color: var(--vi);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--va) 90%, transparent));
+}
+[data-mode="day"] .vr-check {
+  color: #fff;
+  background: var(--vi);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vr, .vr-icon, .vr-opt, .vr-opt::before, .vr-num, .vr-heat { transition: none; }
+  .vr-opt:active { transform: none; }
+  .vr-opt[data-selected] .vr-num,
+  .vr-opt[data-selected] .vr-heat { animation: none; }
+}

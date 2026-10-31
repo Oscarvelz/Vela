@@ -8,6 +8,103 @@ import { asEnvelope, type Envelope } from "./vault-crypto";
 export const TABLE = "vela_vault";
 export const AUTH_STORAGE_KEY = "vela-auth";
 
+/* "Keep me signed in" — only about the Supabase cloud session. The journal's own lock
+   (passphrase / fingerprint / grace) is untouched by this.
+   On (default): the session lives in localStorage until you sign out.
+   Off: it lives in sessionStorage, so it ends when the app or tab is closed. */
+const KEEP = "vela.keep";
+const LAST = "vela.lastUser";
+
+export function keepSignedIn(): boolean {
+  try {
+    return localStorage.getItem(KEEP) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+function box(on = keepSignedIn()): Storage {
+  return on ? localStorage : sessionStorage;
+}
+
+/** Saves the choice and moves any existing auth entries to the matching storage,
+    so nobody is signed out by switching. */
+export function setKeepSignedIn(on: boolean) {
+  try {
+    const was = keepSignedIn();
+    localStorage.setItem(KEEP, on ? "1" : "0");
+    if (was === on) return;
+    const from = box(was);
+    const to = box(on);
+    for (let i = from.length - 1; i >= 0; i -= 1) {
+      const k = from.key(i);
+      if (k && (k.startsWith(AUTH_STORAGE_KEY) || k === LAST)) {
+        const v = from.getItem(k);
+        if (v !== null) to.setItem(k, v);
+        from.removeItem(k);
+      }
+    }
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Auth storage that follows the keep choice. Same storageKey as before, so a session
+    already in localStorage (every user before this option existed) is read as is. */
+const authStorage = {
+  getItem: (k: string) => {
+    try {
+      return box().getItem(k);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (k: string, v: string) => {
+    try {
+      const on = keepSignedIn();
+      box(on).setItem(k, v);
+      box(!on).removeItem(k);
+    } catch {
+      /* storage full or blocked */
+    }
+  },
+  removeItem: (k: string) => {
+    try {
+      localStorage.removeItem(k);
+      sessionStorage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  },
+};
+
+/** The last account signed in here (id + email only), kept the same way as the session.
+    Lets Vela tell "the session ended by itself" apart from "never signed in". */
+export function rememberUser(u: { id: string; email: string } | null) {
+  if (!u) return;
+  try {
+    box().setItem(LAST, JSON.stringify({ id: u.id, email: u.email }));
+  } catch {
+    /* ignore */
+  }
+}
+export function lastUser(): { id: string; email: string } | null {
+  try {
+    const u = JSON.parse(box().getItem(LAST) || "null") as { id?: unknown; email?: unknown } | null;
+    return u && typeof u.id === "string" ? { id: u.id, email: typeof u.email === "string" ? u.email : "" } : null;
+  } catch {
+    return null;
+  }
+}
+export function forgetUser() {
+  try {
+    localStorage.removeItem(LAST);
+    sessionStorage.removeItem(LAST);
+  } catch {
+    /* ignore */
+  }
+}
+
 let client: SupabaseClient | null = null;
 let loading: Promise<SupabaseClient | null> | null = null;
 
@@ -19,7 +116,7 @@ export function getClient(): Promise<SupabaseClient | null> {
     loading = import("@supabase/supabase-js")
       .then(({ createClient }) => {
         client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: AUTH_STORAGE_KEY },
+          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: AUTH_STORAGE_KEY, storage: authStorage },
         });
         return client;
       })

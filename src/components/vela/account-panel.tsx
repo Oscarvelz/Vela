@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { CloudOff, RefreshCw } from "lucide-react";
-import { getClient } from "@/lib/vela/cloud";
+import { useEffect, useState } from "react";
+import { CloudOff, KeyRound, RefreshCw } from "lucide-react";
+import { getClient, keepSignedIn, setKeepSignedIn } from "@/lib/vela/cloud";
 import { cloudConfigured } from "@/lib/vela/supabase-config";
 import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
@@ -15,10 +15,16 @@ export function AccountPanel() {
   const t = useT();
   const authReady = useCloud((s) => s.authReady);
   const user = useCloud((s) => s.user);
+  const sessionGone = useCloud((s) => s.sessionGone);
+  const lastEmail = useCloud((s) => s.lastEmail);
   const cloudPhase = useJournal((s) => s.cloudPhase);
   const unlocked = useJournal((s) => s.unlocked);
   const [mode, setMode] = useState<"in" | "up">("in");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => (useCloud.getState().sessionGone ? useCloud.getState().lastEmail : ""));
+  const [keep, setKeep] = useState(keepSignedIn);
+  useEffect(() => {
+    if (sessionGone && lastEmail) setEmail((cur) => cur || lastEmail);
+  }, [sessionGone, lastEmail]);
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [error, setError] = useState("");
@@ -117,6 +123,7 @@ export function AccountPanel() {
       return;
     }
     setPending(true);
+    setKeepSignedIn(keep);
     try {
       const sb = await getClient();
       if (!sb) throw new Error("offline");
@@ -147,6 +154,7 @@ export function AccountPanel() {
       return;
     }
     setPending(true);
+    setKeepSignedIn(keep);
     try {
       const sb = await getClient();
       if (!sb) throw new Error("offline");
@@ -160,9 +168,23 @@ export function AccountPanel() {
     }
   }
 
+  const again = sessionGone && mode === "in";
+
   return (
     <div className="space-y-3">
-      <p className="text-sm leading-relaxed text-dim">{t("cloudBody")}</p>
+      {sessionGone ? (
+        <div className="vela-relogin" data-testid="relogin" role="status">
+          <span className="vela-relogin-icon" aria-hidden="true">
+            <KeyRound className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-semibold">{t("sessionEndedTitle")}</p>
+            <p className="mt-0.5 text-sm leading-relaxed text-dim">{t("sessionEndedBody")}</p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm leading-relaxed text-dim">{t("cloudBody")}</p>
+      )}
       <div className="grid grid-cols-2 gap-2">
         <Button variant={mode === "in" ? "primary" : "ghost"} onClick={() => setMode("in")}>
           {t("signIn")}
@@ -214,6 +236,10 @@ export function AccountPanel() {
           </>
         ) : null}
         <p className="text-xs leading-relaxed text-dim">{t("passwordHint")}</p>
+        <label className="vela-keep" htmlFor="account-keep">
+          <input id="account-keep" type="checkbox" checked={keep} onChange={(event) => setKeep(event.target.checked)} />
+          <span>{t("keepSignedIn")}</span>
+        </label>
         {error ? (
           <p className="text-sm text-danger" role="alert">
             {error}
@@ -221,7 +247,7 @@ export function AccountPanel() {
         ) : null}
         {note ? <p className="text-sm font-semibold text-accent">{note}</p> : null}
         <Button type="submit" className="w-full" disabled={pending}>
-          {mode === "up" ? t("createAccount") : t("signIn")}
+          {mode === "up" ? t("createAccount") : again ? t("signInAgain") : t("signIn")}
         </Button>
       </form>
       <Button variant="ghost" className="w-full" disabled={pending} onClick={() => void magic()}>

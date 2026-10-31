@@ -28,6 +28,7 @@ import type { JournalWipe } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
 import { Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
+import { useCloud } from "@/lib/vela/sync";
 import { CycleTune } from "./cycle-card";
 import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PasswordInput } from "./ui";
 
@@ -38,6 +39,7 @@ export function SettingsView() {
   const displayName = useJournal((s) => s.journal.profile?.displayName ?? "");
   const partnerCount = useJournal((s) => s.journal.partners.length);
   const cloudPhase = useJournal((s) => s.cloudPhase);
+  const sessionGone = useCloud((s) => s.sessionGone);
   const language = useJournal((s) => s.journal.settings.language);
   const theme = useJournal((s) => s.journal.settings.theme);
   const cycleOn = useJournal((s) => visibleTrackers(s.journal.settings.cycles).length > 0);
@@ -107,7 +109,7 @@ export function SettingsView() {
       >
         <CycleSection />
       </Accordion>
-      <Accordion id="data" icon={<Download className="size-5" />} title={t("dataSync")} badge={cloudPhase === "saved" || cloudPhase === "saving" || cloudPhase === "offline" ? t("cloudBadge") : t("localBadge")} open={open.data} onToggle={toggle}>
+      <Accordion id="data" icon={<Download className="size-5" />} title={t("dataSync")} badge={sessionGone && cloudPhase === "signed-out" ? t("signInAgain") : cloudPhase === "saved" || cloudPhase === "saving" || cloudPhase === "offline" ? t("cloudBadge") : t("localBadge")} open={open.data} onToggle={toggle}>
         <DataSection />
       </Accordion>
       <Accordion id="prefs" icon={<Settings2 className="size-5" />} title={t("preferences")} open={open.prefs} onToggle={toggle}>

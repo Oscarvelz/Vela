@@ -68,7 +68,7 @@ const browser = await chromium.launch({
 });
 
 async function device(width) {
-  const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: "block" }); // SW first-install reload raced the form fill on localhost
   await ctx.route("https://fakeproj.supabase.co/**", handle);
   const session = {
     access_token: "fake.jwt.token",
