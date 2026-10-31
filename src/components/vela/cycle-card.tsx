@@ -304,6 +304,13 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
     const from = ov.from + (regular ? 3 : 4);
     return from < length - 1 ? { from, to: length } : null;
   }, [runs, length, regular]);
+  // After the period, before the fertile window: lower too, but less certain (ovulation can come early).
+  const early = useMemo(() => {
+    const fertile = runs.find((run) => run.phase === "fertile") ?? runs.find((run) => run.phase === "ovulation");
+    if (!fertile) return null;
+    const to = fertile.from - (regular ? 0 : 1);
+    return to > 0 ? { from: 0, to } : null;
+  }, [runs, regular]);
   const tiles = useMemo(() => {
     const out: { key: string; label: CopyKey; dot: string; from: number; to: number }[] = [];
     const first = (phase: CyclePhase) => runs.find((run) => run.phase === phase);
@@ -317,7 +324,8 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
     return out;
   }, [runs, low]);
   const inLow = Boolean(low && shown >= low.from && shown < low.to);
-  const lowNote = scrubbing && !phaseNote && inLow ? t("cyLowNote") : "";
+  const inEarly = Boolean(early && shown >= early.from && shown < early.to);
+  const lowNote = scrubbing && !phaseNote ? (inLow ? t("cyLowNote") : inEarly ? t("cyLowEarlyNote") : "") : "";
 
   const [tx, ty] = polar(todayIndex * step + step / 2);
   const [sx, sy] = polar(shown * step + step / 2);
@@ -387,7 +395,10 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
               })}
           </g>
           {low ? (
-            <path d={arcPathR(low.from * step + gap / 2, low.to * step - gap / 2, R + STROKE / 2 + 2.6)} fill="none" strokeWidth={2.4} strokeLinecap="round" className={cn("cy-arc-low", inLow && scrubbing && "is-lit")} />
+            <path d={arcPathR(low.from * step + gap / 2, low.to * step, R + STROKE / 2 + 2.6)} fill="none" strokeWidth={2.4} strokeLinecap="round" className={cn("cy-arc-low", inLow && scrubbing && "is-lit")} />
+          ) : null}
+          {early ? (
+            <path d={arcPathR(0.01, early.to * step - gap / 2, R + STROKE / 2 + 2.6)} fill="none" strokeWidth={2.4} strokeLinecap="round" className={cn("cy-arc-low cy-arc-early", inEarly && scrubbing && "is-lit")} />
           ) : null}
           <g className="cy-moments">
             {[...moments.keys()].map((index) => {

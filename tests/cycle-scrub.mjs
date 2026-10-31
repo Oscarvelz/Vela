@@ -114,6 +114,9 @@ console.log('key', await page.locator('.cy-dial').getAttribute('aria-valuetext')
 await page.locator('[data-testid="cycle-phase-chips"] button').nth(3).click(); await page.waitForTimeout(400);
 console.log('low', await page.locator('.cy-dial').getAttribute('aria-valuetext'));
 await card.screenshot({ path: `${OUT}/scrub-3-low.png` });
+await page.locator('[data-testid="cycle-phase-chips"] button').nth(0).click(); await page.keyboard.press('ArrowRight'); for (let i=0;i<5;i++) await page.keyboard.press('ArrowRight'); await page.waitForTimeout(400);
+console.log('early', await page.locator('.cy-dial').getAttribute('aria-valuetext'));
+await card.screenshot({ path: `${OUT}/scrub-4-early.png` });
 await page.locator('.cy-act').first().click(); await page.waitForTimeout(300);
 console.log('back', await page.locator('.cy-dial').getAttribute('aria-valuetext'));
 const ov = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
