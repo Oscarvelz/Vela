@@ -6,6 +6,7 @@ import {
   cycleStats,
   dayInfo,
   libidoByPhase,
+  lowChanceDays,
   pastCycles,
   periodContaining,
   sessionsByPhase,
@@ -296,26 +297,16 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
     offset === 0 ? t("cyTodayWord") : offset === 1 ? t("cyIn1") : offset === -1 ? t("cyAgo1") : offset > 0 ? fill(t("cyInN"), { n: offset }) : fill(t("cyAgoN"), { n: -offset });
   const phaseNote = info ? (info.stage === "ovulation" ? t("cyOvulationNote") : info.stage === "fertile" ? t("cyFertileNote") : "") : "";
   const count = moments.get(shown) ?? 0;
-  const regular = cycleStats(cycle).regularity === "regular";
-  // Lower-chance days: from 3 days after the estimated ovulation (4 while the rhythm is still learning) to the period.
-  const low = useMemo(() => {
-    const ov = runs.find((run) => run.phase === "ovulation");
-    if (!ov) return null;
-    const from = ov.from + (regular ? 3 : 4);
-    return from < length - 1 ? { from, to: length } : null;
-  }, [runs, length, regular]);
-  // After the period, before the fertile window: lower too, but less certain (ovulation can come early).
-  const early = useMemo(() => {
-    const fertile = runs.find((run) => run.phase === "fertile") ?? runs.find((run) => run.phase === "ovulation");
-    if (!fertile) return null;
-    const to = fertile.from - (regular ? 0 : 1);
-    return to > 0 ? { from: 0, to } : null;
-  }, [runs, regular]);
+  // Lower-chance days (solid: after ovulation; dashed: after the period, before any possibly fertile day).
+  // Bounds come from the engine so they stay conservative and never touch the fertile window.
+  const { low, early } = useMemo(() => lowChanceDays(cycle, today, length), [cycle, today, length]);
   const tiles = useMemo(() => {
     const out: { key: string; label: CopyKey; dot: string; from: number; to: number }[] = [];
     const first = (phase: CyclePhase) => runs.find((run) => run.phase === phase);
     const period = first("period");
-    const fertile = first("fertile");
+    const fertileRuns = runs.filter((run) => run.phase === "fertile");
+    // The window spans the ovulation dot (it includes the day after ovulation): one tile from first to last day.
+    const fertile = fertileRuns.length ? { from: fertileRuns[0].from, to: fertileRuns[fertileRuns.length - 1].to } : undefined;
     const ov = first("ovulation");
     if (period) out.push({ key: "period", label: "cyLegendPeriod", dot: "cy-bg-period", from: period.from, to: period.to });
     if (fertile) out.push({ key: "fertile", label: "cyLegendFertile", dot: "cy-bg-fertile", from: fertile.from, to: fertile.to });
@@ -398,7 +389,7 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
             <path d={arcPathR(low.from * step + gap / 2, low.to * step, R + STROKE / 2 + 2.6)} fill="none" strokeWidth={2.4} strokeLinecap="round" className={cn("cy-arc-low", inLow && scrubbing && "is-lit")} />
           ) : null}
           {early ? (
-            <path d={arcPathR(0.01, early.to * step - gap / 2, R + STROKE / 2 + 2.6)} fill="none" strokeWidth={2.4} strokeLinecap="round" className={cn("cy-arc-low cy-arc-early", inEarly && scrubbing && "is-lit")} />
+            <path d={arcPathR(early.from * step + gap / 2, early.to * step - gap / 2, R + STROKE / 2 + 2.6)} fill="none" strokeWidth={2.4} strokeLinecap="round" className={cn("cy-arc-low cy-arc-early", inEarly && scrubbing && "is-lit")} />
           ) : null}
           <g className="cy-moments">
             {[...moments.keys()].map((index) => {

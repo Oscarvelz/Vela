@@ -1,7 +1,7 @@
 // Sanity checks for the cycle engine. Fake data only. Run: node tests/run-cycle-check.mjs
 import {
   cleanCycle, cycleStats, cycleSnapshot, cycleMarks, pastCycles, withStart, withEnd, withDayLog, withoutStart,
-  libidoByPhase, sessionsByPhase, periodContaining, defaultCycle, dayInfo,
+  libidoByPhase, sessionsByPhase, periodContaining, defaultCycle, dayInfo, lowChanceDays, phaseOn,
 } from "../src/lib/vela/cycle";
 import { addDays } from "../src/lib/vela/dates";
 
@@ -95,6 +95,48 @@ ok("partner mode kept + name trimmed", partner.perspective === "partner" && part
 ok("partner: day log stays stored", Boolean(partner.days["2026-06-01"]));
 ok("partner: libido hidden", libidoByPhase(partner, "2026-06-20").total === 0);
 ok("bad perspective → self", cleanCycle({ perspective: "x" }).perspective === "self");
+
+
+// 8. Audit fixes (2026-10-31).
+// 8a. Due day: the predicted day itself is not "cycle day 1 / period day 1" until a start is logged.
+{
+  const due = cycleSnapshot(c, "2026-06-21"); // predicted next = Jun 21 (28-day average)
+  ok("due day: cycle day continues (29), not 1", due.day === 29 && due.cycleStart === "2026-05-24", due);
+  ok("due day: not a period stage / period day", due.stage === "luteal" && due.periodDay === null && due.phase === "quiet", due);
+  ok("due day: next period = today, not late", due.nextPeriod === "2026-06-21" && due.daysToPeriod === 0 && due.late === 0);
+  ok("due day: ring grows to 29", due.ringLength === 29);
+  const dm = cycleMarks(c, "2026-06-19", "2026-06-25", "2026-06-21");
+  ok("due day: today shown as predicted period", dm["2026-06-21"]?.phase === "period" && dm["2026-06-21"].predicted);
+  ok("due day: session today not counted as period", sessionsByPhase(c, ["2026-06-21"], "2026-06-21").quiet === 1);
+  ok("due day: dayInfo(today) matches snapshot", JSON.stringify(dayInfo(c, "2026-06-21", "2026-06-21")) === JSON.stringify({ phase: "quiet", stage: "luteal", predicted: false, cycleDay: 29 }));
+  ok("late: today's unconfirmed period is not a period day (phaseOn)", phaseOn(c, "2026-06-24", "2026-06-24") === "quiet");
+}
+// 8b. The day after ovulation is fertile (ACOG: 5 days before to 1 day after ovulation).
+ok("ov+1 (Jun 8) fertile", marks["2026-06-08"]?.phase === "fertile", marks["2026-06-08"]);
+ok("ov+2 (Jun 9) not fertile", !marks["2026-06-09"]);
+ok("dayInfo ov+1 stage fertile", dayInfo(c, "2026-06-08", today)?.stage === "fertile");
+// 8c. Lower-chance arcs: rhythm-method bounds (shortest − 18 / longest − 11), never on fertile days.
+{
+  const reg = lowChanceDays(c, today); // gaps 28/29/27 → regular; start May 24, ov Jun 7 (index 14)
+  ok("regular: low from ov+3 / longest−10 (index 18)", reg.low?.from === 18 && reg.low.to === 28, reg);
+  ok("regular: early after period, ends by shortest−19 (indices 5–7)", reg.early?.from === 5 && reg.early.to === 8, reg);
+  const irr2 = lowChanceDays(irr, "2026-05-20"); // gaps 24/38/26/39 → first fertile day 6, last fertile day 28
+  ok("irregular: no early arc (shortest 24 → fertile from day 6)", irr2.early === null, irr2);
+  ok("irregular: low arc starts at day 29 (longest 39 − 10)", irr2.low?.from === 28, irr2);
+  const short = cleanCycle({ enabled: true, periodDays: 6, starts: ["2026-04-01", "2026-04-22", "2026-05-13", "2026-06-03"] });
+  ok("21-day cycles: no early arc over fertile days hidden by the period", lowChanceDays(short, "2026-06-05").early === null);
+  const one = cleanCycle({ enabled: true, starts: ["2026-06-01"] });
+  const oneLow = lowChanceDays(one, "2026-06-10");
+  ok("learning (1 start): one extra day of margin each side", oneLow.low?.from === 18 && oneLow.early?.to === 8, oneLow);
+}
+// 8d. A cycle left open for months (no new start): the calendar day panel still counts days right.
+{
+  const longToday = "2026-09-01"; // 100 days after May 24
+  const snapL = cycleSnapshot(c, longToday);
+  ok("long-open cycle: snapshot day 101", snapL.day === 101, snapL.day);
+  ok("long-open cycle: dayInfo yesterday = day 100", dayInfo(c, "2026-08-31", longToday)?.cycleDay === 100, dayInfo(c, "2026-08-31", longToday));
+  ok("long-open cycle: day 20 is luteal (after ovulation)", dayInfo(c, "2026-06-12", longToday)?.stage === "luteal");
+}
 
 // 6. Disabled → nothing.
 ok("disabled → no marks", Object.keys(cycleMarks({ ...c, enabled: false }, "2026-01-01", "2026-12-31", today)).length === 0);

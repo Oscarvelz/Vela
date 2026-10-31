@@ -248,28 +248,31 @@ function settingsNums(cycle: CycleSettings) {
 
 function lateInfo(cycle: CycleSettings, today: string) {
   const starts = sortedStarts(cycle.starts);
-  if (!starts.length) return { predictedNext: null as string | null, late: 0 };
+  if (!starts.length) return { predictedNext: null as string | null, late: 0, due: false };
   const last = starts[starts.length - 1];
   const predictedNext = addDays(last, cycleStats(cycle).cycle);
-  const late = last <= today && today > predictedNext ? daysBetween(predictedNext, today) : 0;
-  return { predictedNext, late };
+  // "Due": the predicted day has arrived (or passed) and no new start is logged yet.
+  const due = last <= today && today >= predictedNext;
+  const late = due ? daysBetween(predictedNext, today) : 0;
+  return { predictedNext, late, due };
 }
 
 function anchors(cycle: CycleSettings, today: string): Anchor[] {
   const starts = sortedStarts(cycle.starts);
   if (starts.length === 0) return [];
   const stats = cycleStats(cycle);
-  const { predictedNext, late } = lateInfo(cycle, today);
+  const { predictedNext, due } = lateInfo(cycle, today);
   const list: Anchor[] = [];
   for (let index = 0; index < starts.length; index += 1) {
     const start = starts[index];
     const ovRef = starts[index + 1] ?? predictedNext!;
-    // A late period keeps the current cycle open until today; the projection then starts today.
-    const next = starts[index + 1] ?? (late > 0 ? addDays(today, 1) : predictedNext!);
+    // A due or late period keeps the current cycle open through today (it is never "day 1" until logged);
+    // the projected period then starts today ("expected any day"), overlapping only that one day.
+    const next = starts[index + 1] ?? (due ? addDays(today, 1) : predictedNext!);
     const end = cycle.ends[start] ?? addDays(start, stats.period - 1);
     list.push({ start, next, ovRef, logged: true, periodEnd: end < next ? end : addDays(next, -1) });
   }
-  let cursor = list[list.length - 1].next;
+  let cursor = due ? today : list[list.length - 1].next;
   for (let step = 0; step < 9; step += 1) {
     const next = addDays(cursor, stats.cycle);
     list.push({ start: cursor, next, ovRef: next, logged: false, periodEnd: addDays(cursor, stats.period - 1) });
@@ -299,7 +302,9 @@ export function cycleMarks(cycle: CycleSettings, from: string, to: string, today
     }
     const ovulation = addDays(anchor.ovRef, -luteal);
     if (ovulation > anchor.start && ovulation < anchor.next) {
-      for (let offset = -fertile; offset <= 0; offset += 1) {
+      // Fertile window: the `fertile` days before ovulation, ovulation, and the day after
+      // (ACOG: pregnancy is possible from 5 days before until 1 day after ovulation).
+      for (let offset = -fertile; offset <= 1; offset += 1) {
         const ds = addDays(ovulation, offset);
         if (ds <= anchor.periodEnd || ds >= anchor.next) continue;
         put(ds, offset === 0 ? "ovulation" : "fertile", true);
@@ -318,9 +323,19 @@ export function phaseMap(cycle: CycleSettings, from: string, to: string, today =
   return out;
 }
 
+/**
+ * The phase a day actually had: a period that is only predicted for today or earlier (due / late,
+ * nothing logged yet) does not count as a period day. Future days keep their predicted phase.
+ */
+function actualPhase(mark: DayMark | undefined, ds: string, today: string): CyclePhase {
+  if (!mark) return "quiet";
+  if (mark.phase === "period" && mark.predicted && ds <= today) return "quiet";
+  return mark.phase;
+}
+
 export function phaseOn(cycle: CycleSettings, ds: string, today = localToday()): CyclePhase {
   if (!cycle.enabled || cycle.starts.length === 0) return "quiet";
-  return cycleMarks(cycle, ds, ds, today)[ds]?.phase ?? "quiet";
+  return actualPhase(cycleMarks(cycle, ds, ds, today)[ds], ds, today);
 }
 
 function localToday() {
@@ -381,13 +396,13 @@ export function cycleSnapshot(cycle: CycleSettings, today: string): CycleSnapsho
   };
   if (!cycle.enabled || starts.length === 0) return empty;
   const { luteal, fertile } = settingsNums(cycle);
-  const { late } = lateInfo(cycle, today);
+  const { late, due } = lateInfo(cycle, today);
   const list = anchors(cycle, today);
   const current = list.find((anchor) => anchor.start <= today && today < anchor.next) ?? list[0];
   const inside = current.start <= today && today < current.next;
   const day = inside ? daysBetween(current.start, today) + 1 : null;
-  // While late the next period is "expected any day": shown as today.
-  const nextPeriod = late > 0 ? today : current.start > today ? current.start : current.next;
+  // While due or late the next period is "expected any day": shown as today.
+  const nextPeriod = due ? today : current.start > today ? current.start : current.next;
   const ovulationRaw = addDays(current.ovRef, -luteal);
   const ovulation = ovulationRaw > current.start && ovulationRaw < current.next ? ovulationRaw : null;
   const fertileRaw = ovulation ? addDays(ovulation, -fertile) : null;
@@ -433,6 +448,41 @@ export function cycleSnapshot(cycle: CycleSettings, today: string): CycleSnapsho
   };
 }
 
+/* ── Lower-chance days on the dial ────────────────────────────────────── */
+
+export type DayRange = { from: number; to: number };
+
+/**
+ * Lower-chance days of the current cycle as ring indices (0 = cycle day 1, `to` exclusive).
+ * Conservative calendar (rhythm-method) bounds: the shortest and longest measured cycles are used
+ * (first fertile day = shortest − 18, last fertile day = longest − 11), never the average alone, and
+ * the app's own fertile window (with the day after ovulation) is never covered. While the rhythm is
+ * still learning or irregular, one extra day of margin is kept on each side.
+ * - early: after the period ends, before any possibly fertile day (less certain).
+ * - low: from 3 days after the estimated ovulation (4 unless regular) to the end of the ring.
+ */
+export function lowChanceDays(cycle: CycleSettings, today: string, ringLength?: number): { early: DayRange | null; low: DayRange | null } {
+  const none = { early: null, low: null };
+  const snap = cycleSnapshot(cycle, today);
+  if (!snap.cycleStart || !snap.ovulation || !snap.fertileStart || !snap.periodEnd) return none;
+  const stats = cycleStats(cycle);
+  const length = ringLength ?? snap.ringLength;
+  const margin = stats.regularity === "regular" ? 0 : 1;
+  const shortest = stats.min !== null ? Math.min(stats.min, stats.cycle) : stats.cycle;
+  const longest = stats.max !== null ? Math.max(stats.max, stats.cycle) : stats.cycle;
+  const index = (ds: string) => daysBetween(snap.cycleStart!, ds);
+  const ov = index(snap.ovulation);
+  const fertileFrom = index(snap.fertileStart);
+  const earlyFrom = index(snap.periodEnd) + 1;
+  // Last lower-chance index before the window: day (shortest − 19) → index shortest − 20.
+  const earlyTo = Math.min(fertileFrom - margin, shortest - 19, ov - 1);
+  const lowFrom = Math.max(ov + 3 + margin, longest - 11);
+  return {
+    early: earlyTo > earlyFrom ? { from: earlyFrom, to: earlyTo } : null,
+    low: lowFrom < length - 1 ? { from: lowFrom, to: length } : null,
+  };
+}
+
 /** The logged period (start and end, logged or estimated) that contains this date, if any. */
 export function periodContaining(cycle: CycleSettings, ds: string) {
   const starts = sortedStarts(cycle.starts);
@@ -459,7 +509,7 @@ export function sessionsByPhase(cycle: CycleSettings, dates: string[], today: st
   const map = cycleMarks(cycle, starts[0], last < today ? today : last, today);
   for (const date of dates) {
     if (date < starts[0] || date > today) continue;
-    counts[map[date]?.phase ?? "quiet"] += 1;
+    counts[actualPhase(map[date], date, today)] += 1;
   }
   return counts;
 }
@@ -479,7 +529,7 @@ export function libidoByPhase(cycle: CycleSettings, today: string) {
   const map = cycleMarks(cycle, starts[0], today, today);
   for (const ds of dates) {
     const symptoms = cycle.days[ds].symptoms ?? [];
-    const phase = map[ds]?.phase ?? "quiet";
+    const phase = actualPhase(map[ds], ds, today);
     if (symptoms.includes("libidoHigh")) {
       out.high[phase] += 1;
       out.total += 1;
@@ -538,7 +588,12 @@ export function dayInfo(cycle: CycleSettings, ds: string, today: string): DayInf
     const snap = cycleSnapshot(cycle, today);
     return { phase: snap.phase, stage: snap.stage, predicted: false, cycleDay: snap.day };
   }
-  const span = Math.max(60, cycleStats(cycle).cycle + 20);
+  // The scan must reach back to the start of this day's cycle and ahead to the next period, even when a
+  // cycle ran long (a very late period, or months with no start logged).
+  let before = starts[0];
+  for (const start of starts) if (start <= ds) before = start;
+  const after = starts.find((start) => start > ds) ?? (ds < today ? today : ds);
+  const span = Math.max(60, cycleStats(cycle).cycle + 20, daysBetween(before, ds) + 2, daysBetween(ds, after) + 2);
   const marks = cycleMarks(cycle, addDays(ds, -span), addDays(ds, span), today);
   const mark = marks[ds];
   let cycleDay: number | null = null;
