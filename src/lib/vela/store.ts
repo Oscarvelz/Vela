@@ -966,15 +966,18 @@ export const useJournal = create<Store>((set, get) => {
       });
     },
     saveBatch: (entries, partnerName) => {
-      const partner = partnerName.trim();
-      const list = entries.filter((entry) => entry.date && entry.count > 0);
-      if (!partner || list.length === 0) return;
+      const fallback = partnerName.trim();
+      const list = entries.filter((entry) => entry.date && entry.count > 0 && (entry.partnerName?.trim() || fallback));
+      if (list.length === 0) return;
       const journal = get().journal;
-      const partners = journal.partners.includes(partner) ? journal.partners.slice() : [...journal.partners, partner];
+      const lang = journal.settings.language;
+      const partners = journal.partners.slice();
       const encounters = journal.encounters.slice();
       const sessions = journal.sessions.slice();
       const stamp = Date.now();
       list.forEach((entry, index) => {
+        const partner = entry.partnerName?.trim() || fallback;
+        if (!partners.includes(partner)) partners.push(partner);
         const encounterId = `e${stamp.toString(36)}${index.toString(36)}${Math.random().toString(36).slice(2, 5)}`;
         const end = entry.nextDay ? addDays(entry.date, 1) : entry.date;
         encounters.push({
@@ -989,6 +992,13 @@ export const useJournal = create<Store>((set, get) => {
         });
         const [hourText, minuteText] = (entry.time || "21:00").split(":");
         const startMins = (Number(hourText) || 0) * 60 + (Number(minuteText) || 0);
+        const ratings = {
+          intensity: entry.intensity || 0,
+          connection: entry.connection || 0,
+          satisfaction: entry.satisfaction || 0,
+          energy: entry.energy || 0,
+        };
+        const roundTimes = entry.times?.length >= entry.count ? entry.times : [];
         for (let sessionIndex = 0; sessionIndex < entry.count; sessionIndex += 1) {
           const onNext = entry.nextDay && sessionIndex === entry.count - 1 && entry.count > 1;
           const mins = (startMins + sessionIndex * 30) % 1440;
@@ -997,16 +1007,13 @@ export const useJournal = create<Store>((set, get) => {
             createdAt: stamp + index * 20 + sessionIndex,
             partnerName: partner,
             date: onNext ? end : entry.date,
-            time: `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`,
-            place: entry.place,
-            durationMins: 30,
-            positions: [],
-            intensity: 0,
-            connection: 0,
-            satisfaction: 0,
-            energy: 0,
-            overall: 5,
-            notes: "",
+            time: roundTimes[sessionIndex] || `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`,
+            place: entry.place || "Other",
+            durationMins: Math.min(240, Math.max(5, entry.durationMins || 30)),
+            positions: (entry.positions ?? []).slice(),
+            ...ratings,
+            overall: entry.overall || 5,
+            notes: composedNote(ratings, lang),
             ownWords: entry.notes,
             contraception: entry.contraception.slice(),
             problems: entry.problems.slice(),
