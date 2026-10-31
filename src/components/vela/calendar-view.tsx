@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
 import { fmtDate, iso, monthHeading, todayStr } from "@/lib/vela/dates";
-import { phaseMap } from "@/lib/vela/cycle";
+import { cycleMarks } from "@/lib/vela/cycle";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { sessionsSorted } from "@/lib/vela/stats";
 import { useJournal } from "@/lib/vela/store";
 import { MonthDays } from "./month-days";
 import { SessionCard } from "./session-card";
-import { CycleDayLine } from "./cycle-card";
+import { CycleDayPanel, CycleLegend } from "./cycle-card";
 import { Button, Card } from "./ui";
 import { cn } from "@/lib/cn";
 
@@ -25,8 +25,6 @@ export function CalendarView() {
   const ratingStyle = useJournal((s) => s.journal.settings.ratingStyle);
   const sessions = useJournal((s) => s.journal.sessions);
   const cycle = useJournal((s) => s.journal.settings.cycle);
-  const logPeriodStart = useJournal((s) => s.logPeriodStart);
-  const removePeriodStart = useJournal((s) => s.removePeriodStart);
   const shift = useJournal((s) => s.shiftMonth);
   const goToToday = useJournal((s) => s.goToToday);
   const pick = useJournal((s) => s.pickDay);
@@ -149,7 +147,7 @@ export function CalendarView() {
                   lang={lang}
                   selected={selected}
                   counts={counts}
-                  phases={cycle.enabled ? phaseMap(cycle, iso(pane.year, pane.month, 1), iso(pane.year, pane.month, 31)) : undefined}
+                  marks={cycle.enabled ? cycleMarks(cycle, iso(pane.year, pane.month, 1), iso(pane.year, pane.month, 31), now) : undefined}
                   marker={ratingStyle}
                   onPick={(ds) => {
                     if (skipClick.current) return;
@@ -161,9 +159,7 @@ export function CalendarView() {
           </div>
         </div>
         <p className="mt-2 text-center text-[11px] leading-snug text-dim">{t("swipeMonths")}</p>
-        {cycle.enabled && cycle.starts.length > 0 ? (
-          <p className="mt-1 text-center text-[11px] leading-snug text-dim">{t("cycleLegend")}</p>
-        ) : null}
+        {cycle.enabled && cycle.starts.length > 0 ? <CycleLegend /> : null}
         <p className="mt-2 text-sm text-dim">
           <span className="text-accent">·</span> {sessions.length} {t("totalSessionsL")}{" "}
           <span className="text-accent">·</span> {active} {t("activeDaysL")}
@@ -171,20 +167,7 @@ export function CalendarView() {
       </Card>
       <div className="mt-5 lg:mt-0">
         <h2 className="mb-3 font-display text-3xl">{fmtDate(selected, lang)}</h2>
-        <CycleDayLine date={selected} />
-        {cycle.enabled ? (
-          <div className="mb-3">
-            {cycle.starts.includes(selected) ? (
-              <Button variant="ghost" onClick={() => removePeriodStart(selected)}>
-                {t("cycleUnmarkDay")}
-              </Button>
-            ) : (
-              <Button variant="ghost" onClick={() => logPeriodStart(selected)}>
-                {t("cycleMarkDay")}
-              </Button>
-            )}
-          </div>
-        ) : null}
+        <CycleDayPanel date={selected} />
         {daySessions.length === 0 ? (
           <Card className="py-8 text-center">
             <p className="font-display text-2xl">{t("noSessionsDay")}</p>

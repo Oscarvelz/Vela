@@ -2,6 +2,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { JournalApp } from "@/components/vela/journal-app";
+import { useJournal } from "@/lib/vela/store";
+
+// Test-only hook (fake data seeding). Compiled out of the real build: VITE_E2E is never set for docs/.
+if (import.meta.env.VITE_E2E === "1") (window as unknown as { __velaStore: typeof useJournal }).__velaStore = useJournal;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -17,6 +17,8 @@ import { SessionForm } from "./session-form";
 import { SettingsView } from "./settings-view";
 import { Button, ConfirmDialog, IconButton } from "./ui";
 import { useScrollBars } from "./use-scroll-bars";
+import { CyclePill } from "./cycle-card";
+import { CycleLayers } from "./cycle-sheets";
 
 const TABS: { id: TabId; icon: (props: { className?: string }) => ReactNode; label: "navHome" | "navCalendar" | "navHistory" | "navInsights" }[] = [
   { id: "home", icon: HomeIcon, label: "navHome" },
@@ -299,7 +301,10 @@ function Shell() {
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
           <Mark alive className="-mx-1 size-12" />
           <div className="min-w-0">
-            <h1 className="font-display text-2xl leading-none tracking-wide">{brand}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-display text-2xl leading-none tracking-wide">{brand}</h1>
+              <CyclePill />
+            </div>
             <p className="mt-1 text-xs tracking-widest text-dim uppercase">{tag}</p>
           </div>
           <div className="ml-auto flex items-center gap-0.5">
@@ -372,6 +377,7 @@ function Shell() {
           <p className="rounded-full border border-accent bg-surface-2 px-4 py-2 text-sm font-semibold shadow-lift">{toast}</p>
         </div>
       ) : null}
+      <CycleLayers />
       {editingId ? (
         <EditSheet
           id={editingId}

@@ -609,6 +609,7 @@ function CycleSection() {
   const cycle = useJournal((s) => s.journal.settings.cycle);
   const setCycle = useJournal((s) => s.setCycle);
   const removePeriodStart = useJournal((s) => s.removePeriodStart);
+  const [name, setName] = useState(cycle.partnerName);
   return (
     <div className="space-y-4">
       <p className="text-sm leading-relaxed text-dim">{t("cycleBody")}</p>
@@ -618,13 +619,49 @@ function CycleSection() {
       </div>
       {cycle.enabled ? (
         <>
+          <div>
+            <p className="mb-2 text-sm font-semibold">{t("cyPerspective")}</p>
+            <div className="ag-seg grid grid-cols-2 gap-1 rounded-card p-1" role="group" aria-label={t("cyPerspective")} data-testid="cycle-perspective">
+              {(["self", "partner"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={cycle.perspective === value}
+                  onClick={() => setCycle({ perspective: value })}
+                  className={cn(
+                    "ag-seg-btn min-h-11 rounded-[0.85rem] px-2 text-xs leading-tight font-semibold",
+                    cycle.perspective === value ? "ag-pick" : "text-dim",
+                  )}
+                >
+                  {t(value === "self" ? "cyPerspSelf" : "cyPerspPartner")}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-dim">{t(cycle.perspective === "partner" ? "cyPerspPartnerHint" : "cyPerspSelfHint")}</p>
+            {cycle.perspective === "partner" ? (
+              <label className="mt-3 block">
+                <span className="mb-1.5 block text-sm font-semibold">{t("cyHerName")}</span>
+                <input
+                  className={fieldClass}
+                  value={name}
+                  maxLength={40}
+                  placeholder={t("cyHerNamePh")}
+                  onChange={(event) => setName(event.target.value)}
+                  onBlur={() => setCycle({ partnerName: name })}
+                />
+              </label>
+            ) : null}
+          </div>
           <CycleTune />
           <p className="text-sm font-semibold">{t("cycleStarts")}</p>
           {cycle.starts.length === 0 ? <p className="text-sm text-dim">{t("cycleNoStarts")}</p> : null}
           <div className="space-y-2">
             {[...cycle.starts].sort().reverse().map((date) => (
               <div key={date} className="flex items-center gap-2">
-                <span className="flex-1 text-sm">{fmtShort(date, lang)}</span>
+                <span className="flex-1 text-sm">
+                  {fmtShort(date, lang)}
+                  {cycle.ends[date] ? <span className="text-dim"> – {fmtShort(cycle.ends[date], lang)}</span> : null}
+                </span>
                 <Button variant="ghost" className="min-h-10 px-3" onClick={() => removePeriodStart(date)}>
                   {t("cycleUnmarkDay")}
                 </Button>

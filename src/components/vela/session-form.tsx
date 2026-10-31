@@ -11,6 +11,8 @@ import { blankDraft, useJournal } from "@/lib/vela/store";
 import { RATING_KEYS, type Draft, type RatingKey } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
 import { MonthDays } from "./month-days";
+import { SessionPhaseChip } from "./cycle-card";
+import { cycleMarks } from "@/lib/vela/cycle";
 import { MapAddress } from "./map-address";
 import { Button, ConfirmDialog, Field, RatingIcon, fieldClass } from "./ui";
 
@@ -57,6 +59,7 @@ export function SessionForm({
   const addPartner = useJournal((s) => s.addPartner);
   const removePartner = useJournal((s) => s.removePartner);
   const customPlaces = useJournal((s) => s.journal.settings.customPlaces);
+  const cycle = useJournal((s) => s.journal.settings.cycle);
   const customPositions = useJournal((s) => s.journal.settings.customPositions);
   const weekStart = useJournal((s) => s.journal.settings.weekStart);
   const ratingStyle = useJournal((s) => s.journal.settings.ratingStyle);
@@ -203,6 +206,7 @@ export function SessionForm({
           </button>
         </Field>
       </div>
+      <SessionPhaseChip date={draft.date} />
       {openDate ? (
         <div className="rounded-card border border-border bg-surface-2 p-3">
           <div className="mb-2 flex items-center justify-between">
@@ -220,6 +224,7 @@ export function SessionForm({
             weekStart={weekStart}
             lang={lang}
             selected={draft.date}
+            marks={cycle.enabled ? cycleMarks(cycle, `${view.y}-${pad(view.m + 1)}-01`, `${view.y}-${pad(view.m + 1)}-31`, todayStr()) : undefined}
             marker={ratingStyle}
             onPick={(ds) => {
               patch({ date: ds });

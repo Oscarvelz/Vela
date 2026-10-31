@@ -1,12 +1,25 @@
-import { useState } from "react";
-import { Droplets } from "lucide-react";
-import { cycleLengthOf, cycleSnapshot, phaseOn, sessionsByPhase, type CyclePhase } from "@/lib/vela/cycle";
+import { useMemo, useState } from "react";
+import { Check, Droplet, Settings2, X } from "lucide-react";
+import {
+  cycleMarks,
+  cycleSnapshot,
+  cycleStats,
+  dayInfo,
+  libidoByPhase,
+  pastCycles,
+  periodContaining,
+  sessionsByPhase,
+  type CyclePhase,
+  type CycleStage,
+  type DayMark,
+} from "@/lib/vela/cycle";
 import type { CopyKey } from "@/lib/vela/copy";
+import { fill, stageKey, useCycleWords } from "@/lib/vela/cycle-words";
 import { addDays, fmtShort, parseDate, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
-import { Button, Card } from "./ui";
+import { Button, Card, fieldClass } from "./ui";
 
 const PHASE_KEY: Record<CyclePhase, CopyKey> = {
   period: "cyclePeriod",
@@ -19,22 +32,45 @@ export function phaseKey(phase: CyclePhase) {
   return PHASE_KEY[phase];
 }
 
-export function CycleCard() {
-  const t = useT();
+/** Background class for a small phase / stage dot. */
+export function stageDot(stage: CycleStage | CyclePhase) {
+  if (stage === "period") return "cy-bg-period";
+  if (stage === "fertile") return "cy-bg-fertile";
+  if (stage === "ovulation") return "cy-bg-ovulation";
+  if (stage === "late") return "cy-bg-late";
+  return "cy-bg-quiet";
+}
+
+function markClass(mark: DayMark | undefined) {
+  if (!mark) return "";
+  if (mark.phase === "period") return mark.predicted ? "cy-mark-period-pred" : "cy-mark-period";
+  if (mark.phase === "ovulation") return "cy-mark-ovulation";
+  if (mark.phase === "fertile") return "cy-mark-fertile";
+  return "";
+}
+
+export { markClass as cycleMarkClass };
+
+/* ── Home card ──────────────────────────────────────────────────────────── */
+
+export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onClose?: () => void }) {
+  const { t, w, partner } = useCycleWords();
   const lang = useLang();
   const cycle = useJournal((s) => s.journal.settings.cycle);
   const setCycle = useJournal((s) => s.setCycle);
   const logPeriodStart = useJournal((s) => s.logPeriodStart);
-  const removePeriodStart = useJournal((s) => s.removePeriodStart);
+  const setPeriodEnd = useJournal((s) => s.setPeriodEnd);
+  const openCycleDay = useJournal((s) => s.openCycleDay);
+  const showToast = useJournal((s) => s.showToast);
   const [tune, setTune] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null);
   const today = todayStr();
-  const snap = cycleSnapshot(cycle, today);
-  const days = Array.from({ length: 21 }, (_, index) => addDays(today, index - 20));
+
   if (!cycle.enabled) {
     return (
-      <div className="ag-panel rounded-card border border-border px-4 py-4">
+      <div className="ag-panel rounded-card border border-border px-4 py-4" id="cycle-card">
         <p className="flex items-center gap-2 font-display text-2xl">
-          <Droplets className="size-4 text-accent" />
+          <span className="cy-bg-period size-2.5 rounded-full" />
           {t("cycleTitle")}
         </p>
         <p className="mt-2 text-sm leading-relaxed text-dim">{t("cycleBody")}</p>
@@ -44,71 +80,436 @@ export function CycleCard() {
       </div>
     );
   }
-  const detail = !snap.hasStarts
-    ? t("cycleNoStarts")
-    : snap.phase === "period"
-      ? `${t("cycleDay")} ${snap.day} ${t("cycleOf")} ${cycle.periodDays} · ${t("cyclePeriodThrough")} ${fmtShort(snap.periodEnd || today, lang)}`
-      : snap.phase === "fertile" || snap.phase === "ovulation"
-        ? `${t("cycleFertileThrough")} ${fmtShort(snap.ovulation || today, lang)}`
-        : snap.fertileStart && snap.fertileStart > today
-          ? `${t("cycleWindowOn")} ${fmtShort(snap.fertileStart, lang)}`
-          : snap.nextPeriod
-            ? `${t("cycleNextPeriod")} ${fmtShort(snap.nextPeriod, lang)}`
-            : t("cycleHomeHint");
+
+  const snap = cycleSnapshot(cycle, today);
+  if (!snap.hasStarts) return <FirstStart />;
+
+  const keyLine = dialLine(snap, today, t);
+  const stats = cycleStats(cycle);
+  const primary = snap.periodOpen
+    ? {
+        label: w("cyPeriodEnded"),
+        run: () => {
+          if (snap.cycleStart) setPeriodEnd(snap.cycleStart, today);
+          showToast(t("cyEndToast"));
+        },
+      }
+    : {
+        label: w("cyPeriodStarted"),
+        run: () => {
+          logPeriodStart(today);
+          showToast(t("cyStartToast"));
+        },
+      };
+
   return (
-    <div className="ag-panel rounded-card border border-border px-4 py-4">
-      <div className="flex items-start gap-3">
-        <span
-          className={cn(
-            "mt-1 size-2.5 shrink-0 rounded-full",
-            snap.phase === "period" ? "bg-wine" : snap.phase === "quiet" ? "bg-dim/40" : "bg-accent",
-          )}
-        />
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold tracking-wide text-dim uppercase">{t("cycleTitle")}</p>
-          <h3 className="font-display text-2xl leading-tight">{snap.hasStarts ? t(phaseKey(snap.phase)) : t("cycleTitle")}</h3>
-          <p className="mt-1 text-sm leading-relaxed text-dim">{detail}</p>
+    <div className={cn(!inSheet && "ag-panel rounded-card border border-border px-4 py-4")} id={inSheet ? undefined : "cycle-card"} data-testid="cycle-card">
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.16em] text-dim uppercase">{w("cyTitle")}</p>
+        <RegularityBadge regularity={stats.regularity} />
+        <button
+          type="button"
+          className={cn("grid size-8 shrink-0 place-items-center rounded-full text-dim", tune && "text-accent")}
+          aria-label={t("cyAdjustCycle")}
+          aria-expanded={tune}
+          onClick={() => setTune((open) => !open)}
+        >
+          <Settings2 className="size-4" />
+        </button>
+        {onClose ? (
+          <button type="button" className="grid size-8 shrink-0 place-items-center rounded-full text-dim" aria-label={t("closeEdit")} onClick={onClose}>
+            <X className="size-5" />
+          </button>
+        ) : null}
+      </div>
+      <CycleDial snap={snap} keyLine={keyLine} />
+      <div className={cn("mt-4 grid gap-2", partner ? "grid-cols-1" : "grid-cols-[1fr_auto]")}>
+        <Button className="w-full" onClick={primary.run} data-testid="cycle-primary">
+          <Droplet className="size-4" aria-hidden />
+          {primary.label}
+        </Button>
+        {!partner ? (
+          <Button variant="ghost" className="px-4" onClick={() => openCycleDay(today)}>
+            {t("cyLogToday")}
+          </Button>
+        ) : null}
+      </div>
+      <WeekStrip
+        picked={picked}
+        onPick={(ds) => {
+          if (!partner) openCycleDay(ds);
+          else setPicked((current) => (current === ds ? null : ds));
+        }}
+      />
+      {partner && picked ? (
+        <div className="cy-rise mt-2 rounded-card border border-border bg-surface-2/60 px-3 py-3">
+          <p className="mb-2 text-xs font-semibold text-dim">{fmtShort(picked, lang)}</p>
+          <PeriodDateActions date={picked} />
         </div>
-      </div>
-      {snap.startedToday ? (
-        <p className="mt-3 text-sm text-accent">{t("cycleAlready")}</p>
       ) : null}
-      <p className="mt-3 text-sm font-semibold">{t("cyclePick")}</p>
-      <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
-        {days.map((date) => {
-          const on = cycle.starts.includes(date);
-          const parsed = parseDate(date);
-          return (
-            <button
-              key={date}
-              type="button"
-              aria-pressed={on}
-              onClick={() => (on ? removePeriodStart(date) : logPeriodStart(date))}
-              className={cn(
-                "flex min-h-12 min-w-11 shrink-0 flex-col items-center justify-center rounded-xl border px-1 text-center",
-                on ? "border-accent bg-surface-2 text-fg" : "border-border text-dim",
-              )}
-            >
-              <span className="text-[10px] uppercase">{parsed.toLocaleDateString(lang === "es" ? "es" : "en", { weekday: "narrow" })}</span>
-              <span className="text-sm font-semibold tabular-nums">{parsed.getDate()}</span>
-            </button>
-          );
-        })}
-      </div>
-      <button type="button" className="mt-2 text-sm font-semibold text-accent" onClick={() => setTune((open) => !open)}>
-        {t("cycleTune")}
-      </button>
+      <p className="mt-3 text-center text-xs leading-relaxed text-dim">
+        {snap.nextPeriod && snap.late === 0 ? (
+          <>
+            {t("cyNextOn")} · <b className="font-semibold text-fg">{fmtShort(snap.nextPeriod, lang)}</b>
+            {snap.window ? ` ${fill(t("cyWindowPm"), { n: snap.window })}` : ""}
+            {" · "}
+          </>
+        ) : null}
+        {t("cyEstimate")}
+      </p>
       {tune ? <CycleTune /> : null}
     </div>
   );
 }
+
+function dialLine(snap: ReturnType<typeof cycleSnapshot>, today: string, t: (key: CopyKey) => string) {
+  if (snap.late > 0) return snap.late === 1 ? t("cyLate1") : fill(t("cyLateN"), { n: snap.late });
+  if (snap.stage === "period" && snap.periodDay) return fill(t("cyPeriodDayN"), { n: snap.periodDay });
+  if (snap.stage === "ovulation") return t("cyOvulationToday");
+  const toOv = snap.ovulation && snap.ovulation > today ? daysUntil(today, snap.ovulation) : null;
+  if ((snap.stage === "fertile" || snap.stage === "follicular") && toOv !== null) {
+    return toOv === 1 ? t("cyOvulationIn1") : fill(t("cyOvulationInN"), { n: toOv });
+  }
+  const n = snap.daysToPeriod ?? 0;
+  if (n <= 0) return t("cyPeriodToday");
+  return n === 1 ? t("cyPeriodIn1") : fill(t("cyPeriodInN"), { n });
+}
+
+function daysUntil(from: string, to: string) {
+  return Math.round((parseDate(to).getTime() - parseDate(from).getTime()) / 86_400_000);
+}
+
+function RegularityBadge({ regularity }: { regularity: "learning" | "regular" | "irregular" }) {
+  const t = useT();
+  const key: CopyKey = regularity === "regular" ? "cyRegular" : regularity === "irregular" ? "cyIrregular" : "cyLearning";
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide",
+        regularity === "regular" ? "border-[color:var(--cy-fertile)] cy-text-fertile" : regularity === "irregular" ? "border-[color:var(--cy-period)] cy-text-period" : "border-border text-dim",
+      )}
+    >
+      {t(key)}
+    </span>
+  );
+}
+
+/* ── Dial ───────────────────────────────────────────────────────────────── */
+
+const R = 100;
+const C = 120;
+const STROKE = 13;
+
+function polar(angle: number, radius = R) {
+  const rad = ((angle - 90) * Math.PI) / 180;
+  return [C + radius * Math.cos(rad), C + radius * Math.sin(rad)];
+}
+
+function arcPath(from: number, to: number) {
+  const [x1, y1] = polar(from);
+  const [x2, y2] = polar(to);
+  const large = to - from > 180 ? 1 : 0;
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+}
+
+export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnapshot>; keyLine: string }) {
+  const t = useT();
+  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const today = todayStr();
+  const start = snap.cycleStart ?? today;
+  const length = Math.max(snap.ringLength, 14);
+  const runs = useMemo(() => {
+    const marks = cycleMarks(cycle, start, addDays(start, length - 1), today);
+    const out: { from: number; to: number; phase: CyclePhase; predicted: boolean }[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const ds = addDays(start, index);
+      const mark = marks[ds];
+      if (!mark || mark.phase === "quiet") continue;
+      const predicted = ds > today || mark.predicted;
+      const last = out[out.length - 1];
+      if (last && last.phase === mark.phase && last.predicted === predicted && last.to === index) last.to = index + 1;
+      else out.push({ from: index, to: index + 1, phase: mark.phase, predicted });
+    }
+    return out;
+  }, [cycle, start, length, today]);
+  const step = 360 / length;
+  const gap = Math.min(1.6, step * 0.18);
+  const dayIndex = snap.day ? Math.min(snap.day, length) - 1 : 0;
+  const [tx, ty] = polar(dayIndex * step + step / 2);
+  const ticks = Array.from({ length }, (_, index) => index);
+  return (
+    <div className="cy-dial mt-1" role="img" aria-label={`${t("cycleDay")} ${snap.day ?? ""} · ${t(stageKey(snap.stage))} · ${keyLine}`}>
+      <svg viewBox="0 0 240 240" aria-hidden>
+        <circle cx={C} cy={C} r={R} fill="none" stroke="var(--cy-track)" strokeWidth={STROKE} />
+        {ticks.map((index) => {
+          const [x1, y1] = polar(index * step, R - STROKE / 2 - 5);
+          const [x2, y2] = polar(index * step, R - STROKE / 2 - (index % 7 === 0 ? 10 : 7));
+          return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--ag-dim)" strokeOpacity={index % 7 === 0 ? 0.55 : 0.22} strokeWidth={1} strokeLinecap="round" />;
+        })}
+        <g className="cy-arcs">
+          {runs
+            .filter((run) => run.phase !== "ovulation")
+            .map((run) => (
+              <path
+                key={`${run.from}-${run.phase}-${run.predicted}`}
+                d={arcPath(run.from * step + gap / 2, run.to * step - gap / 2)}
+                fill="none"
+                strokeWidth={STROKE}
+                strokeLinecap="butt"
+                className={cn(`cy-arc-${run.phase}`, run.predicted && "cy-arc-pred")}
+              />
+            ))}
+          {runs
+            .filter((run) => run.phase === "ovulation")
+            .map((run) => {
+              const [ox, oy] = polar(run.from * step + step / 2);
+              return <circle key={`ov-${run.from}`} cx={ox} cy={oy} r={STROKE / 2 + 2.5} className={cn("cy-ov-dot", run.predicted && "cy-ov-pred")} />;
+            })}
+        </g>
+        {snap.day ? (
+          <>
+            <circle cx={tx} cy={ty} r={13} className="cy-today-halo" />
+            <circle cx={tx} cy={ty} r={7.5} className="cy-today-dot" />
+          </>
+        ) : null}
+      </svg>
+      <div className="cy-center">
+        <span className="text-[10px] font-semibold tracking-[0.22em] text-dim uppercase">{t("cycleDay")}</span>
+        <span className="font-display text-[3.4rem] leading-[0.95] tabular-nums" data-testid="cycle-day">
+          {snap.day ?? "—"}
+        </span>
+        <span className="mt-1 flex items-center gap-1.5 text-sm font-semibold">
+          <span className={cn("size-2 rounded-full", stageDot(snap.stage))} />
+          {t(stageKey(snap.stage))}
+        </span>
+        <span className={cn("mt-1 max-w-[11rem] text-xs leading-snug", snap.late > 0 ? "cy-text-period font-semibold" : "text-dim")}>{keyLine}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── 7-day strip ────────────────────────────────────────────────────────── */
+
+function WeekStrip({ picked, onPick }: { picked: string | null; onPick: (ds: string) => void }) {
+  const lang = useLang();
+  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const partner = cycle.perspective === "partner";
+  const today = todayStr();
+  const days = Array.from({ length: 7 }, (_, index) => addDays(today, index - 3));
+  const marks = cycleMarks(cycle, days[0], days[6], today);
+  return (
+    <div className="mt-4 grid grid-cols-7 gap-1" data-testid="cycle-week">
+      {days.map((ds) => {
+        const parsed = parseDate(ds);
+        const mark = marks[ds];
+        const future = ds > today;
+        const logged = !partner && Boolean(cycle.days[ds]);
+        return (
+          <button
+            key={ds}
+            type="button"
+            disabled={future}
+            onClick={() => onPick(ds)}
+            aria-pressed={picked === ds}
+            aria-label={ds}
+            className={cn("cy-week-day flex flex-col items-center gap-1 rounded-xl py-1.5", picked === ds && "bg-surface-2", future && "opacity-80")}
+          >
+            <span className={cn("text-[10px] font-semibold uppercase", ds === today ? "text-accent" : "text-dim")}>
+              {parsed.toLocaleDateString(lang === "es" ? "es" : "en", { weekday: "narrow" })}
+            </span>
+            <span
+              className={cn(
+                "cy-week-num grid size-9 place-items-center rounded-full text-sm font-semibold tabular-nums",
+                markClass(mark),
+                ds === today && "cy-today-ring",
+              )}
+            >
+              {parsed.getDate()}
+            </span>
+            <span className={cn("size-1 rounded-full", logged ? "bg-accent" : "bg-transparent")} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Start / end toggles for one date ───────────────────────────────────── */
+
+export function PeriodDateActions({ date, compact = false }: { date: string; compact?: boolean }) {
+  const { t, w } = useCycleWords();
+  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const logPeriodStart = useJournal((s) => s.logPeriodStart);
+  const removePeriodStart = useJournal((s) => s.removePeriodStart);
+  const setPeriodEnd = useJournal((s) => s.setPeriodEnd);
+  const showToast = useJournal((s) => s.showToast);
+  const today = todayStr();
+  const isStart = cycle.starts.includes(date);
+  const container = periodContaining(cycle, date);
+  // "Last day" is offered only near that period (logged or estimated end, plus a few days), never mid-cycle.
+  const canEnd = container && date > container.start && date <= today && date <= addDays(container.end ?? container.estimatedEnd, 3);
+  const isEnd = Boolean(container && cycle.ends[container.start] === date);
+  const insidePeriod = Boolean(container && date > container.start && date <= (container.end ?? container.estimatedEnd));
+  if (date > today) return null;
+  return (
+    <div className={cn("flex flex-wrap gap-2", compact && "gap-1.5")}>
+      {insidePeriod ? null : (
+      <ToggleChip
+        on={isStart}
+        onClick={() => {
+          if (isStart) removePeriodStart(date);
+          else {
+            logPeriodStart(date);
+            showToast(t("cyStartToast"));
+          }
+        }}
+      >
+        {w("cyMarkStart")}
+      </ToggleChip>
+      )}
+      {canEnd ? (
+        <ToggleChip
+          on={isEnd}
+          onClick={() => {
+            setPeriodEnd(container.start, isEnd ? null : date);
+            if (!isEnd) showToast(t("cyEndToast"));
+          }}
+        >
+          {w("cyMarkEnd")}
+        </ToggleChip>
+      ) : null}
+    </div>
+  );
+}
+
+export function ToggleChip({ on, onClick, children, className }: { on: boolean; onClick: () => void; children: React.ReactNode; className?: string }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={cn(
+        "inline-flex min-h-[37px] items-center gap-1.5 rounded-full border px-[0.85rem] text-[0.8rem] font-semibold",
+        on ? "ag-chip-on" : "ag-pill border-border text-fg",
+        className,
+      )}
+    >
+      {on ? <Check className="size-3.5" aria-hidden /> : null}
+      {children}
+    </button>
+  );
+}
+
+/* ── Empty state: perspective + first day ───────────────────────────────── */
+
+function FirstStart() {
+  const { t, w, partner } = useCycleWords();
+  const lang = useLang();
+  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const setCycle = useJournal((s) => s.setCycle);
+  const logPeriodStart = useJournal((s) => s.logPeriodStart);
+  const weekStart = useJournal((s) => s.journal.settings.weekStart);
+  const showToast = useJournal((s) => s.showToast);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [name, setName] = useState(cycle.partnerName);
+  const today = todayStr();
+  // Five full weeks ending with this week: enough to find a recent first day without scrolling.
+  const dow = parseDate(today).getDay();
+  const lead = weekStart === "monday" ? (dow + 6) % 7 : dow;
+  const first = addDays(today, -lead - 28);
+  const days = Array.from({ length: 35 }, (_, index) => addDays(first, index));
+  const heads = days.slice(0, 7).map((ds) => parseDate(ds).toLocaleDateString(lang === "es" ? "es" : "en", { weekday: "narrow" }));
+  return (
+    <div className="ag-panel rounded-card border border-border px-4 py-4" id="cycle-card" data-testid="cycle-first">
+      <p className="text-xs font-semibold tracking-[0.16em] text-dim uppercase">{w("cyTitle")}</p>
+      <div className="ag-seg mt-3 grid grid-cols-2 gap-1 rounded-card p-1" role="group" aria-label={t("cyPerspective")}>
+        {(["self", "partner"] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={cycle.perspective === value}
+            onClick={() => setCycle({ perspective: value })}
+            className={cn(
+              "ag-seg-btn min-h-10 rounded-[0.85rem] px-2 text-xs leading-tight font-semibold",
+              cycle.perspective === value ? "ag-pick" : "text-dim",
+            )}
+          >
+            {t(value === "self" ? "cyPerspSelf" : "cyPerspPartner")}
+          </button>
+        ))}
+      </div>
+      {partner ? (
+        <input
+          className={cn(fieldClass, "mt-2 py-2.5 text-sm")}
+          value={name}
+          maxLength={40}
+          placeholder={t("cyHerNamePh")}
+          aria-label={t("cyHerName")}
+          onChange={(event) => setName(event.target.value)}
+          onBlur={() => setCycle({ partnerName: name })}
+        />
+      ) : null}
+      <h3 className="mt-4 font-display text-[1.6rem] leading-tight">{w("cyFirstTitle")}</h3>
+      <p className="mt-1 text-sm leading-relaxed text-dim">{w("cyFirstBody")}</p>
+      <div className="mt-3 rounded-card border border-border bg-surface-2/50 px-2 py-2">
+        <div className="grid grid-cols-7 pb-1 text-center text-[10px] font-semibold text-dim">
+          {heads.map((head, index) => (
+            <span key={index}>{head}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-y-1">
+          {days.map((ds) => {
+            const future = ds > today;
+            const on = chosen === ds;
+            const day = parseDate(ds).getDate();
+            return (
+              <button
+                key={ds}
+                type="button"
+                disabled={future}
+                aria-pressed={on}
+                aria-label={ds}
+                onClick={() => setChosen(on ? null : ds)}
+                className="grid place-items-center py-0.5 disabled:opacity-30"
+              >
+                <span
+                  className={cn(
+                    "cy-week-num grid size-9 place-items-center rounded-full text-sm tabular-nums transition",
+                    on ? "cy-bg-period font-bold text-[color:var(--cy-ink)]" : ds === today ? "cy-today-ring" : "",
+                    day === 1 && !on && "font-semibold text-accent",
+                  )}
+                >
+                  {day}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <Button
+        className="mt-3 w-full"
+        disabled={!chosen}
+        onClick={() => {
+          if (!chosen) return;
+          if (partner && name !== cycle.partnerName) setCycle({ partnerName: name });
+          logPeriodStart(chosen);
+          showToast(t("cyStartToast"));
+        }}
+      >
+        {chosen ? `${t("cyFirstSave")} · ${fmtShort(chosen, lang)}` : t("cyFirstPick")}
+      </Button>
+    </div>
+  );
+}
+
+/* ── Usual lengths ──────────────────────────────────────────────────────── */
 
 export function CycleTune() {
   const t = useT();
   const cycle = useJournal((s) => s.journal.settings.cycle);
   const setCycle = useJournal((s) => s.setCycle);
   return (
-    <div className="mt-3 space-y-3">
+    <div className="mt-3 space-y-3 border-t border-border pt-3">
       <TuneRow label={t("cyclePeriodLen")} value={cycle.periodDays} min={2} max={10} suffix={t("cycleDaysWord")} onChange={(periodDays) => setCycle({ periodDays })} />
       <TuneRow label={t("cycleLen")} value={cycle.cycleDays} min={21} max={45} suffix={t("cycleDaysWord")} onChange={(cycleDays) => setCycle({ cycleDays })} />
       <TuneRow label={t("cycleLuteal")} value={cycle.lutealDays} min={10} max={18} suffix={t("cycleDaysWord")} onChange={(lutealDays) => setCycle({ lutealDays })} />
@@ -138,21 +539,23 @@ function TuneRow({
   return (
     <div className="flex items-center gap-2">
       <span className="min-w-0 flex-1 text-sm font-semibold">{label}</span>
-      <button type="button" className="grid size-9 place-items-center rounded-full border border-border" onClick={() => onChange(Math.max(min, value - 1))} aria-label={label}>
+      <button type="button" className="grid size-9 place-items-center rounded-full border border-border" onClick={() => onChange(Math.max(min, value - 1))} aria-label={`${label} −`}>
         –
       </button>
-      <span className="w-14 text-center text-sm tabular-nums">
+      <span className="w-16 text-center text-sm tabular-nums">
         {value} {suffix}
       </span>
-      <button type="button" className="grid size-9 place-items-center rounded-full border border-border" onClick={() => onChange(Math.min(max, value + 1))} aria-label={label}>
+      <button type="button" className="grid size-9 place-items-center rounded-full border border-border" onClick={() => onChange(Math.min(max, value + 1))} aria-label={`${label} +`}>
         +
       </button>
     </div>
   );
 }
 
+/* ── Insights ───────────────────────────────────────────────────────────── */
+
 export function CycleStats() {
-  const t = useT();
+  const { t, w, partner } = useCycleWords();
   const lang = useLang();
   const cycle = useJournal((s) => s.journal.settings.cycle);
   const sessions = useJournal((s) => s.journal.sessions);
@@ -160,29 +563,60 @@ export function CycleStats() {
   if (!cycle.enabled || cycle.starts.length === 0) return null;
   const today = todayStr();
   const snap = cycleSnapshot(cycle, today);
+  const stats = cycleStats(cycle);
+  const history = pastCycles(cycle, 6);
   const counts = sessionsByPhase(cycle, sessions.map((session) => session.date), today);
-  const best = counts.fertile + counts.ovulation;
-  const length = cycleLengthOf(cycle);
-  const rows: { phase: "period" | "fertile" | "quiet"; label: string; value: number }[] = [
-    { phase: "period", label: t("cyclePeriod"), value: counts.period },
-    { phase: "fertile", label: t("cycleFertile"), value: best },
-    { phase: "quiet", label: t("cyclePhaseQuiet"), value: counts.quiet },
+  const rows: { phase: "period" | "fertile" | "quiet"; label: string; value: number; dot: string }[] = [
+    { phase: "period", label: t("cyclePeriod"), value: counts.period, dot: "cy-bg-period" },
+    { phase: "fertile", label: t("cycleFertile"), value: counts.fertile + counts.ovulation, dot: "cy-bg-fertile" },
+    { phase: "quiet", label: t("cyclePhaseQuiet"), value: counts.quiet, dot: "cy-bg-quiet" },
   ];
   const max = Math.max(1, ...rows.map((row) => row.value));
+  const libido = partner ? null : libidoByPhase(cycle, today);
+  const longest = Math.max(35, ...history.map((row) => row.length));
+  const regularityLine =
+    stats.regularity === "learning"
+      ? t("cyNeedMore")
+      : `${t(stats.regularity === "regular" ? "cyRegular" : "cyIrregular")} · ${fill(t("cyRangeDays"), { a: stats.min ?? "", b: stats.max ?? "" })}`;
   return (
-    <Card className="min-w-0 overflow-hidden">
-      <h2 className="font-display text-2xl">{t("cycleTitle")}</h2>
+    <Card className="min-w-0 overflow-hidden" data-testid="cycle-stats">
+      <div className="flex items-center gap-2">
+        <h2 className="min-w-0 flex-1 truncate font-display text-2xl">{w("cyTitle")}</h2>
+        <RegularityBadge regularity={stats.regularity} />
+      </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
-        <Mini value={String(cycle.starts.length)} label={t("cyclePeriodsLogged")} />
-        <Mini value={String(length)} label={t("cycleAvgLen")} />
+        <Mini value={`${stats.cycle}`} unit={t("cycleDaysWord")} label={t("cycleAvgLen")} />
+        <Mini value={`${stats.period}`} unit={t("cycleDaysWord")} label={t("cyAvgPeriod")} />
         <Mini value={snap.nextPeriod ? fmtShort(snap.nextPeriod, lang) : "—"} label={t("cycleNextPeriod")} />
       </div>
+      <p className="mt-3 text-sm text-dim">
+        <span className="font-semibold text-fg">{t("cyRegularity")}:</span> {regularityLine}
+      </p>
+      {history.length > 0 ? (
+        <>
+          <p className="mt-4 text-sm font-semibold">{t("cyLastCycles")}</p>
+          <div className="mt-2 flex h-36 items-end gap-2" data-testid="cycle-bars">
+            {history.map((row) => (
+              <div key={row.start} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                <span className="text-[11px] font-semibold tabular-nums">{row.length}</span>
+                <span className="relative flex w-full max-w-9 flex-col justify-end overflow-hidden rounded-[10px] bg-surface-2" style={{ height: `${Math.round((row.length / longest) * 96)}px` }}>
+                  <span className={cn("block w-full", row.periodLogged ? "cy-bg-period" : "cy-bg-period opacity-60")} style={{ height: `${Math.round((row.period / row.length) * 100)}%` }} />
+                </span>
+                <span className="w-full truncate text-center text-[10px] text-dim">{fmtShort(row.start, lang)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
       <p className="mt-4 text-sm font-semibold">{t("cycleInMoments")}</p>
       <div className="mt-2 space-y-2">
         {rows.map((row) => (
           <button key={row.phase} type="button" className="block w-full min-w-0 text-left" onClick={() => openPhase(row.phase)}>
             <span className="mb-1 flex items-baseline justify-between gap-3">
-              <span className="min-w-0 truncate text-sm font-semibold">{row.label}</span>
+              <span className="flex min-w-0 items-center gap-2 truncate text-sm font-semibold">
+                <span className={cn("size-2 shrink-0 rounded-full", row.dot)} />
+                {row.label}
+              </span>
               <span className="shrink-0 text-sm tabular-nums text-dim">{row.value}</span>
             </span>
             <span className="block h-2.5 w-full overflow-hidden rounded-full bg-surface-2">
@@ -191,23 +625,229 @@ export function CycleStats() {
           </button>
         ))}
       </div>
+      {libido && libido.total > 0 ? <LibidoRows libido={libido} /> : null}
     </Card>
   );
 }
 
-function Mini({ value, label }: { value: string; label: string }) {
+function LibidoRows({ libido }: { libido: ReturnType<typeof libidoByPhase> }) {
+  const t = useT();
+  const cols: { phase: CyclePhase; label: CopyKey; dot: string }[] = [
+    { phase: "period", label: "cyLegendPeriod", dot: "cy-bg-period" },
+    { phase: "fertile", label: "cyLegendFertile", dot: "cy-bg-fertile" },
+    { phase: "ovulation", label: "cyLegendOvulation", dot: "cy-bg-ovulation" },
+    { phase: "quiet", label: "cyclePhaseQuiet", dot: "cy-bg-quiet" },
+  ];
+  const top = cols.reduce((best, col) => (libido.high[col.phase] > libido.high[best.phase] ? col : best), cols[0]);
+  const peak = Math.max(1, ...cols.flatMap((col) => [libido.high[col.phase], libido.low[col.phase]]));
+  return (
+    <div className="mt-4" data-testid="cycle-libido">
+      <p className="text-sm font-semibold">{t("cyLibido")}</p>
+      {libido.high[top.phase] > 0 && top.phase !== "quiet" ? <p className="mt-1 text-sm text-dim">{fill(t("cyLibidoPeak"), { phase: t(top.label).toLowerCase() })}</p> : null}
+      <div className="mt-2 grid grid-cols-[auto_repeat(4,minmax(0,1fr))] items-center gap-x-2 gap-y-1.5 text-[11px]">
+        <span />
+        {cols.map((col) => (
+          <span key={col.phase} className="flex min-w-0 items-center justify-center gap-1 truncate text-dim">
+            <span className={cn("size-1.5 shrink-0 rounded-full", col.dot)} />
+            <span className="truncate">{t(col.label)}</span>
+          </span>
+        ))}
+        {(["high", "low"] as const).map((kind) => (
+          <FragmentRow key={kind} label={t(kind === "high" ? "cyLibidoHigh" : "cyLibidoLow")} values={cols.map((col) => libido[kind][col.phase])} peak={peak} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FragmentRow({ label, values, peak }: { label: string; values: number[]; peak: number }) {
+  return (
+    <>
+      <span className="font-semibold">{label}</span>
+      {values.map((value, index) => (
+        <span key={index} className="grid h-7 place-items-center rounded-lg tabular-nums" style={{ background: `color-mix(in srgb, var(--ag-accent) ${value ? 10 + Math.round((value / peak) * 45) : 4}%, transparent)` }}>
+          {value}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function Mini({ value, label, unit }: { value: string; label: string; unit?: string }) {
   return (
     <div className="min-w-0 rounded-[14px] border border-border bg-surface-2 px-2 py-3 text-center">
-      <b className="block truncate font-display text-xl tabular-nums leading-none text-accent">{value}</b>
+      <b className="block truncate font-display text-xl tabular-nums leading-none text-accent">
+        {value}
+        {unit ? <span className="ml-0.5 font-sans text-[10px] font-semibold text-dim">{unit}</span> : null}
+      </b>
       <span className="mt-1.5 block truncate text-[10px] text-dim">{label}</span>
     </div>
   );
 }
 
-export function CycleDayLine({ date }: { date: string }) {
+/* ── Calendar: the selected day ─────────────────────────────────────────── */
+
+export function CycleDayPanel({ date }: { date: string }) {
+  const { t, partner } = useCycleWords();
+  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const openCycleDay = useJournal((s) => s.openCycleDay);
+  if (!cycle.enabled) return null;
+  const today = todayStr();
+  const info = dayInfo(cycle, date, today);
+  const log = partner ? null : cycle.days[date];
+  return (
+    <div className="mb-3 space-y-2" data-testid="cycle-day-panel">
+      {info ? (
+        <p className="flex items-center gap-2 text-sm">
+          <span className={cn("size-2 rounded-full", stageDot(info.stage))} />
+          <span className="font-semibold">{t(stageKey(info.stage))}</span>
+          {info.cycleDay ? <span className="text-dim">· {t("cycleDay")} {info.cycleDay}</span> : null}
+          {info.predicted ? <span className="text-dim">· {t("cyLegendPredicted").toLowerCase()}</span> : null}
+        </p>
+      ) : null}
+      {log ? <DayLogSummary date={date} /> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <PeriodDateActions date={date} />
+        {!partner && date <= today ? (
+          <button type="button" className="min-h-[37px] px-2 text-sm font-semibold text-accent" onClick={() => openCycleDay(date)}>
+            {log ? t("cyEditDay") : t("cyLogDay")}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+const FLOW_KEY = { spotting: "cyFlowSpotting", light: "cyFlowLight", medium: "cyFlowMedium", heavy: "cyFlowHeavy" } as const;
+export const SYMPTOM_KEY = {
+  cramps: "cySymCramps",
+  headache: "cySymHeadache",
+  bloating: "cySymBloating",
+  tender: "cySymTender",
+  fatigue: "cySymFatigue",
+  acne: "cySymAcne",
+  libidoHigh: "cySymLibidoHigh",
+  libidoLow: "cySymLibidoLow",
+  discharge: "cySymDischarge",
+} as const;
+export const MOOD_KEY = {
+  calm: "cyMoodCalm",
+  happy: "cyMoodHappy",
+  sensitive: "cyMoodSensitive",
+  irritable: "cyMoodIrritable",
+  anxious: "cyMoodAnxious",
+  low: "cyMoodLow",
+} as const;
+export { FLOW_KEY };
+
+function DayLogSummary({ date }: { date: string }) {
+  const t = useT();
+  const log = useJournal((s) => s.journal.settings.cycle.days[date]);
+  if (!log) return null;
+  const parts = [
+    log.flow ? `${t("cyFlow")}: ${t(FLOW_KEY[log.flow])}` : "",
+    ...(log.symptoms ?? []).map((item) => t(SYMPTOM_KEY[item])),
+    log.mood ? t(MOOD_KEY[log.mood]) : "",
+  ].filter(Boolean);
+  return (
+    <div className="space-y-1">
+      {parts.length ? (
+        <div className="flex flex-wrap gap-1.5">
+          {parts.map((part) => (
+            <span key={part} className="rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs">
+              {part}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {log.note ? <p className="text-sm leading-relaxed text-dim">“{log.note}”</p> : null}
+    </div>
+  );
+}
+
+/* ── Session form: phase of the session's date ──────────────────────────── */
+
+export function SessionPhaseChip({ date }: { date: string }) {
   const t = useT();
   const cycle = useJournal((s) => s.journal.settings.cycle);
   if (!cycle.enabled || cycle.starts.length === 0) return null;
-  const phase = phaseOn(cycle, date);
-  return <p className="mt-1 text-sm text-accent">{t(phaseKey(phase))}</p>;
+  const info = dayInfo(cycle, date, todayStr());
+  if (!info) return null;
+  const note = info.stage === "ovulation" ? t("cyOvulationNote") : info.stage === "fertile" ? t("cyFertileNote") : "";
+  return (
+    <div className="-mt-2 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="session-phase">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs font-semibold">
+        <span className={cn("size-2 rounded-full", stageDot(info.stage))} />
+        {t(stageKey(info.stage))}
+        {info.cycleDay ? <span className="font-medium text-dim">· {t("cycleDay")} {info.cycleDay}</span> : null}
+      </span>
+      {note ? <span className="cy-text-fertile text-xs font-medium leading-snug">{note}</span> : null}
+    </div>
+  );
+}
+
+/* ── History: one small dot per entry ───────────────────────────────────── */
+
+export function PhaseDot({ date, className }: { date: string; className?: string }) {
+  const t = useT();
+  const cycle = useJournal((s) => s.journal.settings.cycle);
+  if (!cycle.enabled || cycle.starts.length === 0) return null;
+  const info = dayInfo(cycle, date, todayStr());
+  if (!info || info.phase === "quiet") return null;
+  const label = t(stageKey(info.stage));
+  return <span role="img" aria-label={label} title={label} className={cn("inline-block size-2 shrink-0 rounded-full align-middle", stageDot(info.stage), className)} />;
+}
+
+/* ── Header pill ────────────────────────────────────────────────────────── */
+
+const PILL_KEY: Record<CycleStage, CopyKey> = {
+  period: "cyLegendPeriod",
+  follicular: "cyShortFollicular",
+  fertile: "cyLegendFertile",
+  ovulation: "cyLegendOvulation",
+  luteal: "cyShortLuteal",
+  late: "cyShortLate",
+};
+
+export function CyclePill() {
+  const t = useT();
+  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const discreet = useJournal((s) => s.journal.settings.discreet);
+  const setCycleSheet = useJournal((s) => s.setCycleSheet);
+  if (!cycle.enabled || cycle.starts.length === 0) return null;
+  const snap = cycleSnapshot(cycle, todayStr());
+  if (!snap.day) return null;
+  return (
+    <button type="button" className="cy-pill" aria-label={t("cyOpenCycle")} onClick={() => setCycleSheet(true)} data-testid="cycle-pill">
+      <span className={cn("size-1.5 rounded-full", stageDot(snap.stage))} />
+      <span className="tabular-nums">
+        {t("cyDayShort")}
+        {snap.day}
+      </span>
+      <span className="text-dim">·</span>
+      <span>{discreet ? t(stageKey(snap.stage, true)) : snap.late > 0 ? `${t("cyShortLate")} +${snap.late}` : t(PILL_KEY[snap.stage])}</span>
+    </button>
+  );
+}
+
+/* ── Calendar legend ────────────────────────────────────────────────────── */
+
+export function CycleLegend() {
+  const t = useT();
+  const items: { key: CopyKey; cls: string }[] = [
+    { key: "cyLegendPeriod", cls: "cy-mark-period" },
+    { key: "cyLegendPredicted", cls: "cy-mark-period-pred" },
+    { key: "cyLegendFertile", cls: "cy-mark-fertile" },
+    { key: "cyLegendOvulation", cls: "cy-mark-ovulation" },
+  ];
+  return (
+    <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-dim" data-testid="cycle-legend">
+      {items.map((item) => (
+        <span key={item.key} className="inline-flex items-center gap-1.5">
+          <span className={cn("cy-week-num inline-block size-3 rounded-full", item.cls)} />
+          {t(item.key)}
+        </span>
+      ))}
+    </div>
+  );
 }

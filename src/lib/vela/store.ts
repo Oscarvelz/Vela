@@ -9,7 +9,7 @@ import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
 import type { Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings, TabId } from "./types";
 import type { Lang } from "./copy";
-import { cleanCycle, defaultCycle, sortedStarts } from "./cycle";
+import { cleanCycle, defaultCycle, withDayLog, withEnd, withStart, withoutStart, type DayLog } from "./cycle";
 import { clearFingerprint, resetFingerprintPrompt } from "./fingerprint";
 
 /** Old plaintext journal key (Grok build). Only read for the one-time migration. */
@@ -564,6 +564,13 @@ type Store = {
   setCycle: (partial: Partial<import("./cycle").CycleSettings>) => void;
   logPeriodStart: (date: string) => void;
   removePeriodStart: (date: string) => void;
+  setPeriodEnd: (start: string, end: string | null) => void;
+  logCycleDay: (date: string, log: Partial<DayLog> | null) => void;
+  /** Date whose cycle day log sheet is open. */
+  cycleDay: string | null;
+  openCycleDay: (date: string | null) => void;
+  cycleSheet: boolean;
+  setCycleSheet: (open: boolean) => void;
   addPartner: (name: string) => void;
   removePartner: (name: string) => void;
   addCustom: (kind: "places" | "positions" | "problems", value: string) => void;
@@ -720,6 +727,8 @@ export const useJournal = create<Store>((set, get) => {
         editingId: null,
         confirmDeleteId: null,
         confirmErase: false,
+        cycleDay: null,
+        cycleSheet: false,
       });
     },
     replaceJournal: (raw) => {
@@ -1065,15 +1074,21 @@ export const useJournal = create<Store>((set, get) => {
       patchSettings({ cycle: cleanCycle({ ...cycle, ...partial }) });
     },
     logPeriodStart: (date) => {
-      const cycle = get().journal.settings.cycle;
-      patchSettings({
-        cycle: cleanCycle({ ...cycle, enabled: true, starts: sortedStarts([...cycle.starts, date]) }),
-      });
+      patchSettings({ cycle: withStart(get().journal.settings.cycle, date) });
     },
     removePeriodStart: (date) => {
-      const cycle = get().journal.settings.cycle;
-      patchSettings({ cycle: cleanCycle({ ...cycle, starts: cycle.starts.filter((item) => item !== date) }) });
+      patchSettings({ cycle: withoutStart(get().journal.settings.cycle, date) });
     },
+    setPeriodEnd: (start, end) => {
+      patchSettings({ cycle: withEnd(get().journal.settings.cycle, start, end) });
+    },
+    logCycleDay: (date, log) => {
+      patchSettings({ cycle: withDayLog(get().journal.settings.cycle, date, log) });
+    },
+    cycleDay: null,
+    openCycleDay: (cycleDay) => set({ cycleDay }),
+    cycleSheet: false,
+    setCycleSheet: (cycleSheet) => set({ cycleSheet }),
     addPartner: (name) => {
       const trimmed = name.trim();
       const journal = get().journal;

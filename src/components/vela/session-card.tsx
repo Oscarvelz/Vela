@@ -9,6 +9,7 @@ import type { Session } from "@/lib/vela/types";
 import { RATING_KEYS } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
 import { Button, ConfirmDialog, RatingIcon } from "./ui";
+import { PhaseDot } from "./cycle-card";
 
 const METHOD_KEY = {
   pullout: "methodPullout",
@@ -131,6 +132,7 @@ export function SessionCard({ session, density = "list" }: { session: Session; d
               <span className="font-sans text-base font-medium text-dim"> · {placeLabel(lang, session.place)}</span>
             </h3>
             <p className="text-sm leading-snug">
+              <PhaseDot date={session.date} className="mr-1.5 -mt-0.5" />
               <span className="font-semibold text-accent">{fmtDate(session.date, lang)}</span>
               <span className="text-dim"> · {fmtTime(session.time, lang)}</span>
             </p>
@@ -272,6 +274,7 @@ function CompactSession({ session, density }: { session: Session; density: 2 | 3
           {density === 2 ? <span className="font-medium text-dim"> · {placeLabel(lang, session.place)}</span> : null}
         </p>
         <p className={cn("mt-0.5 text-dim", tight ? "text-[9px] leading-tight" : "text-[10px]")}>
+          <PhaseDot date={session.date} className="mr-1 size-1.5" />
           {fmtShort(session.date, lang)}
           {density < 4 ? ` · ${fmtTime(session.time, lang)}` : ""}
         </p>

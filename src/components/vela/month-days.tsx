@@ -1,5 +1,6 @@
 import type { RatingStyle, WeekStart } from "@/lib/vela/catalog";
-import type { CyclePhase } from "@/lib/vela/cycle";
+import type { DayMark } from "@/lib/vela/cycle";
+import { cycleMarkClass } from "./cycle-card";
 import { RatingIcon } from "./ui";
 import type { Lang } from "@/lib/vela/copy";
 import { iso, monthMeta, todayStr, weekdayHeads } from "@/lib/vela/dates";
@@ -12,7 +13,7 @@ export function MonthDays({
   lang,
   selected,
   counts,
-  phases,
+  marks,
   marker,
   onPick,
 }: {
@@ -22,7 +23,7 @@ export function MonthDays({
   lang: Lang;
   selected?: string;
   counts?: Record<string, number>;
-  phases?: Record<string, CyclePhase>;
+  marks?: Record<string, DayMark>;
   marker: RatingStyle;
   onPick: (ds: string) => void;
 }) {
@@ -45,7 +46,7 @@ export function MonthDays({
         {cells.map((cell, index) => {
           if (!cell.ds || !cell.day) return <span key={`e${index}`} className="aspect-square" />;
           const count = counts?.[cell.ds] ?? 0;
-          const phase = phases?.[cell.ds];
+          const mark = marks?.[cell.ds];
           const isSelected = cell.ds === selected;
           const isToday = cell.ds === today;
           return (
@@ -59,25 +60,17 @@ export function MonthDays({
             >
               <span
                 className={cn(
-                  "grid size-9 place-items-center rounded-full text-sm tabular-nums",
-                  isToday &&
-                    "bg-[color-mix(in_srgb,var(--ag-accent)_18%,transparent)] text-fg shadow-[inset_0_0_0_1.5px_var(--ag-accent)]",
-                  isSelected && !isToday && "bg-accent text-on-accent",
-                  count > 0 && !isSelected && !isToday && "bg-[color-mix(in_srgb,var(--ag-accent)_8%,transparent)]",
+                  "cy-week-num grid size-9 place-items-center rounded-full text-sm tabular-nums",
+                  !isSelected && cycleMarkClass(mark),
+                  isToday && !mark && "bg-[color-mix(in_srgb,var(--ag-accent)_18%,transparent)] text-fg",
+                  isToday && "cy-today-ring",
+                  isSelected && "bg-accent font-semibold text-on-accent",
+                  count > 0 && !isSelected && !isToday && !mark && "bg-[color-mix(in_srgb,var(--ag-accent)_8%,transparent)]",
                 )}
               >
                 {cell.day}
               </span>
-              {phase && phase !== "quiet" ? (
-                <span
-                  className={cn(
-                    "absolute top-1 size-1.5 rounded-full",
-                    phase === "period" && "bg-wine",
-                    phase === "fertile" && "bg-accent",
-                    phase === "ovulation" && "bg-accent shadow-[0_0_0_2px_color-mix(in_srgb,var(--ag-accent)_40%,transparent)]",
-                  )}
-                />
-              ) : null}
+              {mark?.start ? <span className="cy-bg-period absolute top-1 size-1.5 rounded-full" aria-hidden /> : null}
               {count > 0 ? (
                 <span className="absolute bottom-0 flex items-center text-accent">
                   <RatingIcon style={marker} className="size-2.5" />
