@@ -8,6 +8,7 @@ import type { CopyKey } from "@/lib/vela/copy";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { ratingLabel, ratingSentence } from "@/lib/vela/notes";
 import { blankDraft, useJournal } from "@/lib/vela/store";
+import { trackerForPartner } from "@/lib/vela/cycle-trackers";
 import { RATING_KEYS, type Draft, type RatingKey } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
 import { MonthDays } from "./month-days";
@@ -59,7 +60,7 @@ export function SessionForm({
   const addPartner = useJournal((s) => s.addPartner);
   const removePartner = useJournal((s) => s.removePartner);
   const customPlaces = useJournal((s) => s.journal.settings.customPlaces);
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycles = useJournal((s) => s.journal.settings.cycles);
   const customPositions = useJournal((s) => s.journal.settings.customPositions);
   const weekStart = useJournal((s) => s.journal.settings.weekStart);
   const ratingStyle = useJournal((s) => s.journal.settings.ratingStyle);
@@ -74,6 +75,9 @@ export function SessionForm({
     return [base];
   });
   const draft = slots[Math.min(active, Math.max(slots.length - 1, 0))] ?? blankDraft();
+  // The session's phase (chip and date picker marks) comes from its partner's tracker, else the user's own.
+  const draftPartner = draft.newPartner.trim() || draft.partnerName || "";
+  const cycle = trackerForPartner(cycles, draftPartner);
   const [openDate, setOpenDate] = useState(false);
   const [openTime, setOpenTime] = useState(false);
   const [openRate, setOpenRate] = useState<RatingKey | null>(null);
@@ -206,7 +210,7 @@ export function SessionForm({
           </button>
         </Field>
       </div>
-      <SessionPhaseChip date={draft.date} />
+      <SessionPhaseChip date={draft.date} partner={draftPartner} />
       {openDate ? (
         <div className="rounded-card border border-border bg-surface-2 p-3">
           <div className="mb-2 flex items-center justify-between">
@@ -224,7 +228,7 @@ export function SessionForm({
             weekStart={weekStart}
             lang={lang}
             selected={draft.date}
-            marks={cycle.enabled ? cycleMarks(cycle, `${view.y}-${pad(view.m + 1)}-01`, `${view.y}-${pad(view.m + 1)}-31`, todayStr()) : undefined}
+            marks={cycle?.enabled ? cycleMarks(cycle, `${view.y}-${pad(view.m + 1)}-01`, `${view.y}-${pad(view.m + 1)}-31`, todayStr()) : undefined}
             marker={ratingStyle}
             onPick={(ds) => {
               patch({ date: ds });

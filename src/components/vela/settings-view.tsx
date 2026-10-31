@@ -20,7 +20,9 @@ import { THEMES } from "@/lib/vela/catalog";
 import { fmtShort } from "@/lib/vela/dates";
 import { FingerprintSettings } from "./bio";
 import { useLang, useT } from "@/lib/vela/i18n";
-import { useJournal } from "@/lib/vela/store";
+import { selectActiveCycle, useJournal } from "@/lib/vela/store";
+import { MAX_TRACKERS, followsPartner, visibleTrackers, type CycleTracker } from "@/lib/vela/cycle-trackers";
+import { fill, trackerLabel } from "@/lib/vela/cycle-words";
 import type { CopyKey } from "@/lib/vela/copy";
 import type { JournalWipe } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
@@ -38,7 +40,7 @@ export function SettingsView() {
   const cloudPhase = useJournal((s) => s.cloudPhase);
   const language = useJournal((s) => s.journal.settings.language);
   const theme = useJournal((s) => s.journal.settings.theme);
-  const cycleOn = useJournal((s) => s.journal.settings.cycle.enabled);
+  const cycleOn = useJournal((s) => visibleTrackers(s.journal.settings.cycles).length > 0);
 
   return (
     <div className="space-y-3">
@@ -507,19 +509,69 @@ function PrivacySection() {
 
 function CycleSection() {
   const t = useT();
-  const lang = useLang();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
-  const setCycle = useJournal((s) => s.setCycle);
-  const removePeriodStart = useJournal((s) => s.removePeriodStart);
-  const [name, setName] = useState(cycle.partnerName);
+  const cycles = useJournal((s) => s.journal.settings.cycles);
+  const active = useJournal(selectActiveCycle);
+  const [editId, setEditId] = useState(active.id);
+  const editing = cycles.find((tracker) => tracker.id === editId) ?? active;
+  const multi = cycles.length > 1;
   return (
     <div className="space-y-4">
       <p className="text-sm leading-relaxed text-dim">{t("cycleBody")}</p>
+      {multi ? (
+        <div>
+          <p className="mb-2 text-sm font-semibold">{t("cyPeopleTitle")}</p>
+          <div className="flex flex-wrap gap-2" data-testid="cycle-trackers">
+            {cycles.map((tracker) => {
+              const on = tracker.id === editing.id;
+              return (
+                <button
+                  key={tracker.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setEditId(tracker.id)}
+                  className={cn(
+                    "inline-flex min-h-[37px] max-w-full items-center gap-1.5 rounded-full border px-[0.85rem] text-[0.8rem] font-semibold",
+                    on ? "ag-chip-on" : "ag-pill border-border text-fg",
+                  )}
+                >
+                  <span className={cn("size-2 shrink-0 rounded-full", tracker.enabled ? "cy-bg-period" : "bg-fg/20")} />
+                  <span className="min-w-0 truncate">{trackerLabel(tracker, t)}</span>
+                  {!tracker.enabled ? <span className="shrink-0 font-medium text-dim">· {t("cyPaused")}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+      <TrackerEditor key={editing.id} tracker={editing} multi={multi} onRemoved={() => setEditId("")} />
+      <AddTracker onAdded={setEditId} />
+    </div>
+  );
+}
+
+function TrackerEditor({ tracker, multi, onRemoved }: { tracker: CycleTracker; multi: boolean; onRemoved: () => void }) {
+  const t = useT();
+  const lang = useLang();
+  const partners = useJournal((s) => s.journal.partners);
+  const store = useJournal((s) => s.setCycle);
+  const removePeriodStart = useJournal((s) => s.removePeriodStart);
+  const removeTracker = useJournal((s) => s.removeTracker);
+  const [name, setName] = useState(tracker.partnerName);
+  const [confirm, setConfirm] = useState(false);
+  const setCycle = (partial: Parameters<typeof store>[0]) => store(partial, tracker.id);
+  const label = trackerLabel(tracker, t);
+  const linkOptions = [
+    { value: "", label: t("cyLinkNone") },
+    ...[...new Set([...partners, ...(tracker.partnerLink ? [tracker.partnerLink] : [])])].map((partner) => ({ value: partner, label: partner })),
+  ];
+  return (
+    <div className="space-y-4" data-testid="cycle-tracker-editor">
       <div className="flex items-center gap-3">
-        <span className="flex-1 font-semibold">{t("cycleEnable")}</span>
-        <Switch checked={cycle.enabled} label={t("cycleTitle")} onChange={(enabled) => setCycle({ enabled })} />
+        <span className="min-w-0 flex-1 font-semibold">{multi ? t("cyTrackerOn") : t("cycleEnable")}</span>
+        <Switch checked={tracker.enabled} label={multi ? `${t("cyTrackerOn")} · ${label}` : t("cycleTitle")} onChange={(enabled) => setCycle({ enabled })} />
       </div>
-      {cycle.enabled ? (
+      {multi && !tracker.enabled ? <p className="-mt-2 text-xs leading-relaxed text-dim">{t("cyPausedHint")}</p> : null}
+      {tracker.enabled ? (
         <>
           <div>
             <p className="mb-2 text-sm font-semibold">{t("cyPerspective")}</p>
@@ -528,19 +580,32 @@ function CycleSection() {
                 <button
                   key={value}
                   type="button"
-                  aria-pressed={cycle.perspective === value}
+                  aria-pressed={tracker.perspective === value}
                   onClick={() => setCycle({ perspective: value })}
                   className={cn(
                     "ag-seg-btn min-h-11 rounded-[0.85rem] px-2 text-xs leading-tight font-semibold",
-                    cycle.perspective === value ? "ag-pick" : "text-dim",
+                    tracker.perspective === value ? "ag-pick" : "text-dim",
                   )}
                 >
                   {t(value === "self" ? "cyPerspSelf" : "cyPerspPartner")}
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-xs leading-relaxed text-dim">{t(cycle.perspective === "partner" ? "cyPerspPartnerHint" : "cyPerspSelfHint")}</p>
-            {cycle.perspective === "partner" ? (
+            <p className="mt-2 text-xs leading-relaxed text-dim">{t(tracker.perspective === "partner" ? "cyPerspPartnerHint" : "cyPerspSelfHint")}</p>
+            {tracker.perspective === "partner" && multi ? (
+              <div className="mt-3">
+                <span className="mb-1.5 block text-sm font-semibold">{t("cyLinkPartner")}</span>
+                <MenuSelect
+                  id={`cycle-link-${tracker.id}`}
+                  label={t("cyLinkPartner")}
+                  value={tracker.partnerLink}
+                  options={linkOptions}
+                  onChange={(partnerLink) => setCycle({ partnerLink, partnerName: partnerLink || name })}
+                />
+                <p className="mt-2 text-xs leading-relaxed text-dim">{t("cyLinkHint")}</p>
+              </div>
+            ) : null}
+            {tracker.perspective === "partner" && !tracker.partnerLink ? (
               <label className="mt-3 block">
                 <span className="mb-1.5 block text-sm font-semibold">{t("cyHerName")}</span>
                 <input
@@ -548,23 +613,24 @@ function CycleSection() {
                   value={name}
                   maxLength={40}
                   placeholder={t("cyHerNamePh")}
+                  data-testid="cycle-tracker-name"
                   onChange={(event) => setName(event.target.value)}
                   onBlur={() => setCycle({ partnerName: name })}
                 />
               </label>
             ) : null}
           </div>
-          <CycleTune />
+          <CycleTune id={tracker.id} />
           <p className="text-sm font-semibold">{t("cycleStarts")}</p>
-          {cycle.starts.length === 0 ? <p className="text-sm text-dim">{t("cycleNoStarts")}</p> : null}
+          {tracker.starts.length === 0 ? <p className="text-sm text-dim">{t("cycleNoStarts")}</p> : null}
           <div className="space-y-2">
-            {[...cycle.starts].sort().reverse().map((date) => (
+            {[...tracker.starts].sort().reverse().map((date) => (
               <div key={date} className="flex items-center gap-2">
                 <span className="flex-1 text-sm">
                   {fmtShort(date, lang)}
-                  {cycle.ends[date] ? <span className="text-dim"> – {fmtShort(cycle.ends[date], lang)}</span> : null}
+                  {tracker.ends[date] ? <span className="text-dim"> – {fmtShort(tracker.ends[date], lang)}</span> : null}
                 </span>
-                <Button variant="ghost" className="min-h-10 px-3" onClick={() => removePeriodStart(date)}>
+                <Button variant="ghost" className="min-h-10 px-3" onClick={() => removePeriodStart(date, tracker.id)}>
                   {t("cycleUnmarkDay")}
                 </Button>
               </div>
@@ -572,6 +638,132 @@ function CycleSection() {
           </div>
         </>
       ) : null}
+      {multi ? (
+        <>
+          <Button variant="ghost" className="w-full text-danger" onClick={() => setConfirm(true)} data-testid="cycle-tracker-remove">
+            <X className="size-4" /> {t("cyRemoveTracker")}
+          </Button>
+          <ConfirmDialog
+            open={confirm}
+            title={tracker.perspective === "partner" ? fill(t("cyRemoveTrackerQ"), { name: label }) : t("cyRemoveTrackerSelfQ")}
+            confirmLabel={t("cyRemoveYes")}
+            cancelLabel={t("keep")}
+            onCancel={() => setConfirm(false)}
+            onConfirm={() => {
+              setConfirm(false);
+              removeTracker(tracker.id);
+              onRemoved();
+            }}
+          />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function AddTracker({ onAdded }: { onAdded: (id: string) => void }) {
+  const t = useT();
+  const cycles = useJournal((s) => s.journal.settings.cycles);
+  const partners = useJournal((s) => s.journal.partners);
+  const addTracker = useJournal((s) => s.addTracker);
+  const setCycle = useJournal((s) => s.setCycle);
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<"self" | "partner">("partner");
+  const [name, setName] = useState("");
+  if (cycles.length >= MAX_TRACKERS) return null;
+  const hasSelf = cycles.some((tracker) => tracker.perspective === "self" && (tracker.enabled || tracker.starts.length > 0));
+  const free = partners.filter((partner) => !cycles.some((tracker) => followsPartner(tracker, partner)));
+  const add = (perspective: "self" | "partner", partnerName = "", partnerLink = "") => {
+    const only = cycles.length === 1 ? cycles[0] : null;
+    let id: string;
+    if (only && !only.enabled && only.starts.length === 0) {
+      // An unused, switched-off first cycle is simply reused instead of leaving an empty one behind.
+      setCycle({ enabled: true, perspective, partnerName, partnerLink }, only.id);
+      useJournal.getState().selectCycle(only.id);
+      id = only.id;
+    } else {
+      id = addTracker({ perspective, partnerName, partnerLink });
+    }
+    if (id) onAdded(id);
+    setOpen(false);
+    setName("");
+  };
+  if (!open) {
+    return (
+      <Button variant="ghost" className="w-full" onClick={() => { setKind(hasSelf ? "partner" : kind); setOpen(true); }} data-testid="cycle-add-tracker">
+        + {t("cyAddPerson")}
+      </Button>
+    );
+  }
+  return (
+    <div className="space-y-3 rounded-card border border-border bg-surface-2/50 p-3" data-testid="cycle-add-panel">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">{t("cyAddPerson")}</p>
+          <p className="mt-1 text-xs leading-relaxed text-dim">{t("cyAddPersonHint")}</p>
+        </div>
+        <button type="button" className="grid size-8 shrink-0 place-items-center rounded-full text-dim" aria-label={t("closeEdit")} onClick={() => setOpen(false)}>
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="ag-seg grid grid-cols-2 gap-1 rounded-card p-1" role="group" aria-label={t("cyPerspective")}>
+        {(["self", "partner"] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            disabled={value === "self" && hasSelf}
+            aria-pressed={kind === value}
+            onClick={() => setKind(value)}
+            className={cn("ag-seg-btn min-h-10 rounded-[0.85rem] px-2 text-xs leading-tight font-semibold disabled:opacity-40", kind === value ? "ag-pick" : "text-dim")}
+          >
+            {t(value === "self" ? "cyAddSelf" : "cyAddPartner")}
+          </button>
+        ))}
+      </div>
+      {kind === "self" ? (
+        <Button className="w-full" onClick={() => add("self")}>
+          {t("add")}
+        </Button>
+      ) : (
+        <>
+          {free.length ? (
+            <div className="flex flex-wrap gap-2">
+              {free.map((partner) => (
+                <button
+                  key={partner}
+                  type="button"
+                  className="ag-pill inline-flex min-h-[37px] max-w-full items-center rounded-full border border-border px-[0.85rem] text-[0.8rem] font-semibold text-fg"
+                  onClick={() => add("partner", partner, partner)}
+                  data-testid="cycle-add-partner"
+                >
+                  <span className="min-w-0 truncate">+ {partner}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex gap-2">
+            <input
+              className={cn(fieldClass, "min-w-0 flex-1")}
+              value={name}
+              maxLength={40}
+              placeholder={t("cyHerNamePh")}
+              aria-label={t("cyHerName")}
+              onChange={(event) => setName(event.target.value)}
+            />
+            <Button
+              className="shrink-0 px-4"
+              disabled={!name.trim()}
+              onClick={() => {
+                const typed = name.trim();
+                const saved = partners.find((partner) => partner.toLocaleLowerCase() === typed.toLocaleLowerCase());
+                add("partner", saved ?? typed, saved ?? "");
+              }}
+            >
+              {t("add")}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

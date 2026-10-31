@@ -10,7 +10,21 @@ import { renumber, sessionsSorted, type CompareMode } from "./stats";
 import type { Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings, TabId } from "./types";
 import type { Lang } from "./copy";
 import { bumpGrace, claimGrace, dropGrace, parkKey } from "./grace";
-import { cleanCycle, defaultCycle, withDayLog, withEnd, withStart, withoutStart, type DayLog } from "./cycle";
+import { cleanCycle, withDayLog, withEnd, withStart, withoutStart, type CycleSettings, type DayLog } from "./cycle";
+import {
+  MAX_TRACKERS,
+  activeTracker,
+  asLegacyCycle,
+  cleanTracker,
+  cleanTrackers,
+  defaultTracker,
+  mergeTrackerLists,
+  newTrackerId,
+  restamp,
+  selectedId,
+  trackerTombstone,
+  type CycleTracker,
+} from "./cycle-trackers";
 import { clearFingerprint, rememberPass, resetFingerprintPrompt, rewrapFingerprint } from "./fingerprint";
 import { useBioUi } from "./bio-offer";
 import { bioText } from "./bio-copy";
@@ -42,7 +56,9 @@ export function defaultSettings(language: Lang = "en"): Settings {
     customPositions: [],
     customProblems: [],
     defaultPartner: "",
-    cycle: defaultCycle(),
+    cycle: asLegacyCycle(defaultTracker()),
+    cycles: [defaultTracker()],
+    cycleSelected: defaultTracker().id,
     themeVersion: 2,
   };
 }
@@ -72,8 +88,20 @@ function asSettings(raw: unknown, language: Lang): Settings {
       : [],
     customProblems: Array.isArray(s.customProblems) ? s.customProblems.filter((x) => typeof x === "string") : [],
     defaultPartner: typeof s.defaultPartner === "string" ? s.defaultPartner : "",
-    cycle: cleanCycle(s.cycle),
+    ...cycleFields(s),
   };
+}
+
+/** Cycle trackers of any settings object (old single-cycle journals migrate into tracker "c1"). */
+function cycleFields(s: Partial<Settings>) {
+  const cycles = cleanTrackers(s.cycles, s.cycle);
+  return { cycle: asLegacyCycle(cycles[0]), cycles, cycleSelected: selectedId(cycles, s.cycleSelected) };
+}
+
+/** The tracker the cycle card, header pill and calendar show. */
+export function selectActiveCycle(state: { journal: Journal }): CycleTracker {
+  const settings = state.journal.settings;
+  return activeTracker(settings.cycles, settings.cycleSelected);
 }
 
 function asSession(raw: unknown, index: number): Session | null {
@@ -249,8 +277,16 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       if (session.partnerName) livePartners.add(session.partnerName);
     }
   }
+  const cycles = mergeTrackerLists(newer.settings.cycles, older.settings.cycles, deleted);
+  const settings: Settings = {
+    ...newer.settings,
+    cycles,
+    cycle: asLegacyCycle(cycles[0]),
+    cycleSelected: selectedId(cycles, newer.settings.cycleSelected),
+  };
   return {
     ...newer,
+    settings,
     partners: [...livePartners],
     sessions: renumber(sessions),
     encounters,
@@ -564,9 +600,15 @@ type Store = {
   setDiscreet: (discreet: boolean) => void;
   setAutoLock: (mins: number) => void;
   setDefaultPartner: (name: string) => void;
-  setCycle: (partial: Partial<import("./cycle").CycleSettings>) => void;
+  /** Changes the shown tracker, or tracker `id` (settings fields, enabled = on / paused, name, link). */
+  setCycle: (partial: Partial<CycleTracker>, id?: string) => void;
+  selectCycle: (id: string) => void;
+  /** Adds a tracker and shows it; returns its id ("" at the limit). */
+  addTracker: (spec: { perspective: "self" | "partner"; partnerName?: string; partnerLink?: string }) => string;
+  /** Removes a tracker and its history (never the last one). */
+  removeTracker: (id: string) => void;
   logPeriodStart: (date: string) => void;
-  removePeriodStart: (date: string) => void;
+  removePeriodStart: (date: string, id?: string) => void;
   setPeriodEnd: (start: string, end: string | null) => void;
   logCycleDay: (date: string, log: Partial<DayLog> | null) => void;
   /** Date whose cycle day log sheet is open. */
@@ -656,6 +698,18 @@ export const useJournal = create<Store>((set, get) => {
   const patchSettings = (partial: Partial<Settings>) => {
     const journal = get().journal;
     commit({ ...journal, settings: { ...journal.settings, ...partial } });
+  };
+  /** Changes one cycle tracker (the shown one unless `id` is given), stamping what changed for sync. */
+  const patchTracker = (change: (cycle: CycleTracker) => CycleSettings, id?: string, extra?: Partial<CycleTracker>) => {
+    const settings = get().journal.settings;
+    const target = id ?? activeTracker(settings.cycles, settings.cycleSelected).id;
+    const now = Date.now();
+    const cycles = settings.cycles.map((tracker) => {
+      if (tracker.id !== target) return tracker;
+      const link = extra && "partnerLink" in extra ? { partnerLink: extra.partnerLink ?? "" } : {};
+      return restamp(tracker, cleanTracker({ ...tracker, ...change(tracker), ...link, id: tracker.id }, tracker.id), now);
+    });
+    patchSettings({ cycles, cycle: asLegacyCycle(cycles[0]), cycleSelected: selectedId(cycles, settings.cycleSelected) });
   };
 
   return {
@@ -1122,21 +1176,57 @@ export const useJournal = create<Store>((set, get) => {
     setDiscreet: (discreet) => patchSettings({ discreet }),
     setAutoLock: (autoLockMins) => patchSettings({ autoLockMins }),
     setDefaultPartner: (defaultPartner) => patchSettings({ defaultPartner: defaultPartner.trim() }),
-    setCycle: (partial) => {
-      const cycle = get().journal.settings.cycle;
-      patchSettings({ cycle: cleanCycle({ ...cycle, ...partial }) });
+    setCycle: (partial, id) => {
+      patchTracker((cycle) => cleanCycle({ ...cycle, ...partial }), id, partial);
     },
     logPeriodStart: (date) => {
-      patchSettings({ cycle: withStart(get().journal.settings.cycle, date) });
+      patchTracker((cycle) => withStart(cycle, date));
     },
-    removePeriodStart: (date) => {
-      patchSettings({ cycle: withoutStart(get().journal.settings.cycle, date) });
+    removePeriodStart: (date, id) => {
+      patchTracker((cycle) => withoutStart(cycle, date), id);
     },
     setPeriodEnd: (start, end) => {
-      patchSettings({ cycle: withEnd(get().journal.settings.cycle, start, end) });
+      patchTracker((cycle) => withEnd(cycle, start, end));
     },
     logCycleDay: (date, log) => {
-      patchSettings({ cycle: withDayLog(get().journal.settings.cycle, date, log) });
+      patchTracker((cycle) => withDayLog(cycle, date, log));
+    },
+    selectCycle: (cycleSelected) => {
+      const settings = get().journal.settings;
+      if (settings.cycleSelected === cycleSelected || !settings.cycles.some((tracker) => tracker.id === cycleSelected)) return;
+      patchSettings({ cycleSelected });
+    },
+    addTracker: (spec) => {
+      const settings = get().journal.settings;
+      if (settings.cycles.length >= MAX_TRACKERS) return "";
+      const now = Date.now();
+      const id = newTrackerId();
+      const tracker = cleanTracker(
+        {
+          ...defaultTracker(id),
+          enabled: true,
+          perspective: spec.perspective,
+          partnerName: spec.partnerName ?? "",
+          partnerLink: spec.partnerLink ?? "",
+          updatedAt: now,
+          metaAt: now,
+        },
+        id,
+      );
+      const cycles = [...settings.cycles, tracker];
+      patchSettings({ cycles, cycle: asLegacyCycle(cycles[0]), cycleSelected: id });
+      return id;
+    },
+    removeTracker: (id) => {
+      const journal = get().journal;
+      const settings = journal.settings;
+      if (settings.cycles.length < 2 || !settings.cycles.some((tracker) => tracker.id === id)) return;
+      const cycles = settings.cycles.filter((tracker) => tracker.id !== id);
+      commit({
+        ...journal,
+        settings: { ...settings, cycles, cycle: asLegacyCycle(cycles[0]), cycleSelected: selectedId(cycles, settings.cycleSelected) },
+        deleted: tombstone(journal, [trackerTombstone(id)]),
+      });
     },
     cycleDay: null,
     openCycleDay: (cycleDay) => set({ cycleDay }),

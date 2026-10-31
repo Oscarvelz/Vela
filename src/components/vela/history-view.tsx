@@ -6,9 +6,10 @@ import { spanDays } from "@/lib/vela/encounters";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { sessionsSorted } from "@/lib/vela/stats";
 import { useJournal } from "@/lib/vela/store";
+import { trackerForPartner, type CycleTracker } from "@/lib/vela/cycle-trackers";
 import type { Encounter, Session } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
-import { phaseOn, type CycleSettings } from "@/lib/vela/cycle";
+import { phaseOn } from "@/lib/vela/cycle";
 import { Sparkle } from "./mark";
 import { phaseKey } from "./cycle-card";
 import { SessionCard } from "./session-card";
@@ -30,20 +31,20 @@ export function HistoryView() {
   const from = useJournal((s) => s.histFrom);
   const to = useJournal((s) => s.histTo);
   const phase = useJournal((s) => s.histPhase);
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycles = useJournal((s) => s.journal.settings.cycles);
   const clearRange = useJournal((s) => s.clearHistRange);
   const [mode, setMode] = useState<"sessions" | "encounters">("sessions");
   const list = sessionsSorted(sessions);
   const q = query.trim().toLowerCase();
   const filtered = list.filter(
-    (session) => inRange(session.date, from, to) && matchesPhase(session.date, phase, cycle) && matchesSession(session, partner, q, lang),
+    (session) => inRange(session.date, from, to) && matchesPhase(session, phase, cycles) && matchesSession(session, partner, q, lang),
   );
   const filteredEncounters = encounters
     .slice()
     .sort((a, b) => b.endDate.localeCompare(a.endDate) || b.createdAt - a.createdAt)
     .filter((encounter) => {
       const inside = list.filter((session) => session.encounterId === encounter.id);
-      if (phase && !inside.some((session) => matchesPhase(session.date, phase, cycle))) return false;
+      if (phase && !inside.some((session) => matchesPhase(session, phase, cycles))) return false;
       const spans =
         encounter.startDate <= (to || "9999-12-31") && encounter.endDate >= (from || "0000-01-01");
       if ((from || to) && !spans && !inside.some((session) => inRange(session.date, from, to))) return false;
@@ -225,8 +226,12 @@ function YearMark({ year }: { year: string }) {
   );
 }
 
-function matchesPhase(date: string, phase: "" | "period" | "fertile" | "quiet", cycle: CycleSettings) {
+/** Each session is judged against its own tracker: its partner's cycle, else the user's own (see trackerForPartner). */
+function matchesPhase(session: { date: string; partnerName: string }, phase: "" | "period" | "fertile" | "quiet", cycles: CycleTracker[]) {
   if (!phase) return true;
+  const cycle = trackerForPartner(cycles, session.partnerName);
+  if (!cycle) return false;
+  const date = session.date;
   const first = [...cycle.starts].sort()[0];
   if (!cycle.enabled || !first || date < first) return false;
   const found = phaseOn(cycle, date);

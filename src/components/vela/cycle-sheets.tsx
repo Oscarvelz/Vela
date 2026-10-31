@@ -4,7 +4,7 @@ import { FLOWS, MOODS, SYMPTOMS, dayInfo, type DayLog, type Flow } from "@/lib/v
 import { stageKey, useCycleWords } from "@/lib/vela/cycle-words";
 import { fmtDate, todayStr } from "@/lib/vela/dates";
 import { useLang } from "@/lib/vela/i18n";
-import { useJournal } from "@/lib/vela/store";
+import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
 import { CycleCard, FLOW_KEY, MOOD_KEY, PeriodDateActions, SYMPTOM_KEY, ToggleChip, stageDot } from "./cycle-card";
 import { Button, fieldClass } from "./ui";
@@ -69,8 +69,8 @@ function Sheet({ label, onClose, children, z = "z-50", testId }: { label: string
 export function CycleLayers() {
   const sheet = useJournal((s) => s.cycleSheet);
   const day = useJournal((s) => s.cycleDay);
-  const partner = useJournal((s) => s.journal.settings.cycle.perspective === "partner");
-  const enabled = useJournal((s) => s.journal.settings.cycle.enabled);
+  const partner = useJournal((s) => selectActiveCycle(s).perspective === "partner");
+  const enabled = useJournal((s) => selectActiveCycle(s).enabled);
   const setSheet = useJournal((s) => s.setCycleSheet);
   const openDay = useJournal((s) => s.openCycleDay);
   return (
@@ -96,7 +96,7 @@ const FLOW_DROPS: Record<Flow, number> = { spotting: 1, light: 2, medium: 3, hea
 function DayLogSheet({ date, onClose }: { date: string; onClose: () => void }) {
   const { t } = useCycleWords();
   const lang = useLang();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycle = useJournal(selectActiveCycle);
   const logCycleDay = useJournal((s) => s.logCycleDay);
   const showToast = useJournal((s) => s.showToast);
   const log: DayLog = cycle.days[date] ?? {};

@@ -1,5 +1,6 @@
 import type { Mode, RatingStyle, ThemeId, WeekStart } from "./catalog";
 import type { CycleSettings } from "./cycle";
+import type { CycleTracker } from "./cycle-trackers";
 import type { Lang } from "./copy";
 
 export type Settings = {
@@ -14,7 +15,12 @@ export type Settings = {
   customPositions: string[];
   customProblems: string[];
   defaultPartner: string;
+  /** Legacy single cycle: mirror of cycles[0], kept so older builds still read a valid cycle. */
   cycle: CycleSettings;
+  /** Cycle trackers (own cycle and/or partners'), each with its own history. Source of truth. */
+  cycles: CycleTracker[];
+  /** Tracker shown on the cycle card, header pill and calendar (last one picked). */
+  cycleSelected: string;
   /** 2 = Firmament became the default theme (Oct 31, 2026). */
   themeVersion?: number;
 };

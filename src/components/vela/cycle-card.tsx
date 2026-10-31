@@ -10,16 +10,16 @@ import {
   lowChanceReady,
   pastCycles,
   periodContaining,
-  sessionsByPhase,
   type CyclePhase,
   type CycleStage,
   type DayMark,
 } from "@/lib/vela/cycle";
 import type { CopyKey } from "@/lib/vela/copy";
-import { fill, stageKey, useCycleWords } from "@/lib/vela/cycle-words";
+import { fill, stageKey, trackerLabel, useCycleWords } from "@/lib/vela/cycle-words";
+import { sessionsByPhaseFor, trackerForPartner, visibleTrackers } from "@/lib/vela/cycle-trackers";
 import { addDays, fmtShort, parseDate, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
-import { useJournal } from "@/lib/vela/store";
+import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
 import { Button, Card, fieldClass } from "./ui";
 import { CycleSky } from "./cycle-sky";
@@ -54,6 +54,46 @@ function markClass(mark: DayMark | undefined) {
 
 export { markClass as cycleMarkClass };
 
+/* ── Whose cycle: switcher shown only with 2+ visible trackers ──────────── */
+
+export function TrackerSwitch({ className }: { className?: string }) {
+  const t = useT();
+  const cycles = useJournal((s) => s.journal.settings.cycles);
+  const active = useJournal(selectActiveCycle);
+  const selectCycle = useJournal((s) => s.selectCycle);
+  const live = visibleTrackers(cycles);
+  if (live.length < 2) return null;
+  return (
+    <div
+      className={cn("ag-seg flex gap-1 overflow-x-auto rounded-card p-1", className)}
+      role="group"
+      aria-label={t("cyWhoseAria")}
+      data-testid="cycle-switch"
+      data-noswipe
+    >
+      {live.map((tracker) => {
+        const on = tracker.id === active.id;
+        return (
+          <button
+            key={tracker.id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => selectCycle(tracker.id)}
+            data-tracker={tracker.id}
+            className={cn(
+              "ag-seg-btn min-h-9 min-w-0 flex-1 basis-0 truncate rounded-[0.85rem] px-3 text-xs font-semibold whitespace-nowrap",
+              on ? "ag-pick" : "text-dim",
+            )}
+            style={{ minWidth: "4.5rem" }}
+          >
+            {trackerLabel(tracker, t)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ── Home card ──────────────────────────────────────────────────────────── */
 
 type Snap = ReturnType<typeof cycleSnapshot>;
@@ -68,7 +108,7 @@ function nearPeriod(snap: Snap, date: string) {
 export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onClose?: () => void }) {
   const { t, w, partner } = useCycleWords();
   const lang = useLang();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycle = useJournal(selectActiveCycle);
   const setCycle = useJournal((s) => s.setCycle);
   const logPeriodStart = useJournal((s) => s.logPeriodStart);
   const setPeriodEnd = useJournal((s) => s.setPeriodEnd);
@@ -142,6 +182,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
 
   return (
     <div className={cn(!inSheet && "ag-panel rounded-card border border-border px-4 py-4")} id={inSheet ? undefined : "cycle-card"} data-testid="cycle-card">
+      <TrackerSwitch className="mb-3" />
       <div className="flex items-center gap-2">
         <p className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.16em] text-dim uppercase">{w("cyTitle")}</p>
         <RegularityBadge regularity={stats.regularity} />
@@ -218,7 +259,7 @@ function daysUntil(from: string, to: string) {
 function useForecast(snap: Snap, today: string): { lead: string; next: string; late: boolean } {
   const { t, partner } = useCycleWords();
   const lang = useLang();
-  const name = useJournal((s) => s.journal.settings.cycle.partnerName).trim();
+  const name = useJournal((s) => selectActiveCycle(s).partnerName).trim();
   const loc = lang === "es" ? "es" : "en";
   const weekday = (ds: string) => parseDate(ds).toLocaleDateString(loc, { weekday: "short" }).replace(/\.$/, "");
   const soon = (ds: string) => (daysUntil(today, ds) <= 6 ? weekday(ds) : fmtShort(ds, lang));
@@ -330,7 +371,7 @@ function useKnobSpring(target: number, dragging: boolean, finger: number | null)
 export function CycleDial({ snap, keyLine, idle }: { snap: Snap; keyLine: string; idle?: ReactNode }) {
   const { t, partner } = useCycleWords();
   const lang = useLang();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycle = useJournal(selectActiveCycle);
   const sessions = useJournal((s) => s.journal.sessions);
   const openCycleDay = useJournal((s) => s.openCycleDay);
   const logPeriodStart = useJournal((s) => s.logPeriodStart);
@@ -728,7 +769,7 @@ function weekMark(mark: DayMark | undefined) {
 
 function WeekStrip({ picked, onPick }: { picked: string | null; onPick: (ds: string) => void }) {
   const lang = useLang();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycle = useJournal(selectActiveCycle);
   const partner = cycle.perspective === "partner";
   const today = todayStr();
   const days = Array.from({ length: 7 }, (_, index) => addDays(today, index - 3));
@@ -768,7 +809,7 @@ function WeekStrip({ picked, onPick }: { picked: string | null; onPick: (ds: str
 
 export function PeriodDateActions({ date, compact = false }: { date: string; compact?: boolean }) {
   const { t, w } = useCycleWords();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycle = useJournal(selectActiveCycle);
   const logPeriodStart = useJournal((s) => s.logPeriodStart);
   const removePeriodStart = useJournal((s) => s.removePeriodStart);
   const setPeriodEnd = useJournal((s) => s.setPeriodEnd);
@@ -835,7 +876,7 @@ export function ToggleChip({ on, onClick, children, className }: { on: boolean; 
 function FirstStart() {
   const { t, w, partner } = useCycleWords();
   const lang = useLang();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycle = useJournal(selectActiveCycle);
   const setCycle = useJournal((s) => s.setCycle);
   const logPeriodStart = useJournal((s) => s.logPeriodStart);
   const weekStart = useJournal((s) => s.journal.settings.weekStart);
@@ -851,6 +892,7 @@ function FirstStart() {
   const heads = days.slice(0, 7).map((ds) => parseDate(ds).toLocaleDateString(lang === "es" ? "es" : "en", { weekday: "narrow" }));
   return (
     <div className="ag-panel rounded-card border border-border px-4 py-4" id="cycle-card" data-testid="cycle-first">
+      <TrackerSwitch className="mb-3" />
       <p className="text-xs font-semibold tracking-[0.16em] text-dim uppercase">{w("cyTitle")}</p>
       <div className="ag-seg mt-3 grid grid-cols-2 gap-1 rounded-card p-1" role="group" aria-label={t("cyPerspective")}>
         {(["self", "partner"] as const).map((value) => (
@@ -934,10 +976,13 @@ function FirstStart() {
 
 /* ── Usual lengths ──────────────────────────────────────────────────────── */
 
-export function CycleTune() {
+export function CycleTune({ id }: { id?: string } = {}) {
   const t = useT();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
-  const setCycle = useJournal((s) => s.setCycle);
+  const active = useJournal(selectActiveCycle);
+  const picked = useJournal((s) => (id ? s.journal.settings.cycles.find((tracker) => tracker.id === id) : undefined));
+  const cycle = picked ?? active;
+  const store = useJournal((s) => s.setCycle);
+  const setCycle = (partial: Parameters<typeof store>[0]) => store(partial, cycle.id);
   return (
     <div className="mt-3 space-y-3 border-t border-border pt-3">
       <TuneRow label={t("cyclePeriodLen")} value={cycle.periodDays} min={2} max={10} suffix={t("cycleDaysWord")} onChange={(periodDays) => setCycle({ periodDays })} />
@@ -987,15 +1032,18 @@ function TuneRow({
 export function CycleStats() {
   const { t, w, partner } = useCycleWords();
   const lang = useLang();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycle = useJournal(selectActiveCycle);
   const sessions = useJournal((s) => s.journal.sessions);
+  const cycles = useJournal((s) => s.journal.settings.cycles);
   const openPhase = useJournal((s) => s.openHistPhase);
   if (!cycle.enabled || cycle.starts.length === 0) return null;
   const today = todayStr();
   const snap = cycleSnapshot(cycle, today);
   const stats = cycleStats(cycle);
   const history = pastCycles(cycle, 6);
-  const counts = sessionsByPhase(cycle, sessions.map((session) => session.date), today);
+  // Each moment is read against its own tracker (its partner's cycle, else the user's own).
+  const counts = sessionsByPhaseFor(cycles, sessions, today);
+  const multi = visibleTrackers(cycles).length > 1;
   const rows: { phase: "period" | "fertile" | "quiet"; label: string; value: number; dot: string }[] = [
     { phase: "period", label: t("cyclePeriod"), value: counts.period, dot: "cy-bg-period" },
     { phase: "fertile", label: t("cycleFertile"), value: counts.fertile + counts.ovulation, dot: "cy-bg-fertile" },
@@ -1010,6 +1058,7 @@ export function CycleStats() {
       : `${t(stats.regularity === "regular" ? "cyRegular" : "cyIrregular")} · ${fill(t("cyRangeDays"), { a: stats.min ?? "", b: stats.max ?? "" })}`;
   return (
     <Card className="min-w-0 overflow-hidden" data-testid="cycle-stats">
+      <TrackerSwitch className="mb-3" />
       <div className="flex items-center gap-2">
         <h2 className="min-w-0 flex-1 truncate font-display text-2xl">{w("cyTitle")}</h2>
         <RegularityBadge regularity={stats.regularity} />
@@ -1039,6 +1088,7 @@ export function CycleStats() {
         </>
       ) : null}
       <p className="mt-4 text-sm font-semibold">{t("cycleInMoments")}</p>
+      {multi ? <p className="mt-1 text-xs leading-relaxed text-dim">{t("cyMomentsRule")}</p> : null}
       <div className="mt-2 space-y-2">
         {rows.map((row) => (
           <button key={row.phase} type="button" className="block w-full min-w-0 text-left" onClick={() => openPhase(row.phase)}>
@@ -1119,7 +1169,7 @@ function Mini({ value, label, unit }: { value: string; label: string; unit?: str
 
 export function CycleDayPanel({ date }: { date: string }) {
   const { t, partner } = useCycleWords();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycle = useJournal(selectActiveCycle);
   const openCycleDay = useJournal((s) => s.openCycleDay);
   if (!cycle.enabled) return null;
   const today = todayStr();
@@ -1172,7 +1222,7 @@ export { FLOW_KEY };
 
 function DayLogSummary({ date }: { date: string }) {
   const t = useT();
-  const log = useJournal((s) => s.journal.settings.cycle.days[date]);
+  const log = useJournal((s) => selectActiveCycle(s).days[date]);
   if (!log) return null;
   const parts = [
     log.flow ? `${t("cyFlow")}: ${t(FLOW_KEY[log.flow])}` : "",
@@ -1197,12 +1247,15 @@ function DayLogSummary({ date }: { date: string }) {
 
 /* ── Session form: phase of the session's date ──────────────────────────── */
 
-export function SessionPhaseChip({ date }: { date: string }) {
+export function SessionPhaseChip({ date, partner = "" }: { date: string; partner?: string }) {
   const t = useT();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
-  if (!cycle.enabled || cycle.starts.length === 0) return null;
+  const cycles = useJournal((s) => s.journal.settings.cycles);
+  const cycle = trackerForPartner(cycles, partner);
+  if (!cycle || !cycle.enabled || cycle.starts.length === 0) return null;
   const info = dayInfo(cycle, date, todayStr());
   if (!info) return null;
+  // With several cycles followed, the chip says whose cycle it read.
+  const whose = visibleTrackers(cycles).length > 1 ? trackerLabel(cycle, t) : "";
   const note = info.stage === "ovulation" ? t("cyOvulationNote") : info.stage === "fertile" ? t("cyFertileNote") : "";
   return (
     <div className="-mt-2 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="session-phase">
@@ -1210,6 +1263,7 @@ export function SessionPhaseChip({ date }: { date: string }) {
         <span className={cn("size-2 rounded-full", stageDot(info.stage))} />
         {t(stageKey(info.stage))}
         {info.cycleDay ? <span className="font-medium text-dim">· {t("cycleDay")} {info.cycleDay}</span> : null}
+        {whose ? <span className="max-w-[8rem] truncate font-medium text-dim" data-testid="session-phase-whose">· {whose}</span> : null}
       </span>
       {note ? <span className="cy-text-fertile text-xs font-medium leading-snug">{note}</span> : null}
     </div>
@@ -1218,10 +1272,11 @@ export function SessionPhaseChip({ date }: { date: string }) {
 
 /* ── History: one small dot per entry ───────────────────────────────────── */
 
-export function PhaseDot({ date, className }: { date: string; className?: string }) {
+export function PhaseDot({ date, partner = "", className }: { date: string; partner?: string; className?: string }) {
   const t = useT();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
-  if (!cycle.enabled || cycle.starts.length === 0) return null;
+  const cycles = useJournal((s) => s.journal.settings.cycles);
+  const cycle = trackerForPartner(cycles, partner);
+  if (!cycle || !cycle.enabled || cycle.starts.length === 0) return null;
   const info = dayInfo(cycle, date, todayStr());
   if (!info || info.phase === "quiet") return null;
   const label = t(stageKey(info.stage));
@@ -1241,15 +1296,23 @@ const PILL_KEY: Record<CycleStage, CopyKey> = {
 
 export function CyclePill() {
   const t = useT();
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycle = useJournal(selectActiveCycle);
   const discreet = useJournal((s) => s.journal.settings.discreet);
   const setCycleSheet = useJournal((s) => s.setCycleSheet);
+  const multi = useJournal((s) => visibleTrackers(s.journal.settings.cycles).length > 1);
   if (!cycle.enabled || cycle.starts.length === 0) return null;
   const snap = cycleSnapshot(cycle, todayStr());
   if (!snap.day) return null;
+  const whose = multi ? trackerLabel(cycle, t) : "";
   return (
-    <button type="button" className="cy-pill" aria-label={t("cyOpenCycle")} onClick={() => setCycleSheet(true)} data-testid="cycle-pill">
+    <button type="button" className="cy-pill" aria-label={whose ? `${t("cyOpenCycle")} · ${whose}` : t("cyOpenCycle")} onClick={() => setCycleSheet(true)} data-testid="cycle-pill">
       <span className={cn("size-1.5 rounded-full", stageDot(snap.stage))} />
+      {whose ? (
+        <>
+          <span className="max-w-[4.5rem] truncate" data-testid="cycle-pill-whose">{whose}</span>
+          <span className="text-dim">·</span>
+        </>
+      ) : null}
       <span className="tabular-nums">
         {t("cyDayShort")}
         {snap.day}
@@ -1264,6 +1327,10 @@ export function CyclePill() {
 
 export function CycleLegend() {
   const t = useT();
+  const cycle = useJournal(selectActiveCycle);
+  const multi = useJournal((s) => visibleTrackers(s.journal.settings.cycles).length > 1);
+  const whoseName = cycle.perspective === "partner" ? trackerLabel(cycle, t) : "";
+  const whose = multi ? (whoseName ? fill(t("cyLegendOf"), { name: whoseName }) : t("cyLegendOfSelf")) : "";
   const items: { key: CopyKey; cls: string }[] = [
     { key: "cyLegendPeriod", cls: "cy-mark-period" },
     { key: "cyLegendPredicted", cls: "cy-mark-period-pred" },
@@ -1272,6 +1339,11 @@ export function CycleLegend() {
   ];
   return (
     <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-dim" data-testid="cycle-legend">
+      {whose ? (
+        <span className="w-full truncate text-center font-semibold" data-testid="cycle-legend-whose">
+          {whose}
+        </span>
+      ) : null}
       {items.map((item) => (
         <span key={item.key} className="inline-flex items-center gap-1.5">
           <span className={cn("cy-week-num inline-block size-3 rounded-full", item.cls)} />

@@ -3,7 +3,7 @@ import { fmtDate, iso, monthHeading, todayStr } from "@/lib/vela/dates";
 import { cycleMarks } from "@/lib/vela/cycle";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { sessionsSorted } from "@/lib/vela/stats";
-import { useJournal } from "@/lib/vela/store";
+import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { MonthDays } from "./month-days";
 import { SessionCard } from "./session-card";
 import { CycleDayPanel, CycleLegend } from "./cycle-card";
@@ -24,7 +24,7 @@ export function CalendarView() {
   const weekStart = useJournal((s) => s.journal.settings.weekStart);
   const ratingStyle = useJournal((s) => s.journal.settings.ratingStyle);
   const sessions = useJournal((s) => s.journal.sessions);
-  const cycle = useJournal((s) => s.journal.settings.cycle);
+  const cycle = useJournal(selectActiveCycle);
   const shift = useJournal((s) => s.shiftMonth);
   const goToToday = useJournal((s) => s.goToToday);
   const pick = useJournal((s) => s.pickDay);

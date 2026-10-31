@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import type { CopyKey } from "./copy";
 import type { CycleStage } from "./cycle";
 import { useT } from "./i18n";
-import { useJournal } from "./store";
+import { selectActiveCycle, useJournal } from "./store";
 
 /** Phrases that change with the tracking perspective ("I track my own" vs "I follow my partner's"). */
 export type CycleWordKey = "cyTitle" | "cyPeriodStarted" | "cyPeriodEnded" | "cyFirstTitle" | "cyFirstBody" | "cyMarkStart" | "cyMarkEnd";
@@ -23,8 +23,8 @@ export function fill(text: string, values: Record<string, string | number>) {
 
 export function useCycleWords() {
   const t = useT();
-  const perspective = useJournal((s) => s.journal.settings.cycle.perspective);
-  const name = useJournal((s) => s.journal.settings.cycle.partnerName).trim();
+  const perspective = useJournal((s) => selectActiveCycle(s).perspective);
+  const name = useJournal((s) => selectActiveCycle(s).partnerName).trim();
   const partner = perspective === "partner";
   const w = useCallback(
     (key: CycleWordKey) => {
@@ -56,4 +56,10 @@ const DISCREET_KEY: Record<CycleStage, CopyKey> = {
 
 export function stageKey(stage: CycleStage, discreet = false) {
   return discreet ? DISCREET_KEY[stage] : STAGE_KEY[stage];
+}
+
+/** Short name for a tracker in switchers, the header pill and legends: the partner's name, else "Me" / "Partner". */
+export function trackerLabel(tracker: { perspective: string; partnerName: string; partnerLink?: string }, t: (key: CopyKey) => string) {
+  if (tracker.perspective !== "partner") return t("cyMe");
+  return (tracker.partnerLink || tracker.partnerName || "").trim() || t("cyPartnerUnnamed");
 }
