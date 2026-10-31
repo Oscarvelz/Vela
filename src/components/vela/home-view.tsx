@@ -43,9 +43,7 @@ export function HomeView() {
       <div className="space-y-4">
         <Card className="ag-hero px-5 py-5">
           <div className="flex items-start gap-3">
-            <span className="ag-soft grid size-11 shrink-0 place-items-center rounded-[14px]">
-              <Mark className="size-6" />
-            </span>
+            <Mark className="-ml-1 mt-0.5 size-14" />
             <h2 className="font-display text-[1.85rem] leading-tight">
               {total > 0 ? t("homeWelcome") : t("homeEmptyTitle")}
             </h2>

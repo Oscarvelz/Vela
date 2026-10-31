@@ -55,8 +55,8 @@ export function AuthScreen() {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10">
       <div className="text-center">
-        <div className="vela-ember mx-auto size-16">
-          <Mark className="relative size-16" />
+        <div className="mx-auto size-24">
+          <Mark alive className="relative size-24" />
         </div>
         <h1 className="vela-rise mt-5 font-display text-4xl tracking-brand" style={{ animationDelay: "120ms" }}>
           VELA

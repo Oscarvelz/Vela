@@ -847,3 +847,27 @@ input[type="range"].ag-range::-moz-range-thumb {
   background-color: rgba(235, 189, 99, 0.13);
   box-shadow: inset 0 0 0 1px rgba(235, 189, 99, 0.34);
 }
+
+/* Vela mark (flame) colours: warm and luminous at night, deeper amber by day so it reads on light paper. */
+.vela-mark { --mark-halo: #ffc04d; --mark-halo-o: 0.55; --mark-tip: #ffd877; --mark-body: #f2b04a; --mark-base: #e08a2c; filter: drop-shadow(0 0 6px rgba(255, 190, 80, 0.35)); }
+[data-mode="day"] .vela-mark { --mark-halo: #f0a640; --mark-halo-o: 0.32; --mark-tip: #f4b552; --mark-body: #e39a34; --mark-base: #c8741f; filter: drop-shadow(0 1px 2px rgba(150, 80, 10, 0.25)); }
+
+/* Living flame: slow, organic, never in sync (prime-ish periods), so it never reads as a loop. */
+.vela-mark-alive .vela-mark-halo { transform-box: fill-box; transform-origin: 50% 60%; animation: vm-halo 6.1s ease-in-out infinite; }
+.vela-mark-alive .vela-mark-fire { transform-box: fill-box; transform-origin: 50% 100%; animation: vm-flicker 3.7s ease-in-out infinite; }
+.vela-mark-alive .vela-mark-sway { transform-box: fill-box; transform-origin: 50% 100%; animation: vm-sway 7.3s ease-in-out infinite; }
+.vela-mark-alive .vela-mark-core { transform-box: fill-box; transform-origin: 50% 90%; animation: vm-core 2.9s ease-in-out infinite; }
+.vela-mark-sparks circle { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.vela-mark-alive .vela-mark-sparks circle:nth-child(1) { animation: vm-spark 7s ease-out 1.2s infinite; }
+.vela-mark-alive .vela-mark-sparks circle:nth-child(2) { animation: vm-spark2 9.5s ease-out 4.1s infinite; }
+.vela-mark-alive .vela-mark-sparks circle:nth-child(3) { animation: vm-spark 11s ease-out 7.4s infinite; }
+@keyframes vm-halo { 0%,100% { opacity: .82; transform: scale(.96); } 45% { opacity: 1; transform: scale(1.05); } 70% { opacity: .9; transform: scale(1); } }
+@keyframes vm-flicker {
+  0%,100% { transform: scale(1, 1); } 18% { transform: scale(.985, 1.035); } 31% { transform: scale(1.01, .985); }
+  52% { transform: scale(.99, 1.045); } 64% { transform: scale(1.012, .99); } 81% { transform: scale(.995, 1.02); }
+}
+@keyframes vm-sway { 0%,100% { transform: skewX(0deg); } 25% { transform: skewX(-2.2deg); } 55% { transform: skewX(1.6deg); } 80% { transform: skewX(-.8deg); } }
+@keyframes vm-core { 0%,100% { transform: scale(1); opacity: .95; } 40% { transform: scale(1.06, 1.1); opacity: 1; } 70% { transform: scale(.96, .98); opacity: .88; } }
+@keyframes vm-spark { 0% { opacity: 0; transform: translate(0,0) scale(1); } 8% { opacity: .9; } 60% { opacity: .35; } 100% { opacity: 0; transform: translate(4px,-26px) scale(.3); } }
+@keyframes vm-spark2 { 0% { opacity: 0; transform: translate(0,0) scale(1); } 10% { opacity: .8; } 60% { opacity: .3; } 100% { opacity: 0; transform: translate(-5px,-22px) scale(.3); } }
+@media (prefers-reduced-motion: reduce) { .vela-mark-alive * { animation: none !important; } }

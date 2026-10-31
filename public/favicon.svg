@@ -3,7 +3,7 @@
  <radialGradient id="sky" cx="50%" cy="42%" r="75%">
   <stop offset="0" stop-color="#1b2a5c"/><stop offset="0.55" stop-color="#0d1636"/><stop offset="1" stop-color="#04060f"/>
  </radialGradient>
- <radialGradient id="halo" cx="256" cy="262" r="200" gradientUnits="userSpaceOnUse">
+ <radialGradient id="halo" cx="256" cy="300" r="230" gradientUnits="userSpaceOnUse">
   <stop offset="0" stop-color="#ffc85a" stop-opacity="0.46"/>
   <stop offset="0.35" stop-color="#e89a3a" stop-opacity="0.17"/>
   <stop offset="0.75" stop-color="#e89a3a" stop-opacity="0.04"/>
@@ -21,10 +21,16 @@
   <stop offset="1" stop-color="#ffd877"/>
  </linearGradient>
  <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter>
+<linearGradient id="fo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd877"/><stop offset="0.55" stop-color="#f2b04a"/><stop offset="1" stop-color="#e08a2c"/></linearGradient>
+ <radialGradient id="fc" cx="50" cy="72" r="16" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fffaf0"/><stop offset="0.6" stop-color="#ffe9b0"/><stop offset="1" stop-color="#ffd276"/></radialGradient>
+ <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/></filter>
 </defs>
 <rect width="512" height="512" fill="url(#sky)"/>
 <circle cx="172.8" cy="91.2" r="0.9" fill="#e9eeff" opacity="0.29"/><circle cx="47.4" cy="259.5" r="0.9" fill="#e9eeff" opacity="0.30"/><circle cx="280.1" cy="47.9" r="2.0" fill="#e9eeff" opacity="0.32"/><circle cx="467.3" cy="292.4" r="1.6" fill="#e9eeff" opacity="0.28"/><circle cx="82.9" cy="217.8" r="2.0" fill="#e9eeff" opacity="0.32"/><circle cx="278.5" cy="49.6" r="0.9" fill="#e9eeff" opacity="0.62"/><circle cx="455.9" cy="190.7" r="1.1" fill="#e9eeff" opacity="0.73"/><circle cx="433.1" cy="364.3" r="1.3" fill="#e9eeff" opacity="0.62"/><circle cx="54.6" cy="261.6" r="1.1" fill="#e9eeff" opacity="0.70"/><circle cx="38.5" cy="335.4" r="2.0" fill="#e9eeff" opacity="0.59"/><circle cx="433.2" cy="168.1" r="1.3" fill="#e9eeff" opacity="0.61"/><circle cx="416.5" cy="465.9" r="1.6" fill="#e9eeff" opacity="0.67"/><circle cx="50.7" cy="365.1" r="1.3" fill="#e9eeff" opacity="0.64"/><circle cx="488.7" cy="407.9" r="1.3" fill="#e9eeff" opacity="0.68"/><circle cx="438.7" cy="183.8" r="1.6" fill="#e9eeff" opacity="0.46"/><circle cx="452.7" cy="254.4" r="1.1" fill="#e9eeff" opacity="0.52"/><circle cx="279.3" cy="437.0" r="1.6" fill="#e9eeff" opacity="0.77"/><circle cx="189.3" cy="437.3" r="1.1" fill="#e9eeff" opacity="0.34"/><circle cx="103.2" cy="129.5" r="1.1" fill="#e9eeff" opacity="0.26"/><circle cx="412.3" cy="106.1" r="1.3" fill="#e9eeff" opacity="0.25"/><circle cx="287.3" cy="469.9" r="2.0" fill="#e9eeff" opacity="0.82"/><circle cx="469.3" cy="341.2" r="2.0" fill="#e9eeff" opacity="0.49"/><circle cx="208.3" cy="68.9" r="1.6" fill="#e9eeff" opacity="0.29"/><circle cx="51.8" cy="118.5" r="1.1" fill="#e9eeff" opacity="0.32"/><circle cx="303.5" cy="68.3" r="2.0" fill="#e9eeff" opacity="0.34"/><circle cx="67.9" cy="191.6" r="0.9" fill="#e9eeff" opacity="0.29"/><circle cx="319.4" cy="471.0" r="2.0" fill="#e9eeff" opacity="0.47"/><circle cx="78.0" cy="420.7" r="1.6" fill="#e9eeff" opacity="0.54"/><circle cx="167.2" cy="88.0" r="1.3" fill="#e9eeff" opacity="0.69"/>
-<circle cx="256" cy="262" r="200" fill="url(#halo)"/>
-<circle cx="256" cy="268" r="96" fill="url(#inner)"/>
-<path filter="url(#soft)" fill="url(#core)" d="M260.5 211.0 C257.5 229.0 278.5 247.0 278.5 271.0 C278.5 289.0 268.0 301.0 256.0 301.0 C242.5 301.0 232.0 289.0 232.0 272.5 C232.0 251.5 250.0 241.0 254.5 223.0 C256.0 217.0 259.0 214.0 260.5 211.0 Z"/>
+<circle cx="256" cy="300" r="230" fill="url(#halo)"/>
+<g transform="translate(256 270) scale(3.1) translate(-50 -52)">
+ <path d="M52 6 C49 20 70 34 72 56 C74 78 63 92 50 92 C36 92 26 80 27 63 C28 45 44 36 48 21 C49 15 51 10 52 6 Z" fill="#ffb84a" opacity="0.55" filter="url(#glow)"/>
+ <path d="M52 6 C49 20 70 34 72 56 C74 78 63 92 50 92 C36 92 26 80 27 63 C28 45 44 36 48 21 C49 15 51 10 52 6 Z" fill="url(#fo)"/>
+ <path d="M51 44 C50 52 60 59 60 70 C60 79 56 84 50 84 C44 84 40 79 40 72 C40 62 48 57 49 50 C49.5 48 50 46 51 44 Z" fill="url(#fc)"/>
+</g>
 </svg>

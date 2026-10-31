@@ -43,7 +43,7 @@ export function SettingsView() {
   return (
     <div className="space-y-3">
       <div className="flex items-start gap-2 px-1 pt-1">
-        <Mark className="mt-1 size-4" />
+        <Mark className="mt-0.5 size-8" />
         <div>
           <h2 className="font-display text-3xl">{t("settings")}</h2>
           <p className="mt-1 text-sm leading-relaxed text-dim">{t("settingsSub")}</p>

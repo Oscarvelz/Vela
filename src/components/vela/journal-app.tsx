@@ -52,7 +52,7 @@ function Splash() {
   return (
     <div className="grid min-h-dvh place-items-center bg-bg">
       <div className="text-center">
-        <Mark className="mx-auto size-16" />
+        <Mark alive className="mx-auto size-24" />
         <p className="mt-4 font-display text-3xl tracking-brand">VELA</p>
       </div>
     </div>
@@ -294,7 +294,7 @@ function Shell() {
     <div className="min-h-dvh max-w-full overflow-x-clip bg-bg text-fg">
       <header ref={setHeaderEl} className="ag-header glow-header sticky top-0 z-30 border-b border-border backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
-          <Mark className="size-10" />
+          <Mark alive className="-mx-1 size-12" />
           <div className="min-w-0">
             <h1 className="font-display text-2xl leading-none tracking-wide">{brand}</h1>
             <p className="mt-1 text-xs tracking-widest text-dim uppercase">{tag}</p>
