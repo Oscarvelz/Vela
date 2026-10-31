@@ -1232,3 +1232,5 @@ input[type="range"].ag-range::-moz-range-thumb {
 [data-mode="day"] .ag-hero-tile.is-on .ag-hero-tile-ico { background: #9e6218; color: #fffaf0; }
 @media (min-width: 1024px) { .ag-hero-title { max-width: 15ch; } }
 @media (prefers-reduced-motion: reduce) { .ag-hero-tile, .ag-hero-tile-ico { transition: none; } .ag-hero-tile:active { transform: none; } }
+/* Today selected: the knob rings the moon instead of covering it. */
+.cy-knob.is-today .cy-knob-ring { fill: none; stroke-width: 2.6; }

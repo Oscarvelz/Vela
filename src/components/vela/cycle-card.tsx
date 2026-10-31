@@ -638,7 +638,8 @@ export function CycleDial({ snap, keyLine, idle }: { snap: Snap; keyLine: string
 
   const knobTarget = shown * step + step / 2;
   const knob = useKnobSpring(knobTarget, dragging, finger);
-  const showKnob = scrubbing || dragging;
+  const onToday = sel !== null && sel === todayIndex && !dragging;
+  const showKnob = scrubbing || dragging || onToday;
   const [tx, ty] = polar(todayIndex * step + step / 2);
   const [sx, sy] = polar(knob.angle);
   const ticks = Array.from({ length }, (_, index) => index);
@@ -756,9 +757,9 @@ export function CycleDial({ snap, keyLine, idle }: { snap: Snap; keyLine: string
             </g>
           ) : null}
           {showKnob ? (
-            <g className="cy-knob">
+            <g className={cn("cy-knob", onToday && "is-today")} data-testid="cycle-knob">
               <circle cx={sx} cy={sy} r={11.5} className={cn("cy-knob-ring", shownMark && shownMark.phase !== "quiet" && `cy-knob-${shownMark.phase}`)} />
-              <circle cx={sx} cy={sy} r={3.6} className="cy-knob-core" />
+              {onToday ? null : <circle cx={sx} cy={sy} r={3.6} className="cy-knob-core" />}
             </g>
           ) : null}
         </svg>

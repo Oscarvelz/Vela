@@ -48,5 +48,13 @@ for (const [dx, dy] of [[0,0],[9,0],[-9,0],[0,9],[0,-9],[7,7],[-7,-7],[7,-7],[-7
   await page.locator(".cy-center").click(); await page.waitForTimeout(120);
 }
 ok("taps near the moon pick today", good === total, `${good}/${total} (today ${today})`);
+// Landing back on today keeps a ring around the moon (it used to vanish).
+await page.mouse.click(cx, cy); await page.waitForTimeout(250);
+ok("tap on moon rings today", await page.locator(".cy-knob.is-today").count() === 1);
+await page.locator(".cy-dial").screenshot({ path: `${OUT}/dial-today-ring${LANG === "es" ? "-es" : ""}.png` });
+await page.locator(".cy-dial").focus(); await page.keyboard.press("ArrowRight"); await page.waitForTimeout(150); await page.keyboard.press("ArrowLeft"); await page.waitForTimeout(250);
+ok("scrub back to today rings the moon", await page.locator(".cy-knob.is-today").count() === 1 && (await page.locator('[data-testid="cycle-day"]').innerText()) === today);
+await page.locator(".cy-center").click(); await page.waitForTimeout(200);
+ok("reset hides the ring", await page.locator(".cy-knob").count() === 0);
 ok("no page errors", errors.length === 0, errors);
 await browser.close(); console.log(fails ? `TAP FAIL ${fails}` : "TAP ALL PASS"); process.exit(fails ? 1 : 0);

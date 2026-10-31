@@ -42,7 +42,7 @@ export function HomeView() {
   return (
     <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-5">
       <div className="space-y-4">
-        <Card className={cn("ag-hero relative isolate overflow-hidden px-5 pb-5 pt-6", total === 0 && "is-empty")}>
+        <Card className={cn("ag-hero relative isolate overflow-hidden px-5 pb-5 pt-6", "is-empty")}>
           <div className="ag-hero-sky" aria-hidden>
             <Constellation className="ag-hero-mark" />
           </div>
@@ -52,15 +52,7 @@ export function HomeView() {
               {total > 0 ? t("homeWelcome") : t("homeEmptyTitle")}
             </h2>
           </div>
-          {total > 0 ? (
-            <dl className="ag-hero-stats" aria-label={t("heroStatsLabel")}>
-              <HeroStat value={total} label={t("heroKept")} />
-              <HeroStat value={week} label={t("heroWeek")} />
-              <HeroStat value={month} label={t("heroMonth")} />
-            </dl>
-          ) : (
-            <p className="ag-hero-body">{t("homeEmptyBody")}</p>
-          )}
+          <p className="ag-hero-body">{t("homeEmptyBody")}</p>
           <Button
             className="ag-hero-cta mt-6 w-full whitespace-nowrap px-5 text-[15px]"
             onClick={() => {
@@ -212,11 +204,3 @@ function Stat({ value, label }: { value: number; label: string }) {
   );
 }
 
-function HeroStat({ value, label }: { value: number; label: string }) {
-  return (
-    <div className="ag-hero-stat">
-      <dt className="ag-hero-stat-label">{label}</dt>
-      <dd className="ag-hero-stat-value font-display tabular-nums">{value}</dd>
-    </div>
-  );
-}
