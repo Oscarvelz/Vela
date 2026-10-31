@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CircleHelp } from "lucide-react";
+import { CircleHelp, Layers, PenLine } from "lucide-react";
 import { placeLabel } from "@/lib/vela/catalog";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { longestStreak, monthCount, sessionsSorted, topCounts, weekCount } from "@/lib/vela/stats";
@@ -66,13 +66,13 @@ export function HomeView() {
             >
               {t("countOneNowLabel")}
             </Button>
-            <div className="grid w-full grid-cols-2 gap-1 rounded-card border border-border bg-surface p-1" role="group" aria-label={t("logMoment")}>
+            <div className="ag-seg grid w-full grid-cols-2 gap-1 rounded-card p-1" role="group" aria-label={t("logMoment")}>
               <button
                 type="button"
                 aria-pressed={showForm}
                 className={cn(
-                  "min-h-11 whitespace-nowrap rounded-[0.9rem] px-2 text-center text-xs font-semibold transition",
-                  showForm ? "ag-pick" : "text-dim",
+                  "ag-seg-btn inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[0.85rem] px-2 text-center text-xs font-semibold",
+                  showForm ? "ag-pick" : "text-dim hover:text-fg",
                 )}
                 onClick={() => {
                   const next = !showForm;
@@ -80,14 +80,15 @@ export function HomeView() {
                   if (next) setShowBatch(false);
                 }}
               >
+                <PenLine className="size-3.5" aria-hidden />
                 {t("logWithDetails")}
               </button>
               <button
                 type="button"
                 aria-pressed={showBatch}
                 className={cn(
-                  "min-h-11 whitespace-nowrap rounded-[0.9rem] px-2 text-center text-xs font-semibold transition",
-                  showBatch ? "ag-pick" : "text-dim",
+                  "ag-seg-btn inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[0.85rem] px-2 text-center text-xs font-semibold",
+                  showBatch ? "ag-pick" : "text-dim hover:text-fg",
                 )}
                 onClick={() => {
                   const next = !showBatch;
@@ -95,6 +96,7 @@ export function HomeView() {
                   if (next) setShowForm(false);
                 }}
               >
+                <Layers className="size-3.5" aria-hidden />
                 {t("batchLog")}
               </button>
             </div>

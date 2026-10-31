@@ -299,13 +299,13 @@ function Shell() {
             <h1 className="font-display text-2xl leading-none tracking-wide">{brand}</h1>
             <p className="mt-1 text-xs tracking-widest text-dim uppercase">{tag}</p>
           </div>
-          <div className="ml-auto flex gap-2">
-            <IconButton label={mode === "night" ? t("switchToDay") : t("switchToNight")} onClick={toggleMode}>
-              {mode === "night" ? <Sun className="size-5" /> : <Moon className="size-5" />}
+          <div className="ml-auto flex items-center gap-0.5">
+            <IconButton className="ag-hdr-btn" label={mode === "night" ? t("switchToDay") : t("switchToNight")} onClick={toggleMode}>
+              {mode === "night" ? <Sun className="size-[19px]" /> : <Moon className="size-[19px]" />}
             </IconButton>
             <IconButton
               label={t("openSettings")}
-              className={settingsOpen ? "border-accent" : ""}
+              className={cn("ag-hdr-btn", settingsOpen && "is-on")}
               onClick={() => {
                 if (settingsOpen) {
                   if (stack.current.length) history.back();
