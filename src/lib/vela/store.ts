@@ -9,6 +9,7 @@ import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
 import type { Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings, TabId } from "./types";
 import type { Lang } from "./copy";
+import { bumpGrace, claimGrace, dropGrace, parkKey } from "./grace";
 import { cleanCycle, defaultCycle, withDayLog, withEnd, withStart, withoutStart, type DayLog } from "./cycle";
 import { clearFingerprint, resetFingerprintPrompt } from "./fingerprint";
 
@@ -692,6 +693,25 @@ export const useJournal = create<Store>((set, get) => {
         stored = null;
       }
       vaultIdMem = stored?.vaultId ?? "";
+      const env0 = stored ? asEnvelope(stored.envelope) : null;
+      if (stored && env0) {
+        const vk = await claimGrace(stored.vaultId);
+        if (vk) {
+          try {
+            const data = await open(vk, env0);
+            sessionKey = vk;
+            const language = readLang();
+            const journal = journalFromUnknown(data, language);
+            if (!journal.profile) journal.profile = { displayName: "", createdAt: Date.now() };
+            rememberUi(journal);
+            set({ journal, legacy: readLegacyJournal(), vault: "locked", vaultId: vaultIdMem, ready: true, unlocked: true, lastActivity: Date.now() });
+            void parkKey(vk, vaultIdMem, journal.settings.autoLockMins);
+            return;
+          } catch {
+            await dropGrace();
+          }
+        }
+      }
       set({
         journal: lockedShell(),
         legacy: readLegacyJournal(),
@@ -702,7 +722,10 @@ export const useJournal = create<Store>((set, get) => {
         lastActivity: Date.now(),
       });
     },
-    touch: () => set({ lastActivity: Date.now() }),
+    touch: () => {
+      set({ lastActivity: Date.now() });
+      if (get().unlocked) bumpGrace(get().journal.settings.autoLockMins);
+    },
     maybeLock: () => {
       const { unlocked, journal, lastActivity } = get();
       const mins = journal.settings.autoLockMins;
@@ -711,6 +734,7 @@ export const useJournal = create<Store>((set, get) => {
     },
     lock: () => {
       resetFingerprintPrompt();
+      void dropGrace();
       const language = get().journal.settings.language;
       // Pending writes already captured their key; drop ours so memory no longer holds it.
       void flushSaves();
@@ -754,6 +778,7 @@ export const useJournal = create<Store>((set, get) => {
       const journal: Journal = { ...base, settings: { ...base.settings, language }, profile, updatedAt: Date.now() };
       set({ journal, unlocked: true, vault: "locked", vaultId: vaultIdMem, lastActivity: Date.now() });
       await persist(journal);
+      void parkKey(vk, vaultIdMem, journal.settings.autoLockMins);
       if (legacy) {
         removeLegacyJournal();
         set({ legacy: null });
@@ -769,6 +794,7 @@ export const useJournal = create<Store>((set, get) => {
       if (!journal.profile) journal.profile = { displayName: "", createdAt: Date.now() };
       set({ journal, unlocked: true, vault: "locked", vaultId: vaultIdMem, lastActivity: Date.now() });
       await persist(journal);
+      void parkKey(vk, vaultIdMem, journal.settings.autoLockMins);
     },
     rekey: async (vk) => {
       if (!get().unlocked) return;
@@ -776,6 +802,7 @@ export const useJournal = create<Store>((set, get) => {
       clearFingerprint();
       set({ keyEpoch: get().keyEpoch + 1 });
       await persist(get().journal);
+      void parkKey(vk, vaultIdMem, get().journal.settings.autoLockMins);
     },
     unlock: async (passphrase) => {
       const stored = await readVault().catch(() => null);
@@ -791,6 +818,7 @@ export const useJournal = create<Store>((set, get) => {
         if (!journal.profile) journal.profile = { displayName: "", createdAt: Date.now() };
         rememberUi(journal);
         set({ journal, unlocked: true, vaultId: vaultIdMem, lastActivity: Date.now() });
+        void parkKey(vk, vaultIdMem, journal.settings.autoLockMins);
         return true;
       } catch {
         return false;
@@ -835,6 +863,7 @@ export const useJournal = create<Store>((set, get) => {
       sessionKey = null;
       vaultIdMem = "";
       clearFingerprint();
+      void dropGrace();
       await deleteVault().catch(() => undefined);
       await deleteSync().catch(() => undefined);
       set({ journal: lockedShell(get().journal.settings.language), unlocked: false, vault: "none", vaultId: "" });

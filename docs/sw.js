@@ -1,8 +1,8 @@
 /* Vela service worker — the app opens with no internet.
    VERSION and PRECACHE are filled in by scripts/postbuild.mjs on every build. */
-const VERSION = "56c7423b5f74";
+const VERSION = "cbd222b23a6f";
 const CACHE = `vela-${VERSION}`;
-const PRECACHE = ["/Vela/","/Vela/assets/dist-CTOaXH3b.js","/Vela/assets/index-1wYgNv9n.js","/Vela/assets/index-BnZpN1pj.css","/Vela/assets/leaflet-src-CLQ_BXKU.js","/Vela/assets/leaflet-vh-t_kPv.css","/Vela/favicon.svg","/Vela/icon-180.png","/Vela/icon-192.png","/Vela/icon-512.png","/Vela/index.html","/Vela/manifest.webmanifest"];
+const PRECACHE = ["/Vela/","/Vela/assets/dist-CTOaXH3b.js","/Vela/assets/index-D38opwpD.js","/Vela/assets/index-tqE8FGEu.css","/Vela/assets/leaflet-src-DnOOBSE0.js","/Vela/assets/leaflet-vh-t_kPv.css","/Vela/favicon.svg","/Vela/icon-180.png","/Vela/icon-192.png","/Vela/icon-512.png","/Vela/index.html","/Vela/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

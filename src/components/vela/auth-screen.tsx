@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
-import { askFingerprintOnOpen, bioFailCode, bioSupported, enrollFingerprint } from "@/lib/vela/fingerprint";
+import { askFingerprintOnOpen, bioFailCode, bioForUser, bioSupported, clearFingerprint, enrollFingerprint, unlockFingerprint } from "@/lib/vela/fingerprint";
+import { Fingerprint } from "lucide-react";
 import { MIN_PASSPHRASE } from "@/lib/vela/vault-crypto";
 import { openFromCloud, resetSyncMeta, useCloud } from "@/lib/vela/sync";
 import type { CopyKey } from "@/lib/vela/copy";
@@ -102,6 +103,8 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
   const [pass, setPass] = useState("");
   const [pending, setPending] = useState(false);
   const [askForget, setAskForget] = useState(false);
+  const vaultId = useJournal((s) => s.vaultId);
+  const bioReady = Boolean(vaultId && bioSupported() && bioForUser(vaultId));
   return (
     <form
       className="space-y-3"
@@ -137,6 +140,34 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
       <Button type="submit" className="w-full" disabled={pending || !pass}>
         {pending ? t("unlocking") : t("unlock")}
       </Button>
+      {bioReady ? (
+        <button
+          type="button"
+          className="ag-bio-btn mx-auto flex flex-col items-center gap-1.5 pt-2 text-xs font-semibold text-dim"
+          disabled={pending}
+          onClick={() => {
+            setError("");
+            setPending(true);
+            unlockFingerprint(vaultId)
+              .then((passphrase) => unlock(passphrase).then((ok) => {
+                if (!ok) {
+                  clearFingerprint();
+                  setError(t("bioMismatch"));
+                }
+              }))
+              .catch((err) => {
+                const code = bioFailCode(err);
+                if (code !== "cancel") setError(t("bioFailed"));
+              })
+              .finally(() => setPending(false));
+          }}
+        >
+          <span className="grid size-14 place-items-center rounded-full">
+            <Fingerprint className="size-7" />
+          </span>
+          {t("bioUnlock")}
+        </button>
+      ) : null}
       <button type="button" className="mx-auto block min-h-10 text-xs text-dim underline" onClick={() => setAskForget(true)}>
         {t("forgotPass")}
       </button>

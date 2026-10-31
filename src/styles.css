@@ -1053,3 +1053,6 @@ input[type="range"].ag-range::-moz-range-thumb {
   .cy-arcs, .cy-today-halo, .cy-sheet, .cy-scrim, .cy-rise { animation: none !important; }
   .cy-week-day { transition: none; }
 }
+
+.ag-bio-btn > span { color: var(--ag-accent); border: 1px solid color-mix(in srgb, var(--ag-accent) 45%, transparent); background: color-mix(in srgb, var(--ag-accent) 8%, transparent); box-shadow: 0 0 22px color-mix(in srgb, var(--ag-accent) 18%, transparent); transition: transform .15s, box-shadow .3s; }
+.ag-bio-btn:active > span { transform: scale(.94); box-shadow: 0 0 30px color-mix(in srgb, var(--ag-accent) 35%, transparent); }
