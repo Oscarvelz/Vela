@@ -13,9 +13,10 @@ export function Mark({ className, alive = false }: { className?: string; alive?:
   return (
     <svg viewBox="0 0 100 100" aria-hidden className={cn("vela-mark shrink-0 overflow-visible", alive && "vela-mark-alive", className)}>
       <defs>
-        <radialGradient id={`h${id}`} cx="50" cy="62" r="50" gradientUnits="userSpaceOnUse">
+        <radialGradient id={`h${id}`} cx="50" cy="60" r="78" gradientUnits="userSpaceOnUse">
           <stop offset="0" style={{ stopColor: "var(--mark-halo)", stopOpacity: "var(--mark-halo-o)" }} />
-          <stop offset="0.45" style={{ stopColor: "var(--mark-halo)", stopOpacity: "calc(var(--mark-halo-o) * 0.35)" }} />
+          <stop offset="0.28" style={{ stopColor: "var(--mark-halo)", stopOpacity: "calc(var(--mark-halo-o) * 0.45)" }} />
+          <stop offset="0.6" style={{ stopColor: "var(--mark-halo)", stopOpacity: "calc(var(--mark-halo-o) * 0.12)" }} />
           <stop offset="1" style={{ stopColor: "var(--mark-halo)", stopOpacity: "0" }} />
         </radialGradient>
         <linearGradient id={`o${id}`} x1="0" y1="0" x2="0" y2="1">
@@ -29,7 +30,7 @@ export function Mark({ className, alive = false }: { className?: string; alive?:
           <stop offset="1" stopColor="#ffd276" />
         </radialGradient>
       </defs>
-      <circle className="vela-mark-halo" cx="50" cy="62" r="50" fill={`url(#h${id})`} />
+      <circle className="vela-mark-halo" cx="50" cy="60" r="78" fill={`url(#h${id})`} />
       <g className="vela-mark-fire">
         <g className="vela-mark-sway">
           <path className="vela-mark-flame" d={FLAME_OUTER} fill={`url(#o${id})`} />
@@ -54,6 +55,27 @@ export function Sparkle({ className }: { className?: string }) {
         fill="currentColor"
         d="M12 0.8 13.7 10.3 23.2 12 13.7 13.7 12 23.2 10.3 13.7 0.8 12 10.3 10.3Z"
       />
+    </svg>
+  );
+}
+
+/* A small amber constellation: "a moment" among the stars. Used where the flame would repeat. */
+const STARS: [number, number, number][] = [
+  [16, 72, 9], [40, 38, 14], [66, 56, 10], [86, 20, 8], [54, 88, 6.5],
+];
+export function Constellation({ className }: { className?: string }) {
+  const star = (x: number, y: number, r: number) =>
+    `M${x} ${y - r} L${x + r * 0.22} ${y - r * 0.22} L${x + r} ${y} L${x + r * 0.22} ${y + r * 0.22} L${x} ${y + r} L${x - r * 0.22} ${y + r * 0.22} L${x - r} ${y} L${x - r * 0.22} ${y - r * 0.22} Z`;
+  return (
+    <svg viewBox="0 0 100 100" aria-hidden className={cn("vela-constellation shrink-0 overflow-visible", className)}>
+      <polyline points="16,72 40,38 66,56 86,20" fill="none" className="vela-const-line" />
+      <line x1="66" y1="56" x2="54" y2="88" className="vela-const-line" />
+      {STARS.map(([x, y, r], i) => (
+        <g key={i} className="vela-const-star" style={{ animationDelay: `${i * 1.3}s`, animationDuration: `${4.2 + i * 0.9}s` }}>
+          <circle cx={x} cy={y} r={r * 1.6} className="vela-const-glow" />
+          <path d={star(x, y, r)} />
+        </g>
+      ))}
     </svg>
   );
 }

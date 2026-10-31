@@ -5,7 +5,7 @@ import { useLang, useT } from "@/lib/vela/i18n";
 import { longestStreak, monthCount, sessionsSorted, topCounts, weekCount } from "@/lib/vela/stats";
 import { useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
-import { Mark, Sparkle } from "./mark";
+import { Constellation, Sparkle } from "./mark";
 import { SessionCard } from "./session-card";
 import { SessionForm } from "./session-form";
 import { BatchLog } from "./batch-log";
@@ -43,7 +43,7 @@ export function HomeView() {
       <div className="space-y-4">
         <Card className="ag-hero px-5 py-5">
           <div className="flex items-start gap-3">
-            <Mark className="-ml-1 mt-0.5 size-14" />
+            <Constellation className="mt-1 size-16" />
             <h2 className="font-display text-[1.85rem] leading-tight">
               {total > 0 ? t("homeWelcome") : t("homeEmptyTitle")}
             </h2>
