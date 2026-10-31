@@ -1,0 +1,434 @@
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { BarChart3, CalendarDays, List, Moon, Settings, Sun } from "lucide-react";
+import { useT } from "@/lib/vela/i18n";
+import { sessionToDraft, useJournal } from "@/lib/vela/store";
+import { PLACES } from "@/lib/vela/catalog";
+import type { TabId } from "@/lib/vela/types";
+import { cn } from "@/lib/cn";
+import { AuthScreen } from "./auth-screen";
+import { CalendarView } from "./calendar-view";
+import { CloudSync } from "./cloud-sync";
+import { HistoryView } from "./history-view";
+import { HomeView } from "./home-view";
+import { InsightsView } from "./insights-view";
+import { Mark } from "./mark";
+import { SessionForm } from "./session-form";
+import { SettingsView } from "./settings-view";
+import { Button, ConfirmDialog, IconButton } from "./ui";
+import { useScrollBars } from "./use-scroll-bars";
+
+const TABS: { id: TabId; icon: (props: { className?: string }) => ReactNode; label: "navHome" | "navCalendar" | "navHistory" | "navInsights" }[] = [
+  { id: "home", icon: HomeIcon, label: "navHome" },
+  { id: "calendar", icon: CalendarDays, label: "navCalendar" },
+  { id: "history", icon: List, label: "navHistory" },
+  { id: "insights", icon: BarChart3, label: "navInsights" },
+];
+
+function HomeIcon(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={props.className} fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function JournalApp() {
+  const ready = useJournal((s) => s.ready);
+  const hydrate = useJournal((s) => s.hydrate);
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
+  if (!ready) return <Splash />;
+  return (
+    <>
+      <CloudSync />
+      <Gate />
+    </>
+  );
+}
+
+function Splash() {
+  return (
+    <div className="grid min-h-dvh place-items-center bg-bg">
+      <div className="text-center">
+        <Mark className="mx-auto size-16" />
+        <p className="mt-4 font-display text-3xl tracking-brand">VELA</p>
+      </div>
+    </div>
+  );
+}
+
+function Gate() {
+  const unlocked = useJournal((s) => s.unlocked);
+  useTheme();
+  useAutoLock();
+  if (!unlocked) return <AuthScreen />;
+  return <Shell />;
+}
+
+function useTheme() {
+  const theme = useJournal((s) => s.journal.settings.theme);
+  const mode = useJournal((s) => s.journal.settings.mode);
+  const language = useJournal((s) => s.journal.settings.language);
+  const discreet = useJournal((s) => s.journal.settings.discreet);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.theme = theme;
+    root.dataset.mode = mode;
+    root.lang = language;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    meta?.setAttribute("content", mode === "day" ? "#FDF6F0" : "#1A0E1A");
+    document.title = discreet ? (language === "es" ? "Diario" : "Journal") : "Vela";
+  }, [theme, mode, language, discreet]);
+}
+
+function useAutoLock() {
+  const maybeLock = useJournal((s) => s.maybeLock);
+  const touch = useJournal((s) => s.touch);
+  useEffect(() => {
+    const bump = () => touch();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") maybeLock();
+    };
+    window.addEventListener("pointerdown", bump, { passive: true });
+    window.addEventListener("keydown", bump, { passive: true });
+    document.addEventListener("visibilitychange", onVisible);
+    const id = window.setInterval(maybeLock, 15000);
+    return () => {
+      window.removeEventListener("pointerdown", bump);
+      window.removeEventListener("keydown", bump);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(id);
+    };
+  }, [maybeLock, touch]);
+}
+
+function Shell() {
+  const t = useT();
+  const tab = useJournal((s) => s.tab);
+  const settingsOpen = useJournal((s) => s.settingsOpen);
+  const editingId = useJournal((s) => s.editingId);
+  const mode = useJournal((s) => s.journal.settings.mode);
+  const discreet = useJournal((s) => s.journal.settings.discreet);
+  const toggleMode = useJournal((s) => s.toggleMode);
+  const setTab = useJournal((s) => s.setTab);
+  const setSettingsOpen = useJournal((s) => s.setSettingsOpen);
+  const closeEdit = useJournal((s) => s.closeEdit);
+  const histFrom = useJournal((s) => s.histFrom);
+  const histTo = useJournal((s) => s.histTo);
+  const histPhase = useJournal((s) => s.histPhase);
+  const toast = useJournal((s) => s.toast);
+  const shift = useRef(16);
+  const stack = useRef<Array<"settings" | "edit" | "range">>([]);
+  const skip = useRef(false);
+  const seenEdit = useRef<string | null>(null);
+  const seenRange = useRef("");
+  const pane = useRef<HTMLDivElement>(null);
+  const [headerEl, setHeaderEl] = useState<HTMLElement | null>(null);
+  const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
+  useScrollBars({ scroller: window, header: headerEl, dock: dockEl });
+
+  useEffect(() => {
+    const closeLayer = (kind: "settings" | "edit" | "range") => {
+      const state = useJournal.getState();
+      if (kind === "edit") state.closeEdit();
+      else if (kind === "settings") state.setSettingsOpen(false);
+      else {
+        state.clearHistRange();
+        state.setTab("insights");
+      }
+    };
+    const onPop = (event: PopStateEvent) => {
+      const landed = Array.isArray(event.state?.agStack) ? (event.state.agStack as Array<"settings" | "edit" | "range">) : [];
+      if (skip.current) {
+        skip.current = false;
+        stack.current = landed;
+        return;
+      }
+      if (landed.length >= stack.current.length) return;
+      const closed = stack.current[stack.current.length - 1];
+      stack.current = landed;
+      if (closed) closeLayer(closed);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (!stack.current.length) return;
+      event.preventDefault();
+      history.back();
+    };
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (editingId && seenEdit.current !== editingId) {
+      const next = [...stack.current, "edit" as const];
+      stack.current = next;
+      history.pushState({ agStack: next }, "");
+    }
+    seenEdit.current = editingId;
+  }, [editingId]);
+
+  useEffect(() => {
+    const key = histPhase || histFrom || histTo ? `${histPhase}|${histFrom}|${histTo}` : "";
+    if (key && seenRange.current !== key && !stack.current.includes("range")) {
+      const next = [...stack.current, "range" as const];
+      stack.current = next;
+      history.pushState({ agStack: next }, "");
+    }
+    seenRange.current = key;
+  }, [histFrom, histTo, histPhase]);
+
+  function pushLayer(kind: "settings") {
+    const next = [...stack.current, kind];
+    stack.current = next;
+    history.pushState({ agStack: next }, "");
+  }
+
+  function goTab(next: TabId, direction: number) {
+    shift.current = direction >= 0 ? 18 : -18;
+    const state = useJournal.getState();
+    const top = stack.current[stack.current.length - 1];
+    if (state.editingId) {
+      skip.current = true;
+      state.closeEdit();
+      if (stack.current.length) history.back();
+    } else if (state.settingsOpen) {
+      skip.current = true;
+      state.setSettingsOpen(false);
+      if (stack.current.length) history.back();
+    } else if (top === "range") {
+      skip.current = true;
+      state.clearHistRange();
+      history.back();
+    }
+    setTab(next);
+  }
+
+  function cycle(direction: 1 | -1) {
+    if (useJournal.getState().settingsOpen || useJournal.getState().editingId) return;
+    const order: TabId[] = ["home", "calendar", "history", "insights"];
+    const index = order.indexOf(useJournal.getState().tab);
+    goTab(order[(index + direction + order.length) % order.length], direction);
+  }
+
+  const cycleRef = useRef(cycle);
+  cycleRef.current = cycle;
+
+  useEffect(() => {
+    const node = pane.current;
+    if (!node) return;
+    let gesture: { x: number; y: number; lock: "x" | "y" | null } | null = null;
+
+    const start = (event: TouchEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.closest("[data-noswipe], input, textarea, select, nav")) {
+        gesture = null;
+        return;
+      }
+      const point = event.touches[0];
+      gesture = { x: point.clientX, y: point.clientY, lock: null };
+    };
+    const move = (event: TouchEvent) => {
+      if (!gesture) return;
+      const point = event.touches[0];
+      const dx = point.clientX - gesture.x;
+      const dy = point.clientY - gesture.y;
+      if (!gesture.lock) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        gesture.lock = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      }
+      if (gesture.lock !== "x") return;
+      event.preventDefault();
+    };
+    const end = (event: TouchEvent) => {
+      if (!gesture) return;
+      const point = event.changedTouches[0];
+      const dx = point.clientX - gesture.x;
+      const locked = gesture.lock;
+      gesture = null;
+      if (locked === "x" && Math.abs(dx) > 48) cycleRef.current(dx < 0 ? 1 : -1);
+    };
+
+    node.addEventListener("touchstart", start, { passive: true });
+    node.addEventListener("touchmove", move, { passive: false });
+    node.addEventListener("touchend", end);
+    node.addEventListener("touchcancel", end);
+    return () => {
+      node.removeEventListener("touchstart", start);
+      node.removeEventListener("touchmove", move);
+      node.removeEventListener("touchend", end);
+      node.removeEventListener("touchcancel", end);
+    };
+  }, []);
+
+  const brand = discreet ? t("discreetName") : "VELA";
+  const tag = discreet ? t("discreetTagline") : t("tagline");
+
+  return (
+    <div className="min-h-dvh max-w-full overflow-x-clip bg-bg text-fg">
+      <header ref={setHeaderEl} className="ag-header glow-header sticky top-0 z-30 border-b border-border backdrop-blur-md">
+        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
+          <Mark className="size-10" />
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl leading-none tracking-wide">{brand}</h1>
+            <p className="mt-1 text-xs tracking-widest text-dim uppercase">{tag}</p>
+          </div>
+          <div className="ml-auto flex gap-2">
+            <IconButton label={mode === "night" ? t("switchToDay") : t("switchToNight")} onClick={toggleMode}>
+              {mode === "night" ? <Sun className="size-5" /> : <Moon className="size-5" />}
+            </IconButton>
+            <IconButton
+              label={t("openSettings")}
+              className={settingsOpen ? "border-accent" : ""}
+              onClick={() => {
+                if (settingsOpen) {
+                  if (stack.current.length) history.back();
+                  else setSettingsOpen(false);
+                } else {
+                  pushLayer("settings");
+                  setSettingsOpen(true);
+                }
+              }}
+            >
+              <Settings className="size-5" />
+            </IconButton>
+          </div>
+        </div>
+      </header>
+      <main className="ag-screen mx-auto w-full min-w-0 max-w-5xl overflow-x-clip px-4 pt-4">
+        <LegacyBanner />
+        <div ref={pane} className="min-w-0 max-w-full">
+        <div key={settingsOpen ? "settings" : tab} className="ag-enter" style={{ ["--ag-shift" as string]: `${shift.current}px` }}>
+          {settingsOpen ? (
+            <SettingsView />
+          ) : tab === "home" ? (
+            <HomeView />
+          ) : tab === "calendar" ? (
+            <CalendarView />
+          ) : tab === "history" ? (
+            <HistoryView />
+          ) : (
+            <InsightsView />
+          )}
+        </div>
+        </div>
+      </main>
+      <nav className="ag-tabbar" aria-label={t("mainNav")}>
+        <div ref={setDockEl} className="ag-tabbar-face">
+        <div className="mx-auto flex w-full max-w-lg px-2 py-2">
+          {TABS.map((item) => {
+            const active = !settingsOpen && tab === item.id;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-current={active ? "page" : undefined}
+                onClick={() => goTab(item.id, TABS.findIndex((tabItem) => tabItem.id === item.id) - TABS.findIndex((tabItem) => tabItem.id === tab))}
+                className={cn(
+                  "flex h-14 w-0 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[14px] px-1 text-[11px] font-semibold leading-none",
+                  active ? "ag-tab-on" : "text-dim",
+                )}
+              >
+                <Icon className="size-5" />
+                {t(item.label)}
+              </button>
+            );
+          })}
+        </div>
+        </div>
+      </nav>
+      {toast ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-28 z-50 flex justify-center px-4">
+          <p className="rounded-full border border-accent bg-surface-2 px-4 py-2 text-sm font-semibold shadow-lift">{toast}</p>
+        </div>
+      ) : null}
+      {editingId ? (
+        <EditSheet
+          id={editingId}
+          onClose={() => {
+            skip.current = true;
+            closeEdit();
+            if (stack.current.length) history.back();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function LegacyBanner() {
+  const t = useT();
+  const legacy = useJournal((s) => s.legacy);
+  const importLegacy = useJournal((s) => s.importLegacy);
+  const discardLegacy = useJournal((s) => s.discardLegacy);
+  const showToast = useJournal((s) => s.showToast);
+  const [ask, setAsk] = useState(false);
+  if (!legacy) return null;
+  return (
+    <section className="ag-panel mb-4 rounded-card border border-accent/60 px-4 py-4" data-testid="legacy-banner">
+      <p className="font-semibold">{t("legacyTitle")}</p>
+      <p className="mt-1 text-sm text-dim">
+        {t("legacyBody")} {legacy.sessions.length}
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Button onClick={() => void importLegacy().then(() => showToast(t("legacyDone")))}>{t("legacyImport")}</Button>
+        <Button variant="ghost" onClick={() => setAsk(true)}>
+          {t("legacyDiscard")}
+        </Button>
+      </div>
+      <ConfirmDialog
+        open={ask}
+        title={t("legacyDiscardQ")}
+        confirmLabel={t("yesDelete")}
+        cancelLabel={t("keep")}
+        onCancel={() => setAsk(false)}
+        onConfirm={() => {
+          setAsk(false);
+          discardLegacy();
+        }}
+      />
+    </section>
+  );
+}
+
+function EditSheet({ id, onClose }: { id: string; onClose: () => void }) {
+  const t = useT();
+  const session = useJournal((s) => s.journal.sessions.find((item) => item.id === id));
+  const encounters = useJournal((s) => s.journal.encounters);
+  const places = useJournal((s) => s.journal.settings.customPlaces);
+  const saveEdit = useJournal((s) => s.saveEdit);
+  const showToast = useJournal((s) => s.showToast);
+  if (!session) return null;
+  const known = [...PLACES, ...places];
+  const encounter = encounters.find((item) => item.id === session.encounterId) ?? null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 sm:items-center" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("edit")}
+        data-noswipe
+        className="ag-panel max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-sheet border border-border px-4 py-5 sm:rounded-sheet"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2 className="mb-4 font-display text-3xl">{t("edit")}</h2>
+        <SessionForm
+          editing
+          initial={sessionToDraft(session, known, encounter)}
+          onClose={onClose}
+          onSave={(draft) => {
+            saveEdit(id, draft);
+            showToast(`${t("saveChanges")} ✓`);
+            onClose();
+          }}
+        />
+      </div>
+    </div>
+  );
+}
