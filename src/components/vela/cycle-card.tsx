@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Check, Droplet, Settings2, X } from "lucide-react";
+import { Check, Droplet, RotateCcw, Settings2, X } from "lucide-react";
 import {
   cycleMarks,
   cycleSnapshot,
@@ -205,6 +205,13 @@ function polar(angle: number, radius = R) {
   return [C + radius * Math.cos(rad), C + radius * Math.sin(rad)];
 }
 
+function arcPathR(from: number, to: number, radius: number) {
+  const [x1, y1] = polar(from, radius);
+  const [x2, y2] = polar(to, radius);
+  const large = to - from > 180 ? 1 : 0;
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${radius} ${radius} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+}
+
 function arcPath(from: number, to: number) {
   const [x1, y1] = polar(from);
   const [x2, y2] = polar(to);
@@ -289,10 +296,28 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
     offset === 0 ? t("cyTodayWord") : offset === 1 ? t("cyIn1") : offset === -1 ? t("cyAgo1") : offset > 0 ? fill(t("cyInN"), { n: offset }) : fill(t("cyAgoN"), { n: -offset });
   const phaseNote = info ? (info.stage === "ovulation" ? t("cyOvulationNote") : info.stage === "fertile" ? t("cyFertileNote") : "") : "";
   const count = moments.get(shown) ?? 0;
-  const chips = useMemo(() => {
-    const seen = new Set<CyclePhase>();
-    return runs.filter((run) => (seen.has(run.phase) ? false : (seen.add(run.phase), true)));
-  }, [runs]);
+  const regular = cycleStats(cycle).regularity === "regular";
+  // Lower-chance days: from 3 days after the estimated ovulation (4 while the rhythm is still learning) to the period.
+  const low = useMemo(() => {
+    const ov = runs.find((run) => run.phase === "ovulation");
+    if (!ov) return null;
+    const from = ov.from + (regular ? 3 : 4);
+    return from < length - 1 ? { from, to: length } : null;
+  }, [runs, length, regular]);
+  const tiles = useMemo(() => {
+    const out: { key: string; label: CopyKey; dot: string; from: number; to: number }[] = [];
+    const first = (phase: CyclePhase) => runs.find((run) => run.phase === phase);
+    const period = first("period");
+    const fertile = first("fertile");
+    const ov = first("ovulation");
+    if (period) out.push({ key: "period", label: "cyLegendPeriod", dot: "cy-bg-period", from: period.from, to: period.to });
+    if (fertile) out.push({ key: "fertile", label: "cyLegendFertile", dot: "cy-bg-fertile", from: fertile.from, to: fertile.to });
+    if (ov) out.push({ key: "ovulation", label: "cyLegendOvulation", dot: "cy-bg-ovulation", from: ov.from, to: ov.to });
+    if (low) out.push({ key: "low", label: "cyLowTile", dot: "cy-bg-low", from: low.from, to: low.to });
+    return out;
+  }, [runs, low]);
+  const inLow = Boolean(low && shown >= low.from && shown < low.to);
+  const lowNote = scrubbing && !phaseNote && inLow ? t("cyLowNote") : "";
 
   const [tx, ty] = polar(todayIndex * step + step / 2);
   const [sx, sy] = polar(shown * step + step / 2);
@@ -361,9 +386,12 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
                 return <circle key={`ov-${run.from}`} cx={ox} cy={oy} r={STROKE / 2 + 2.5} className={cn("cy-ov-dot", run.predicted && "cy-ov-pred")} />;
               })}
           </g>
+          {low ? (
+            <path d={arcPathR(low.from * step + gap / 2, low.to * step - gap / 2, R + STROKE / 2 + 2.6)} fill="none" strokeWidth={2.4} strokeLinecap="round" className={cn("cy-arc-low", inLow && scrubbing && "is-lit")} />
+          ) : null}
           <g className="cy-moments">
             {[...moments.keys()].map((index) => {
-              const [mx, my] = polar(index * step + step / 2, R + STROKE / 2 + 6);
+              const [mx, my] = polar(index * step + step / 2, R + STROKE / 2 + 8.5);
               return <circle key={`m-${index}`} cx={mx} cy={my} r={moments.get(index)! > 1 ? 2.6 : 2} className="cy-moment" />;
             })}
           </g>
@@ -417,40 +445,51 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
           </span>
         </button>
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5" data-testid="cycle-phase-chips">
-        {chips.map((run) => (
-          <button
-            key={run.phase}
-            type="button"
-            onClick={() => choose(run.from)}
-            className={cn("cy-phase-chip", scrubbing && shown >= run.from && shown < run.to && "is-on")}
-            aria-label={`${t("cyJumpTo")} ${t(phaseKey(run.phase))}`}
-          >
-            <span className={cn("size-2 rounded-full", stageDot(run.phase))} />
-            <span className="font-semibold">{t(run.phase === "ovulation" ? "cyLegendOvulation" : run.phase === "period" ? "cyLegendPeriod" : "cyLegendFertile")}</span>
-            <span className="text-dim tabular-nums">{run.to - run.from > 1 ? `${run.from + 1}–${run.to}` : `${run.from + 1}`}</span>
-          </button>
-        ))}
+      <div className={cn("cy-tiles mt-3 grid gap-1.5", tiles.length === 4 ? "grid-cols-4" : "grid-cols-3")} data-testid="cycle-phase-chips">
+        {tiles.map((tile) => {
+          const on = scrubbing && shown >= tile.from && shown < tile.to;
+          return (
+            <button
+              key={tile.key}
+              type="button"
+              onClick={() => choose(tile.from)}
+              className={cn("cy-tile", on && "is-on", tile.key === "low" && "is-low")}
+              aria-label={`${t("cyJumpTo")} ${t(tile.label)}`}
+              aria-pressed={on}
+            >
+              <span className="flex items-center gap-1">
+                <span className={cn("size-2 shrink-0 rounded-full", tile.dot)} />
+                <span className="tabular-nums text-dim">{tile.to - tile.from > 1 ? `${tile.from + 1}–${tile.to}` : tile.from + 1}</span>
+              </span>
+              <span className="w-full font-semibold leading-tight [overflow-wrap:anywhere]">{t(tile.label)}</span>
+            </button>
+          );
+        })}
       </div>
-      {scrubbing ? (
-        <div className="cy-rise mt-2 flex flex-wrap items-center justify-center gap-2">
-          {phaseNote ? <p className="cy-text-fertile w-full text-center text-xs font-semibold">{phaseNote}</p> : null}
-          <button type="button" className="min-h-[37px] rounded-full border border-border px-3 text-[0.8rem] font-semibold" onClick={() => setSel(null)}>
-            {t("cyBackToday")}
-          </button>
-          {shownDate <= today ? (
-            partner ? (
-              <PeriodDateActions date={shownDate} compact />
-            ) : (
-              <button type="button" className="min-h-[37px] rounded-full px-3 text-[0.8rem] font-semibold text-accent" onClick={() => openCycleDay(shownDate)}>
-                {cycle.days[shownDate] ? t("cyEditDay") : t("cyLogDay")}
+      <div className="cy-actions mt-2 min-h-[37px]">
+        {scrubbing ? (
+          <div className="cy-rise space-y-2">
+            {phaseNote || lowNote ? <p className={cn("text-center text-xs font-semibold", phaseNote ? "cy-text-fertile" : "cy-text-low")}>{phaseNote || lowNote}</p> : null}
+            <div className="flex items-center justify-center gap-2">
+              <button type="button" className="cy-act shrink-0" onClick={() => setSel(null)} aria-label={t("cyBackToday")}>
+                <RotateCcw className="size-3.5" aria-hidden />
+                {t("cyTodayShort")}
               </button>
-            )
-          ) : null}
-        </div>
-      ) : !hinted ? (
-        <p className="mt-2 text-center text-[11px] text-dim">{t("cyScrubHint")}</p>
-      ) : null}
+              {shownDate <= today ? (
+                partner ? (
+                  <PeriodDateActions date={shownDate} compact />
+                ) : (
+                  <button type="button" className="cy-act is-accent" onClick={() => openCycleDay(shownDate)}>
+                    {cycle.days[shownDate] ? t("cyEditDay") : t("cyLogDay")}
+                  </button>
+                )
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <p className="pt-2 text-center text-[11px] leading-snug text-dim">{hinted && low ? t("cyLowWhy") : t("cyScrubHint")}</p>
+        )}
+      </div>
     </div>
   );
 }

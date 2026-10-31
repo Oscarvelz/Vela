@@ -111,7 +111,10 @@ console.log('chip', await page.locator('.cy-dial').getAttribute('aria-valuetext'
 await card.screenshot({ path: `${OUT}/scrub-2-chip.png` });
 await page.locator('.cy-dial').focus(); await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(200);
 console.log('key', await page.locator('.cy-dial').getAttribute('aria-valuetext'));
-await page.locator('button:has-text("Back to today")').click(); await page.waitForTimeout(300);
+await page.locator('[data-testid="cycle-phase-chips"] button').nth(3).click(); await page.waitForTimeout(400);
+console.log('low', await page.locator('.cy-dial').getAttribute('aria-valuetext'));
+await card.screenshot({ path: `${OUT}/scrub-3-low.png` });
+await page.locator('.cy-act').first().click(); await page.waitForTimeout(300);
 console.log('back', await page.locator('.cy-dial').getAttribute('aria-valuetext'));
 const ov = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
 console.log('overflow', ov, 'errors', JSON.stringify(errors));
