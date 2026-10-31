@@ -15,6 +15,16 @@ if (LANG === "es") { await page.evaluate(() => window.__velaStore.getState().set
 const hero = page.locator(".ag-hero").first();
 const lines = await page.evaluate(() => { const h = document.querySelector(".ag-hero-title"); const lh = parseFloat(getComputedStyle(h).lineHeight); return Math.round(h.getBoundingClientRect().height / lh); });
 ok("hero title balanced in 2 lines", lines === 2, lines);
+const heroShape = await page.evaluate(() => {
+  const tiles = [...document.querySelectorAll(".ag-hero-actions .ag-hero-tile")];
+  const w = tiles.map((t) => Math.round(t.getBoundingClientRect().width));
+  const cta = Math.round(document.querySelector(".ag-hero-cta").getBoundingClientRect().width);
+  const row = Math.round(document.querySelector(".ag-hero-actions").getBoundingClientRect().width);
+  const clipped = [...document.querySelectorAll(".ag-hero-tile-label")].filter((e) => e.scrollWidth > e.clientWidth + 1).length;
+  return { n: tiles.length, even: new Set(w).size === 1, cta, row, clipped, pressed: tiles.map((t) => t.getAttribute("aria-pressed")) };
+});
+ok("hero: one full-width action over an even 3-up row", heroShape.n === 3 && heroShape.even && Math.abs(heroShape.cta - heroShape.row) <= 1 && heroShape.clipped === 0, heroShape);
+ok("hero: Details/Batch are toggles", heroShape.pressed[0] !== null && heroShape.pressed[1] !== null, heroShape.pressed);
 await hero.screenshot({ path: `${OUT}/hero-empty${LANG === "es" ? "-es" : ""}.png` });
 // Learning state: 2 starts
 await page.evaluate(() => { const s = window.__velaStore.getState(); const pad = (n) => String(n).padStart(2, "0"); const day = (o) => { const d = new Date(); d.setDate(d.getDate() + o); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }; s.setCycle({ enabled: true, perspective: "self", starts: [day(-40), day(-11)], ends: {}, days: {} }); });

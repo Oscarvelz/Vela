@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CircleHelp, Layers, PenLine } from "lucide-react";
+import { CalendarDays, CircleHelp, Layers, PenLine, Plus } from "lucide-react";
 import { placeLabel } from "@/lib/vela/catalog";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { longestStreak, monthCount, sessionsSorted, topCounts, weekCount } from "@/lib/vela/stats";
@@ -37,72 +37,73 @@ export function HomeView() {
     1,
   )[0];
   const streak = longestStreak(sessions);
+  const today = new Intl.DateTimeFormat(lang === "es" ? "es" : "en", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
 
   return (
     <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-5">
       <div className="space-y-4">
-        <Card className="ag-hero px-5 py-5">
-          <div className="ag-hero-head">
+        <Card className={cn("ag-hero relative isolate overflow-hidden px-5 pb-5 pt-6", total === 0 && "is-empty")}>
+          <div className="ag-hero-sky" aria-hidden>
             <Constellation className="ag-hero-mark" />
+          </div>
+          <div className="ag-hero-head">
+            <p className="ag-hero-eyebrow">{today}</p>
             <h2 className="ag-hero-title font-display">
               {total > 0 ? t("homeWelcome") : t("homeEmptyTitle")}
             </h2>
           </div>
           {total > 0 ? (
-            <p className="mt-3 text-sm font-medium leading-relaxed">
-              {total} {total === 1 ? t("momentKept") : t("momentsKept")} · {week} {t("thisWeekL")} · {month}{" "}
-              {t("thisMonthL")}
-            </p>
+            <dl className="ag-hero-stats" aria-label={t("heroStatsLabel")}>
+              <HeroStat value={total} label={t("heroKept")} />
+              <HeroStat value={week} label={t("heroWeek")} />
+              <HeroStat value={month} label={t("heroMonth")} />
+            </dl>
           ) : (
-            <p className="mt-3 text-sm leading-relaxed text-dim">{t("homeEmptyBody")}</p>
+            <p className="ag-hero-body">{t("homeEmptyBody")}</p>
           )}
-          <div className="mt-5 flex flex-col items-start gap-2.5">
-            <Button
-              className="min-w-52 whitespace-nowrap px-5 text-[13px]"
+          <Button
+            className="ag-hero-cta mt-6 w-full whitespace-nowrap px-5 text-[15px]"
+            onClick={() => {
+              quickLog();
+              showToast(t("quickDoneMsg"));
+            }}
+          >
+            <Plus className="size-[18px]" strokeWidth={2.4} aria-hidden />
+            {t("countOneNowLabel")}
+          </Button>
+          <div className="ag-hero-actions mt-3 grid grid-cols-3 gap-2.5" role="group" aria-label={t("logMoment")}>
+            <button
+              type="button"
+              aria-pressed={showForm}
+              aria-label={t("logWithDetails")}
+              className={cn("ag-hero-tile", showForm && "is-on")}
               onClick={() => {
-                quickLog();
-                showToast(t("quickDoneMsg"));
+                const next = !showForm;
+                setShowForm(next);
+                if (next) setShowBatch(false);
               }}
             >
-              {t("countOneNowLabel")}
-            </Button>
-            <div className="ag-seg grid w-full grid-cols-2 gap-1 rounded-card p-1" role="group" aria-label={t("logMoment")}>
-              <button
-                type="button"
-                aria-pressed={showForm}
-                className={cn(
-                  "ag-seg-btn inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[0.85rem] px-2 text-center text-xs font-semibold",
-                  showForm ? "ag-pick" : "text-dim hover:text-fg",
-                )}
-                onClick={() => {
-                  const next = !showForm;
-                  setShowForm(next);
-                  if (next) setShowBatch(false);
-                }}
-              >
-                <PenLine className="size-3.5" aria-hidden />
-                {t("logWithDetails")}
-              </button>
-              <button
-                type="button"
-                aria-pressed={showBatch}
-                className={cn(
-                  "ag-seg-btn inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[0.85rem] px-2 text-center text-xs font-semibold",
-                  showBatch ? "ag-pick" : "text-dim hover:text-fg",
-                )}
-                onClick={() => {
-                  const next = !showBatch;
-                  setShowBatch(next);
-                  if (next) setShowForm(false);
-                }}
-              >
-                <Layers className="size-3.5" aria-hidden />
-                {t("batchLog")}
-              </button>
-            </div>
-            <Button variant="ghost" className="px-5" onClick={() => setTab("calendar")}>
-              {t("calendarBtn")}
-            </Button>
+              <span className="ag-hero-tile-ico"><PenLine className="size-[18px]" aria-hidden /></span>
+              <span className="ag-hero-tile-label">{t("heroDetails")}</span>
+            </button>
+            <button
+              type="button"
+              aria-pressed={showBatch}
+              aria-label={t("batchLog")}
+              className={cn("ag-hero-tile", showBatch && "is-on")}
+              onClick={() => {
+                const next = !showBatch;
+                setShowBatch(next);
+                if (next) setShowForm(false);
+              }}
+            >
+              <span className="ag-hero-tile-ico"><Layers className="size-[18px]" aria-hidden /></span>
+              <span className="ag-hero-tile-label">{t("heroBatch")}</span>
+            </button>
+            <button type="button" className="ag-hero-tile" onClick={() => setTab("calendar")}>
+              <span className="ag-hero-tile-ico"><CalendarDays className="size-[18px]" aria-hidden /></span>
+              <span className="ag-hero-tile-label">{t("calendarBtn")}</span>
+            </button>
           </div>
         </Card>
         <CycleCard />
@@ -207,6 +208,15 @@ function Stat({ value, label }: { value: number; label: string }) {
     <div className="rounded-[14px] border border-border bg-surface-2 px-2 py-4 text-center">
       <b className="block font-display text-3xl tabular-nums text-accent">{value}</b>
       <span className="text-xs font-semibold text-dim">{label}</span>
+    </div>
+  );
+}
+
+function HeroStat({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="ag-hero-stat">
+      <dt className="ag-hero-stat-label">{label}</dt>
+      <dd className="ag-hero-stat-value font-display tabular-nums">{value}</dd>
     </div>
   );
 }
