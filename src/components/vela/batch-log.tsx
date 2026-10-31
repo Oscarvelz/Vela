@@ -9,7 +9,7 @@ import { useLang, useT } from "@/lib/vela/i18n";
 import { ratingLabel } from "@/lib/vela/notes";
 import { useJournal } from "@/lib/vela/store";
 import { RATING_KEYS } from "@/lib/vela/types";
-import { Button, RatingIcon, Switch, fieldClass } from "./ui";
+import { Button, RatingIcon, Switch, fieldClass, saveBurst } from "./ui";
 import { cn } from "@/lib/cn";
 
 const METHODS = [
@@ -133,10 +133,13 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
         </>
       )}
       <Button
-        className="w-full"
+        variant="save"
+        className="w-full rounded-control text-base"
+        data-testid="batch-save"
         disabled={kept.length === 0 || missingPartner}
-        onClick={() => {
+        onClick={(event) => {
           if (kept.length === 0 || missingPartner) return;
+          saveBurst(event.currentTarget);
           saveBatch(
             kept.map((card) => card.entry),
             batchPartner,
@@ -148,6 +151,9 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
           onSaved();
         }}
       >
+        <span className="ag-save-ico" aria-hidden>
+          <Sparkles className="size-[18px]" strokeWidth={2.2} />
+        </span>
         {kept.length > 0
           ? `${t("batchSave")} · ${sessionTotal} ${sessionTotal === 1 ? b("sessionWord") : b("sessionsWord")}`
           : t("batchSave")}

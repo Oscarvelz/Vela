@@ -477,7 +477,7 @@ body::-webkit-scrollbar,
 }
 
 .ag-tab-on {
-  background-color: var(--ag-surface);
+  background-color: transparent;
   background-image: none;
   color: var(--ag-accent);
   box-shadow: none;
@@ -581,21 +581,6 @@ body::-webkit-scrollbar,
     var(--ag-wine) 100%
   );
   box-shadow: inset 0 1px 0 rgba(255, 236, 214, 0.4);
-}
-
-.ag-save {
-  background-color: var(--ag-wine);
-  background-image: linear-gradient(90deg, var(--ag-wine) 0%, color-mix(in srgb, var(--ag-wine) 45%, var(--ag-accent)) 52%, var(--ag-accent) 100%);
-  background-clip: padding-box;
-  color: #f7efe8;
-  box-shadow: none;
-  overflow: hidden;
-}
-
-[data-mode="day"] .ag-save {
-  background-color: #a84860;
-  background-image: linear-gradient(90deg, #a84860 0%, #c4883c 48%, #e0bc74 100%);
-  color: #fffaf4;
 }
 
 input[type="time"],
@@ -853,10 +838,6 @@ input[type="range"].ag-range::-moz-range-thumb {
   }
 }
 
-[data-theme="firmament"][data-mode="night"] .ag-tab-on {
-  background-color: rgba(235, 189, 99, 0.13);
-  box-shadow: inset 0 0 0 1px rgba(235, 189, 99, 0.34);
-}
 
 /* Vela mark (flame) colours: warm and luminous at night, deeper amber by day so it reads on light paper. */
 .vela-mark { --mark-halo: #ffc04d; --mark-halo-o: 0.55; --mark-tip: #ffd877; --mark-body: #f2b04a; --mark-base: #e08a2c; filter: drop-shadow(0 0 6px rgba(255, 190, 80, 0.35)); }
@@ -1234,3 +1215,120 @@ input[type="range"].ag-range::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) { .ag-hero-tile, .ag-hero-tile-ico { transition: none; } .ag-hero-tile:active { transform: none; } }
 /* Today selected: the knob rings the moon instead of covering it. */
 .cy-knob.is-today .cy-knob-ring { fill: none; stroke-width: 2.6; }
+
+/* ── Tab bar: one shared active chip that glides between tabs ───────────────
+   The chip is a single element measured from the active button (tab-bar.tsx);
+   WAAPI stretches it toward the new tab, squashes it a touch, and springs it home. */
+.ag-tabrow { isolation: isolate; }
+.ag-tab-ind {
+  --ind-bg: var(--ag-surface);
+  --ind-ring: color-mix(in srgb, var(--ag-accent) 42%, transparent);
+  --ind-glow: transparent;
+  position: absolute; left: 0; top: 0; z-index: 0; width: 0; height: 0;
+  border-radius: 14px; pointer-events: none; transform-origin: 50% 50%;
+  background: var(--ind-bg);
+  box-shadow: inset 0 0 0 1px var(--ind-ring), 0 6px 18px var(--ind-glow);
+  transition: opacity 200ms ease, scale 260ms cubic-bezier(0.3, 1.4, 0.5, 1);
+  will-change: transform, width;
+}
+.ag-tab-ind[data-on="false"] { opacity: 0; scale: 0.86; }
+[data-theme="firmament"][data-mode="night"] .ag-tab-ind {
+  --ind-bg: linear-gradient(180deg, rgba(235, 189, 99, 0.17) 0%, rgba(235, 189, 99, 0.07) 100%), rgba(16, 20, 44, 0.9);
+  --ind-ring: rgba(235, 189, 99, 0.46);
+  --ind-glow: rgba(235, 180, 80, 0.12);
+  box-shadow: inset 0 0 0 1px var(--ind-ring), inset 0 1px 0 rgba(255, 228, 170, 0.14), 0 6px 20px var(--ind-glow);
+}
+[data-theme="firmament"][data-mode="day"] .ag-tab-ind {
+  --ind-bg: linear-gradient(180deg, #fffaf0 0%, #fbefd8 100%);
+  --ind-ring: rgba(158, 98, 24, 0.42);
+  --ind-glow: rgba(183, 121, 31, 0.16);
+}
+[data-theme="firmament"][data-mode="day"] .ag-tab-on { color: #8f5714; }
+.ag-tab { transition: color 280ms ease; -webkit-tap-highlight-color: transparent; }
+.ag-tab-ico { display: grid; place-items: center; transition: transform 200ms ease, filter 280ms ease; }
+.ag-tab-label { transition: letter-spacing 280ms ease; }
+.ag-tab:not(.ag-tab-on):active .ag-tab-ico { transform: scale(0.9); }
+.ag-tab-on .ag-tab-ico { animation: ag-tab-pop 440ms cubic-bezier(0.3, 1.5, 0.5, 1) both; }
+[data-theme="firmament"][data-mode="night"] .ag-tab-on .ag-tab-ico { filter: drop-shadow(0 0 6px rgba(255, 190, 80, 0.45)); }
+@keyframes ag-tab-pop {
+  0% { transform: translateY(0) scale(0.92); }
+  45% { transform: translateY(-4px) scale(1.14); }
+  100% { transform: translateY(-1px) scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ag-tab, .ag-tab-ico, .ag-tab-label, .ag-tab-ind { transition: none; }
+  .ag-tab-on .ag-tab-ico { animation: none; transform: none; }
+}
+
+/* ── Primary buttons: warm amber, one family ────────────────────────────────
+   .ag-glow (every primary) and .ag-save (the "Save" submit) share a top sheen,
+   a pressed scale and a hover shimmer; .ag-save adds an idle shimmer and icon. */
+.ag-glow, .ag-save { position: relative; isolation: isolate; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+.ag-glow::before, .ag-save::before {
+  content: ""; position: absolute; inset: 0 0 52% 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0));
+}
+.ag-glow::after, .ag-save::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, 0.5) 50%, transparent 68%);
+  transform: translateX(-130%);
+}
+.ag-glow:not(:disabled):hover::after { animation: ag-shimmer 900ms ease-out; }
+.ag-glow:not(:disabled):active, .ag-save:not(:disabled):active { transform: scale(0.975); }
+
+.ag-save {
+  background-color: var(--ag-accent);
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--ag-accent) 70%, white) 0%, var(--ag-accent) 50%, color-mix(in srgb, var(--ag-accent) 84%, black) 100%);
+  color: var(--ag-on-accent);
+  font-weight: 650; letter-spacing: 0.01em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -1px 0 rgba(0, 0, 0, 0.14), 0 8px 22px color-mix(in srgb, var(--ag-accent) 30%, transparent);
+  transition: transform 160ms ease, box-shadow 300ms ease, filter 300ms ease;
+}
+.ag-save:not(:disabled)::after { animation: ag-shimmer-idle 7s ease-in-out 900ms infinite; }
+.ag-save:not(:disabled):hover { filter: brightness(1.04) saturate(1.05); }
+.ag-save:not(:disabled):hover::after { animation: ag-shimmer 900ms ease-out; }
+.ag-save-ico { display: inline-grid; place-items: center; transition: transform 300ms cubic-bezier(0.3, 1.5, 0.5, 1); }
+.ag-save:not(:disabled):hover .ag-save-ico { transform: rotate(14deg) scale(1.12); }
+
+[data-theme="firmament"] .ag-save {
+  background-image: linear-gradient(180deg, #f8dc9e 0%, #ebbd63 52%, #d59d44 100%);
+  color: #0b1330;
+  box-shadow: inset 0 1px 0 rgba(255, 246, 220, 0.7), inset 0 -1px 0 rgba(120, 70, 10, 0.25), 0 0 0 1px rgba(255, 214, 140, 0.18), 0 10px 28px rgba(235, 175, 70, 0.28);
+}
+[data-theme="firmament"] .ag-save:not(:disabled):hover { box-shadow: inset 0 1px 0 rgba(255, 246, 220, 0.7), inset 0 -1px 0 rgba(120, 70, 10, 0.25), 0 0 0 1px rgba(255, 214, 140, 0.28), 0 12px 34px rgba(235, 175, 70, 0.38); }
+[data-theme="firmament"][data-mode="day"] .ag-save {
+  /* Same bronze as the day hero CTA, so cream ink clears WCAG AA. */
+  background-image: linear-gradient(180deg, #b0721f 0%, #9e6218 48%, #84500e 100%);
+  color: #fffaf0;
+  box-shadow: inset 0 1px 0 rgba(255, 226, 170, 0.45), inset 0 -1px 0 rgba(70, 35, 0, 0.3), 0 8px 22px rgba(158, 98, 24, 0.3);
+}
+[data-mode="day"] .ag-save::before, [data-mode="day"] .ag-glow::before { background: linear-gradient(180deg, rgba(255, 240, 210, 0.22), rgba(255, 255, 255, 0)); }
+[data-mode="day"] .ag-save::after, [data-mode="day"] .ag-glow::after { background: linear-gradient(105deg, transparent 34%, rgba(255, 236, 196, 0.4) 50%, transparent 66%); }
+
+.ag-glow:disabled, .ag-save:disabled {
+  opacity: 1; cursor: not-allowed; filter: none; transform: none;
+  background-image: none; background-color: color-mix(in srgb, var(--ag-surface-2) 80%, transparent);
+  color: color-mix(in srgb, var(--ag-dim) 85%, transparent);
+  box-shadow: inset 0 0 0 1px var(--ag-border);
+}
+.ag-glow:disabled::before, .ag-glow:disabled::after, .ag-save:disabled::before, .ag-save:disabled::after { display: none; }
+
+@keyframes ag-shimmer { from { transform: translateX(-130%); } to { transform: translateX(130%); } }
+@keyframes ag-shimmer-idle { 0% { transform: translateX(-130%); } 14%, 100% { transform: translateX(130%); } }
+
+/* Save success: a ring and a few amber sparks bloom from the button (lives on body, survives the form reset). */
+.ag-burst { position: fixed; z-index: 70; pointer-events: none; border-radius: 1rem; }
+.ag-burst-ring { position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 2px color-mix(in srgb, var(--ag-accent) 85%, white), 0 0 26px color-mix(in srgb, var(--ag-accent) 70%, transparent); animation: ag-burst-ring 640ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
+.ag-burst-spark { position: absolute; left: 50%; top: 50%; width: 9px; height: 9px; margin: -4.5px; color: color-mix(in srgb, var(--ag-accent) 72%, white); animation: ag-burst-spark 700ms cubic-bezier(0.15, 0.7, 0.3, 1) forwards; }
+.ag-burst-spark::before { content: ""; position: absolute; inset: 0; background: currentColor; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); filter: drop-shadow(0 0 3px currentColor); }
+.ag-burst-check { position: absolute; inset: 0; border-radius: inherit; display: grid; place-items: center; background: var(--ag-accent); color: var(--ag-on-accent); animation: ag-burst-flash 820ms ease forwards; }
+.ag-burst-check > svg { animation: ag-burst-tick 820ms cubic-bezier(0.3, 1.6, 0.5, 1) forwards; }
+@keyframes ag-burst-ring { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.12, 1.5); } }
+@keyframes ag-burst-spark { 0% { opacity: 0; transform: translate(0, 0) scale(0.4) rotate(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1) rotate(90deg); } }
+@keyframes ag-burst-flash { 0% { opacity: 0; } 12%, 70% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes ag-burst-tick { 0% { transform: scale(0.2) rotate(-20deg); } 40% { transform: scale(1.15) rotate(0); } 70%, 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .ag-glow::after, .ag-save::after, .ag-glow:not(:disabled):hover::after, .ag-save:not(:disabled)::after, .ag-save:not(:disabled):hover::after { animation: none; }
+  .ag-glow:not(:disabled):active, .ag-save:not(:disabled):active, .ag-save:not(:disabled):hover .ag-save-ico { transform: none; }
+  .ag-burst { display: none; }
+}

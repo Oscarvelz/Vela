@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, UserRound, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, UserRound, X } from "lucide-react";
 import { NAMED_PLACES, PLACES, POSITIONS, PROBLEMS, knownProblem, placeLabel, positionLabel } from "@/lib/vela/catalog";
 import { addDays, fmtDate, fmtDuration, fmtShort, fmtTime, monthTitle, pad, todayStr } from "@/lib/vela/dates";
 import { coveringEncounter, weekendOf } from "@/lib/vela/encounters";
@@ -15,7 +15,7 @@ import { MonthDays } from "./month-days";
 import { SessionPhaseChip } from "./cycle-card";
 import { cycleMarks } from "@/lib/vela/cycle";
 import { MapAddress } from "./map-address";
-import { Button, ConfirmDialog, Field, RatingIcon, fieldClass } from "./ui";
+import { Button, ConfirmDialog, Field, RatingIcon, fieldClass, saveBurst } from "./ui";
 
 const METHODS = [
   ["pullout", "methodPullout"],
@@ -593,11 +593,16 @@ export function SessionForm({
         <Button
           variant="save"
           className="flex-1 rounded-control text-base"
-          onClick={() => {
+          data-testid="save-moment"
+          onClick={(event) => {
+            saveBurst(event.currentTarget);
             if (!editing && slots.length > 1 && onSaveAll) onSaveAll(slots);
             else onSave(draft);
           }}
         >
+          <span className="ag-save-ico" aria-hidden>
+            {editing ? <Check className="size-[18px]" strokeWidth={2.6} /> : <Sparkles className="size-[18px]" strokeWidth={2.2} />}
+          </span>
           {editing ? t("saveChanges") : slots.length > 1 ? t("saveThese") : t("saveMoment")}
         </Button>
         {onClose ? (

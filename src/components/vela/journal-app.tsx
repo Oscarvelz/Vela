@@ -20,6 +20,7 @@ import { Button, ConfirmDialog, IconButton } from "./ui";
 import { useScrollBars } from "./use-scroll-bars";
 import { CyclePill } from "./cycle-card";
 import { CycleLayers } from "./cycle-sheets";
+import { TabBar } from "./tab-bar";
 
 const TABS: { id: TabId; icon: (props: { className?: string }) => ReactNode; label: "navHome" | "navCalendar" | "navHistory" | "navInsights" }[] = [
   { id: "home", icon: HomeIcon, label: "navHome" },
@@ -349,31 +350,13 @@ function Shell() {
         </div>
         </div>
       </main>
-      <nav className="ag-tabbar" aria-label={t("mainNav")}>
-        <div ref={setDockEl} className="ag-tabbar-face">
-        <div className="mx-auto flex w-full max-w-lg px-2 py-2">
-          {TABS.map((item) => {
-            const active = !settingsOpen && tab === item.id;
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                aria-current={active ? "page" : undefined}
-                onClick={() => goTab(item.id, TABS.findIndex((tabItem) => tabItem.id === item.id) - TABS.findIndex((tabItem) => tabItem.id === tab))}
-                className={cn(
-                  "flex h-14 w-0 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[14px] px-1 text-[11px] font-semibold leading-none",
-                  active ? "ag-tab-on" : "text-dim",
-                )}
-              >
-                <Icon className="size-5" />
-                {t(item.label)}
-              </button>
-            );
-          })}
-        </div>
-        </div>
-      </nav>
+      <TabBar
+        items={TABS.map((item) => ({ id: item.id, icon: item.icon, label: t(item.label) }))}
+        active={settingsOpen ? null : tab}
+        label={t("mainNav")}
+        dockRef={setDockEl}
+        onSelect={(id) => goTab(id, TABS.findIndex((tabItem) => tabItem.id === id) - TABS.findIndex((tabItem) => tabItem.id === tab))}
+      />
       {toast ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-28 z-50 flex justify-center px-4">
           <p className="rounded-full border border-accent bg-surface-2 px-4 py-2 text-sm font-semibold shadow-lift">{toast}</p>

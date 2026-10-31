@@ -12,6 +12,50 @@ const buttonStyles = {
   save: "ag-save border border-transparent",
 } as const;
 
+/** A brief ring + amber sparks + check from a save button. Lives on <body> so it outlives a form reset. */
+export function saveBurst(target: HTMLElement | null) {
+  if (!target || typeof window === "undefined") return;
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  const rect = target.getBoundingClientRect();
+  const root = document.createElement("div");
+  root.className = "ag-burst";
+  root.setAttribute("aria-hidden", "true");
+  Object.assign(root.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, borderRadius: getComputedStyle(target).borderRadius });
+  const ring = document.createElement("span");
+  ring.className = "ag-burst-ring";
+  root.appendChild(ring);
+  const sparks = 10;
+  for (let index = 0; index < sparks; index++) {
+    const angle = (index / sparks) * Math.PI * 2 + (index % 2 ? 0.3 : 0);
+    const reach = index % 2 ? 0.62 : 0.5;
+    const spark = document.createElement("span");
+    spark.className = "ag-burst-spark";
+    spark.style.setProperty("--dx", `${Math.cos(angle) * rect.width * reach}px`);
+    spark.style.setProperty("--dy", `${Math.sin(angle) * (rect.height * 0.5 + 26)}px`);
+    spark.style.animationDelay = `${(index % 3) * 30}ms`;
+    root.appendChild(spark);
+  }
+  const check = document.createElement("span");
+  check.className = "ag-burst-check";
+  const look = getComputedStyle(target);
+  Object.assign(check.style, { backgroundImage: look.backgroundImage, backgroundColor: look.backgroundColor, color: look.color });
+  check.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  root.appendChild(check);
+  document.body.appendChild(root);
+  // The form may reset and move the button on save: follow its replacement (same test id) while the burst plays.
+  const testId = target.dataset.testid;
+  const started = performance.now();
+  const follow = () => {
+    if (!root.isConnected) return;
+    const live = target.isConnected ? target : testId ? document.querySelector<HTMLElement>(`[data-testid="${testId}"]`) : null;
+    const box = live?.getBoundingClientRect();
+    if (box && box.width > 0 && box.height > 0) Object.assign(root.style, { left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` });
+    if (performance.now() - started < 900) requestAnimationFrame(follow);
+  };
+  requestAnimationFrame(follow);
+  window.setTimeout(() => root.remove(), 900);
+}
+
 export function Button({
   variant = "primary",
   className,
