@@ -9,7 +9,7 @@ import type { CopyKey } from "@/lib/vela/copy";
 import { cn } from "@/lib/cn";
 import { Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
-import { Button, ConfirmDialog, fieldClass } from "./ui";
+import { Button, ConfirmDialog, fieldClass, PasswordInput } from "./ui";
 
 export function AuthScreen() {
   const t = useT();
@@ -120,10 +120,9 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
       <label className="block text-sm font-semibold" htmlFor="unlock-pass">
         {t("pinFor")}
       </label>
-      <input
+      <PasswordInput
         id="unlock-pass"
         className={fieldClass}
-        type="password"
         autoComplete="current-password"
         placeholder={t("enterPin")}
         value={pass}
@@ -175,9 +174,8 @@ function CloudOpenForm({ onFresh }: { onFresh: () => void }) {
     >
       <h2 className="text-center font-display text-2xl">{t("cloudFoundTitle")}</h2>
       <p className="text-center text-sm leading-relaxed text-dim">{t("cloudFoundBody")}</p>
-      <input
+      <PasswordInput
         className={fieldClass}
-        type="password"
         autoComplete="current-password"
         placeholder={t("enterPin")}
         value={pass}
@@ -265,19 +263,17 @@ function CreateForm({ failText }: { failText: (code: string) => string }) {
       <label className="block text-sm font-semibold" htmlFor="create-pass">
         {t("pinPassword")}
       </label>
-      <input
+      <PasswordInput
         id="create-pass"
         className={fieldClass}
-        type="password"
         autoComplete="new-password"
         placeholder={t("pinPh")}
         value={pass}
         onChange={(event) => setPass(event.target.value)}
       />
-      <input
+      <PasswordInput
         id="create-pass2"
         className={fieldClass}
-        type="password"
         autoComplete="new-password"
         placeholder={t("confirmPassphrase")}
         aria-label={t("confirmPassphrase")}

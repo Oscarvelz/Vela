@@ -33,6 +33,7 @@ try {
   await A.page.click('button:has-text("Create account")');
   await A.page.fill("#account-email", EMAIL);
   await A.page.fill("#account-password", PW);
+  await A.page.fill("#account-password2", PW);
   await A.page.locator('form button[type=submit]:has-text("Create account")').click();
   await A.page.waitForSelector(`text=${EMAIL}`, { timeout: 30000 });
   ok("A signed up on the live site", true, EMAIL);

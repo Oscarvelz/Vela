@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from "react";
-import { ChevronDown, Flame, Heart, Star } from "lucide-react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import { ChevronDown, Eye, EyeOff, Flame, Heart, Star } from "lucide-react";
+import { useT } from "@/lib/vela/i18n";
 import { cn } from "@/lib/cn";
 import type { RatingStyle } from "@/lib/vela/catalog";
 
@@ -340,5 +341,26 @@ export function Switch({
         )}
       />
     </button>
+  );
+}
+
+
+/** A password / passphrase field with an eye button to show or hide what was typed. */
+export function PasswordInput({ className, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const t = useT();
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="relative">
+      <input {...props} type={shown ? "text" : "password"} className={cn(className, "pr-12")} />
+      <button
+        type="button"
+        className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-dim hover:text-fg"
+        aria-label={shown ? t("hidePassword") : t("showPassword")}
+        aria-pressed={shown}
+        onClick={() => setShown((v) => !v)}
+      >
+        {shown ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+      </button>
+    </div>
   );
 }

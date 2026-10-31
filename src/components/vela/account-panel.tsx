@@ -5,7 +5,7 @@ import { cloudConfigured } from "@/lib/vela/supabase-config";
 import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
 import { adoptRemotePassphrase, signOut, syncNow, useCloud } from "@/lib/vela/sync";
-import { Button, fieldClass } from "./ui";
+import { Button, fieldClass, PasswordInput } from "./ui";
 
 function appUrl() {
   return `${location.origin}${import.meta.env.BASE_URL}`;
@@ -20,6 +20,7 @@ export function AccountPanel() {
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [pending, setPending] = useState(false);
@@ -71,9 +72,8 @@ export function AccountPanel() {
               });
             }}
           >
-            <input
+            <PasswordInput
               className={fieldClass}
-              type="password"
               autoComplete="current-password"
               placeholder={t("cloudPassPh")}
               value={pass}
@@ -110,6 +110,10 @@ export function AccountPanel() {
     setNote("");
     if (!email.includes("@") || password.length < 8) {
       setError(t("passwordHint"));
+      return;
+    }
+    if (mode === "up" && password !== password2) {
+      setError(t("passwordMismatch"));
       return;
     }
     setPending(true);
@@ -188,14 +192,27 @@ export function AccountPanel() {
         <label className="block text-sm font-semibold" htmlFor="account-password">
           {t("password")}
         </label>
-        <input
+        <PasswordInput
           id="account-password"
           className={fieldClass}
-          type="password"
           autoComplete={mode === "up" ? "new-password" : "current-password"}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
+        {mode === "up" ? (
+          <>
+            <label className="block text-sm font-semibold" htmlFor="account-password2">
+              {t("confirmPassword")}
+            </label>
+            <PasswordInput
+              id="account-password2"
+              className={fieldClass}
+              autoComplete="new-password"
+              value={password2}
+              onChange={(event) => setPassword2(event.target.value)}
+            />
+          </>
+        ) : null}
         <p className="text-xs leading-relaxed text-dim">{t("passwordHint")}</p>
         {error ? (
           <p className="text-sm text-danger" role="alert">

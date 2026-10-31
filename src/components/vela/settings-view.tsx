@@ -27,7 +27,7 @@ import { cn } from "@/lib/cn";
 import { Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
 import { CycleTune } from "./cycle-card";
-import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass } from "./ui";
+import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PasswordInput } from "./ui";
 
 export function SettingsView() {
   const t = useT();
@@ -475,8 +475,8 @@ function PrivacySection() {
         ]}
       />
       <p className="font-semibold">{t("changePin")}</p>
-      <input className={fieldClass} type="password" autoComplete="current-password" value={current} placeholder={t("currentPinPh")} onChange={(event) => setCurrent(event.target.value)} />
-      <input className={fieldClass} type="password" autoComplete="new-password" value={next} placeholder={t("newPinPh")} onChange={(event) => setNext(event.target.value)} />
+      <PasswordInput className={fieldClass} autoComplete="current-password" value={current} placeholder={t("currentPinPh")} onChange={(event) => setCurrent(event.target.value)} />
+      <PasswordInput className={fieldClass} autoComplete="new-password" value={next} placeholder={t("newPinPh")} onChange={(event) => setNext(event.target.value)} />
       <p className="text-xs leading-relaxed text-dim">{t("passWarn")}</p>
       <Button
         disabled={busy}
@@ -550,9 +550,8 @@ function FingerprintControl() {
         {t("bioAdd")}
       </p>
       <p className="text-sm leading-relaxed text-dim">{t("bioAddHint")}</p>
-      <input
+      <PasswordInput
         className={fieldClass}
-        type="password"
         autoComplete="current-password"
         value={pin}
         placeholder={t("currentPinPh")}
