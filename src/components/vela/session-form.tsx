@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, UserRound, X } from "lucide-react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, CloudDrizzle, DoorOpen, Feather, HeartPulse, Plus, Sparkles, UserRound, X } from "lucide-react";
 import { NAMED_PLACES, PLACES, POSITIONS, PROBLEMS, knownProblem, placeLabel, positionLabel } from "@/lib/vela/catalog";
 import { addDays, fmtDate, fmtDuration, fmtShort, fmtTime, monthTitle, pad, todayStr } from "@/lib/vela/dates";
 import { coveringEncounter, weekendOf } from "@/lib/vela/encounters";
@@ -997,6 +997,8 @@ const PROBLEM_GROUPS: { id: string; label: CopyKey; ids: string[] }[] = [
   { id: "situation", label: "problemGroupSituation", ids: ["distraction", "privacy", "alcohol", "medication", "interruption"] },
 ];
 
+const PROBLEM_ICONS: Record<string, typeof HeartPulse> = { body: HeartPulse, mood: CloudDrizzle, situation: DoorOpen, yours: Feather };
+
 function ProblemsPicker({
   scope,
   selected,
@@ -1011,8 +1013,12 @@ function ProblemsPicker({
   const add = useJournal((s) => s.addCustom);
   const [text, setText] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const uid = useId();
   const yours = custom.filter((item) => !PROBLEMS.some((row) => row[0] === item));
   const encounter = scope === "encounter";
+  const knownIds = PROBLEM_GROUPS.flatMap((group) => group.ids);
+  // Anything chosen that no group lists (an older custom name) still shows under Yours.
+  const strays = selected.filter((id) => !knownIds.includes(id) && !yours.includes(id));
 
   function toggle(id: string) {
     onChange(selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id]);
@@ -1033,71 +1039,110 @@ function ProblemsPicker({
 
   const groups = [
     ...PROBLEM_GROUPS,
-    { id: "yours", label: "problemGroupYours" as CopyKey, ids: yours },
+    { id: "yours", label: "problemGroupYours" as CopyKey, ids: [...yours, ...strays] },
   ];
 
   return (
-    <div className={cn("rounded-2xl border-y border-r border-l-4 px-3 py-3", encounter ? "border-accent/70 border-l-accent bg-surface" : "border-fg/22 border-l-fg/55 bg-surface")}>
-      <div className="mb-1 flex items-center gap-2">
-        <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide", encounter ? "bg-accent text-on-accent" : "bg-fg/15 text-fg")}>
-          {encounter ? t("encounterProblems") : t("sessionProblems")}
-        </span>
-        {selected.length > 0 ? <span className="text-xs font-semibold tabular-nums text-fg/70">{selected.length}</span> : null}
-      </div>
-      <p className="text-sm font-semibold">{t("problems")}</p>
-      <p className="mb-3 text-sm leading-relaxed text-fg/75">{encounter ? t("problemScopeEncounter") : t("problemScopeSession")}</p>
-      <div className="space-y-2">
+    <section className="vp" data-scope={scope} aria-labelledby={`${uid}-title`}>
+      <span className="vp-glow" aria-hidden="true" />
+      <header className="vp-head">
+        <div className="vp-head-top">
+          <p className="vp-eyebrow">
+            <span className="vp-eyebrow-dot" aria-hidden="true" />
+            {encounter ? t("problemsEyebrowEncounter") : t("problemsEyebrowSession")}
+          </p>
+          {selected.length > 0 ? (
+            <span className="vp-count" key={selected.length}>
+              <span className="tabular-nums">{selected.length}</span> {selected.length === 1 ? t("problemsChosen1") : t("problemsChosen")}
+            </span>
+          ) : null}
+        </div>
+        <h3 id={`${uid}-title`} className="vp-title font-display">
+          {t("problemsTitle")}
+          <span className="sr-only"> — {t("problems")}</span>
+        </h3>
+        <p className="vp-sub">{encounter ? t("problemsSubEncounter") : t("problemsSubSession")}</p>
+      </header>
+      <div className="vp-list">
         {groups.map((group) => {
           const picked = group.ids.filter((id) => selected.includes(id));
-          const shown = open[group.id];
+          const shown = !!open[group.id];
+          const Icon = PROBLEM_ICONS[group.id] ?? Feather;
+          const panelId = `${uid}-${group.id}`;
+          const hint =
+            group.id === "yours" && group.ids.length === 0
+              ? t("problemYoursEmpty")
+              : group.ids.slice(0, 2).map((id) => problemName(t, id)).join(", ") + (group.ids.length > 2 ? "…" : "");
           return (
-            <div key={group.id} className="rounded-xl border border-fg/18 bg-bg/50">
+            <div key={group.id} className="vp-row" data-open={shown} data-picked={picked.length > 0}>
               <button
                 type="button"
-                className="flex min-h-11 w-full items-center gap-2 px-3 text-left"
+                className="vp-row-btn"
                 aria-expanded={shown}
+                aria-controls={panelId}
                 onClick={() => setOpen((current) => ({ ...current, [group.id]: !current[group.id] }))}
               >
-                <span className="font-semibold">{t(group.label)}</span>
-                <span className="min-w-0 flex-1 truncate text-xs text-fg/60">
-                  {picked.map((id) => problemName(t, id)).join(" · ")}
+                <span className="vp-ring" aria-hidden="true">
+                  <Icon className="size-[17px]" strokeWidth={1.8} />
+                  {picked.length > 0 ? <span className="vp-ring-badge">{picked.length}</span> : null}
                 </span>
-                <ChevronDown className={cn("size-4 shrink-0 text-fg/70 transition-transform", shown && "rotate-180")} />
+                <span className="vp-row-text">
+                  <span className="vp-row-label">{t(group.label)}</span>
+                  {picked.length > 0 ? (
+                    <span className="vp-row-picked">
+                      {picked.slice(0, 2).map((id) => (
+                        <span key={id} className="vp-mini">{problemName(t, id)}</span>
+                      ))}
+                      {picked.length > 2 ? <span className="vp-mini vp-mini-more">+{picked.length - 2}</span> : null}
+                    </span>
+                  ) : (
+                    <span className="vp-row-hint">{hint}</span>
+                  )}
+                </span>
+                <span className="vp-chev" aria-hidden="true">
+                  <ChevronDown className="size-4" />
+                </span>
               </button>
-              {shown ? (
-                <div className="flex flex-wrap gap-2 px-3 pb-3">
-                  {group.ids.map((id) => (
-                    <Chip key={id} small on={selected.includes(id)} onClick={() => toggle(id)}>
-                      {problemName(t, id)}
-                    </Chip>
-                  ))}
-                  {group.id === "yours" ? (
-                    <div className="mt-1 flex w-full gap-2">
-                      <input
-                        className={fieldClass}
-                        value={text}
-                        placeholder={t("problemPh")}
-                        aria-label={t("problemPh")}
-                        onChange={(event) => setText(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            saveOwn();
-                          }
-                        }}
-                      />
-                      <Button className="shrink-0 px-4" onClick={saveOwn}>
-                        {t("saveProblem")}
-                      </Button>
-                    </div>
-                  ) : null}
+              <div className="vp-fold" data-open={shown} id={panelId} role="region" aria-label={t(group.label)}>
+                <div className="vp-fold-in">
+                  <div className="vp-opts">
+                    {group.ids.map((id) => {
+                      const on = selected.includes(id);
+                      return (
+                        <Chip key={id} small on={on} onClick={() => toggle(id)} className="vp-opt">
+                          {on ? <Check className="vp-opt-check" aria-hidden="true" strokeWidth={2.6} /> : null}
+                          {problemName(t, id)}
+                        </Chip>
+                      );
+                    })}
+                    {group.id === "yours" ? (
+                      <div className="vp-add">
+                        <Plus className="size-4 shrink-0 vp-add-ico" aria-hidden="true" />
+                        <input
+                          value={text}
+                          placeholder={t("problemPh")}
+                          aria-label={t("problemPh")}
+                          onChange={(event) => setText(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              saveOwn();
+                            }
+                          }}
+                        />
+                        <button type="button" className="vp-add-save" onClick={saveOwn} disabled={!text.trim()}>
+                          {t("saveProblem")}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              ) : null}
+              </div>
             </div>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }
 
