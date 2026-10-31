@@ -55,11 +55,17 @@ export function AuthScreen() {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10">
       <div className="text-center">
-        <Mark className="mx-auto size-16" />
-        <h1 className="mt-4 font-display text-4xl tracking-brand">VELA</h1>
-        <p className="mt-2 text-xs tracking-widest text-dim uppercase">{t("tagline")}</p>
+        <div className="vela-ember mx-auto size-16">
+          <Mark className="relative size-16" />
+        </div>
+        <h1 className="vela-rise mt-5 font-display text-4xl tracking-brand" style={{ animationDelay: "120ms" }}>
+          VELA
+        </h1>
+        <p className="vela-rise mt-2 text-xs tracking-widest text-dim uppercase" style={{ animationDelay: "220ms" }}>
+          {t("tagline")}
+        </p>
       </div>
-      <div className="mt-6 flex justify-center" role="group" aria-label={t("langLabel")}>
+      <div className="vela-rise mt-6 flex justify-center" style={{ animationDelay: "300ms" }} role="group" aria-label={t("langLabel")}>
         {(["en", "es"] as const).map((lang) => (
           <button
             key={lang}
@@ -71,7 +77,7 @@ export function AuthScreen() {
           </button>
         ))}
       </div>
-      <div className="ag-panel mt-4 rounded-card border border-border px-5 py-5">
+      <div className="vela-rise ag-panel mt-4 rounded-card border border-border px-5 py-5" style={{ animationDelay: "380ms" }}>
         {vault === "locked" ? (
           <UnlockForm error={error} setError={setError} />
         ) : cloudCopy ? (
@@ -80,7 +86,7 @@ export function AuthScreen() {
           <CreateForm failText={failText} />
         )}
       </div>
-      <div className="ag-panel mt-4 rounded-card border border-border px-5 py-5">
+      <div className="vela-rise ag-panel mt-4 rounded-card border border-border px-5 py-5" style={{ animationDelay: "470ms" }}>
         <AccountPanel />
       </div>
       <p className="mt-6 text-center text-xs leading-relaxed text-dim">{t("privateByDesign")}</p>

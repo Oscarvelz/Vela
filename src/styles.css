@@ -72,6 +72,56 @@
   color-scheme: light;
 }
 
+
+/* ── Firmament: navy night sky, starlight and one amber ember (the app icon) ── */
+[data-theme="firmament"][data-mode="night"] {
+  --ag-bg: #070b1e;
+  --ag-surface: #0f1838;
+  --ag-surface-2: #18244f;
+  --ag-text: #eef1ff;
+  --ag-dim: #9ea9cc;
+  --ag-border: rgba(255, 200, 90, 0.17);
+  --ag-accent: #ffc85a;
+  --ag-accent-soft: rgba(255, 200, 90, 0.14);
+  --ag-on-accent: #0b1330;
+  --ag-wine: #2d4596;
+  --ag-danger: #ff8f8f;
+  --ag-chip: #1a2756;
+  --ag-card: none;
+  --ag-sheen: transparent;
+  --ag-wash: rgba(46, 72, 170, 0.32);
+  --ag-wash-2: rgba(255, 190, 90, 0.05);
+  --ag-glow: none;
+  --ag-pill: none;
+  --ag-orb: none;
+  --ag-bubble: none;
+  color-scheme: dark;
+}
+
+[data-theme="firmament"][data-mode="day"] {
+  --ag-bg: #eef1fa;
+  --ag-surface: #ffffff;
+  --ag-surface-2: #e3e8f6;
+  --ag-text: #121a3a;
+  --ag-dim: #58638b;
+  --ag-border: rgba(18, 26, 58, 0.13);
+  --ag-accent: #b7791f;
+  --ag-accent-soft: rgba(183, 121, 31, 0.14);
+  --ag-on-accent: #fffaf0;
+  --ag-wine: #3b4f9e;
+  --ag-danger: #b4233c;
+  --ag-chip: #dde4f6;
+  --ag-card: linear-gradient(115deg, #ffffff 0%, #e7ecfb 55%, #fbecd0 100%);
+  --ag-sheen: rgba(255, 255, 255, 0.75);
+  --ag-wash: rgba(60, 86, 180, 0.12);
+  --ag-wash-2: rgba(230, 170, 70, 0.1);
+  --ag-glow: 0 8px 18px rgba(20, 30, 70, 0.12);
+  --ag-pill: linear-gradient(180deg, #fff, #e6ebf8);
+  --ag-orb: radial-gradient(circle at 32% 26%, #fff, #e2e8f8 72%);
+  --ag-bubble: linear-gradient(165deg, #fff, #e4e9f8);
+  color-scheme: light;
+}
+
 [data-theme="noir"][data-mode="night"] {
   --ag-bg: #0c0c10;
   --ag-surface: #17171e;
@@ -265,6 +315,7 @@
 }
 
 :root {
+  --swatch-firmament: radial-gradient(circle at 50% 56%, #fff1c4 0 9%, #ffc85a 15%, rgba(255, 200, 90, 0.28) 30%, #13204a 58%, #070b1e 100%);
   --swatch-velvet: #8d3566;
   --swatch-noir: #2c3038;
   --swatch-rose: #f0b4c4;
@@ -642,4 +693,157 @@ input[type="range"].ag-range::-moz-range-thumb {
   .ag-enter {
     animation: none;
   }
+}
+
+
+/* ── Firmament sky layer ─────────────────────────────────────────────────── */
+[data-theme="firmament"][data-mode="night"] body {
+  background:
+    radial-gradient(900px 520px at 50% -12%, rgba(46, 72, 170, 0.38), transparent 62%),
+    radial-gradient(620px 380px at 50% 112%, rgba(255, 190, 90, 0.07), transparent 60%),
+    linear-gradient(180deg, #0d1636 0%, #070b1e 58%, #04060f 100%);
+  background-attachment: fixed;
+}
+
+.vela-sky {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.vela-sky canvas {
+  position: absolute;
+  inset: 0;
+  animation: vela-fade 1.6s ease both;
+}
+
+.vela-sky-glow {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  width: 560px;
+  height: 560px;
+  margin: -280px 0 0 -280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 200, 90, 0.09) 0%, rgba(232, 154, 58, 0.035) 38%, transparent 68%);
+  animation: vela-breathe 7s ease-in-out infinite;
+}
+
+[data-theme="firmament"][data-mode="night"] .ag-panel {
+  background-color: rgba(15, 24, 56, 0.68);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  backdrop-filter: blur(12px) saturate(1.15);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+[data-theme="firmament"][data-mode="night"] .ag-header,
+[data-theme="firmament"][data-mode="night"] .ag-tabbar {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+[data-theme="firmament"][data-mode="night"] .ag-header {
+  background: rgba(7, 11, 30, 0.72);
+}
+
+[data-theme="firmament"] .ag-glow {
+  background-image: linear-gradient(180deg, #ffd77e, var(--ag-accent));
+  box-shadow: 0 6px 22px rgba(255, 190, 80, 0.28);
+  transition: box-shadow 300ms ease, filter 300ms ease;
+}
+
+[data-theme="firmament"][data-mode="day"] .ag-glow {
+  background-image: linear-gradient(180deg, #cf9234, var(--ag-accent));
+  box-shadow: 0 6px 18px rgba(183, 121, 31, 0.25);
+}
+
+[data-theme="firmament"] .ag-glow:hover {
+  box-shadow: 0 8px 30px rgba(255, 190, 80, 0.4);
+}
+
+[data-theme="firmament"][data-mode="night"] .ag-hero {
+  background-image:
+    radial-gradient(420px 220px at 85% 0%, rgba(255, 200, 90, 0.12), transparent 70%),
+    linear-gradient(108deg, rgba(45, 69, 150, 0.85) 0%, rgba(24, 36, 79, 0.75) 45%, rgba(15, 24, 56, 0.7) 100%);
+}
+
+/* Lock / sign-in screen: the ember breathes, the rest rises into place. */
+.vela-ember {
+  position: relative;
+}
+
+.vela-ember::before {
+  content: "";
+  position: absolute;
+  inset: -55%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 205, 100, 0.34) 0%, rgba(232, 154, 58, 0.12) 40%, transparent 70%);
+  animation: vela-breathe 4.8s ease-in-out infinite;
+}
+
+.vela-ember > * {
+  animation: vela-float 6s ease-in-out infinite;
+}
+
+.vela-rise {
+  animation: vela-rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes vela-breathe {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes vela-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes vela-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes vela-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vela-sky canvas,
+  .vela-sky-glow,
+  .vela-ember::before,
+  .vela-ember > *,
+  .vela-rise {
+    animation: none;
+  }
+}
+
+[data-theme="firmament"][data-mode="night"] .ag-tab-on {
+  background-color: rgba(255, 200, 90, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(255, 200, 90, 0.35), 0 0 16px rgba(255, 200, 90, 0.12);
 }

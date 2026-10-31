@@ -101,6 +101,7 @@ export function positionLabel(lang: Lang, value: string) {
 }
 
 export const THEMES = [
+  { id: "firmament", name: "themeFirmamentName", desc: "themeFirmamentDesc" },
   { id: "velvet", name: "themeVelvetName", desc: "themeVelvetDesc" },
   { id: "noir", name: "themeNoirName", desc: "themeNoirDesc" },
   { id: "rose", name: "themeRoseName", desc: "themeRoseDesc" },

@@ -5,6 +5,7 @@ import { sessionToDraft, useJournal } from "@/lib/vela/store";
 import { PLACES } from "@/lib/vela/catalog";
 import type { TabId } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
+import { Starfield } from "./starfield";
 import { AuthScreen } from "./auth-screen";
 import { CalendarView } from "./calendar-view";
 import { CloudSync } from "./cloud-sync";
@@ -60,15 +61,34 @@ function Splash() {
 
 function Gate() {
   const unlocked = useJournal((s) => s.unlocked);
-  useTheme();
-  useAutoLock();
-  if (!unlocked) return <AuthScreen />;
-  return <Shell />;
-}
-
-function useTheme() {
   const theme = useJournal((s) => s.journal.settings.theme);
   const mode = useJournal((s) => s.journal.settings.mode);
+  useTheme(unlocked);
+  useAutoLock();
+  // The sign-in / lock screen always wears the Firmament night sky.
+  const sky = !unlocked || (theme === "firmament" && mode === "night");
+  return (
+    <>
+      {sky ? <Starfield dense={!unlocked} /> : null}
+      {unlocked ? <Shell /> : <AuthScreen />}
+    </>
+  );
+}
+
+const THEME_COLOR: Record<string, [string, string]> = {
+  firmament: ["#0d1636", "#eef1fa"],
+  velvet: ["#1a0e1a", "#f8efe8"],
+  noir: ["#0c0c10", "#f3f3f6"],
+  rose: ["#241016", "#fff5f7"],
+  ocean: ["#071618", "#eef8f7"],
+  emerald: ["#0b1910", "#f2f8f4"],
+};
+
+function useTheme(unlocked: boolean) {
+  const chosenTheme = useJournal((s) => s.journal.settings.theme);
+  const chosenMode = useJournal((s) => s.journal.settings.mode);
+  const theme = unlocked ? chosenTheme : "firmament";
+  const mode = unlocked ? chosenMode : "night";
   const language = useJournal((s) => s.journal.settings.language);
   const discreet = useJournal((s) => s.journal.settings.discreet);
   useEffect(() => {
@@ -77,7 +97,8 @@ function useTheme() {
     root.dataset.mode = mode;
     root.lang = language;
     const meta = document.querySelector('meta[name="theme-color"]');
-    meta?.setAttribute("content", mode === "day" ? "#FDF6F0" : "#1A0E1A");
+    const colors = THEME_COLOR[theme] ?? THEME_COLOR.firmament;
+    meta?.setAttribute("content", mode === "day" ? colors[1] : colors[0]);
     document.title = discreet ? (language === "es" ? "Diario" : "Journal") : "Vela";
   }, [theme, mode, language, discreet]);
 }

@@ -16,7 +16,7 @@ import { clearFingerprint, resetFingerprintPrompt } from "./fingerprint";
 export const DB_KEY = "afterglow_pwa_v1";
 export const LANG_KEY = "vela_pwa_lang";
 
-const THEME_IDS: ThemeId[] = ["velvet", "noir", "rose", "ocean", "emerald"];
+const THEME_IDS: ThemeId[] = ["firmament", "velvet", "noir", "rose", "ocean", "emerald"];
 
 function readLang(): Lang {
   if (typeof localStorage === "undefined") return "en";
@@ -28,7 +28,7 @@ function readLang(): Lang {
 
 export function defaultSettings(language: Lang = "en"): Settings {
   return {
-    theme: "velvet",
+    theme: "firmament",
     mode: "night",
     weekStart: "monday",
     discreet: false,
@@ -40,6 +40,7 @@ export function defaultSettings(language: Lang = "en"): Settings {
     customProblems: [],
     defaultPartner: "",
     cycle: defaultCycle(),
+    themeVersion: 2,
   };
 }
 
@@ -48,7 +49,14 @@ function asSettings(raw: unknown, language: Lang): Settings {
   if (!raw || typeof raw !== "object") return base;
   const s = raw as Partial<Settings>;
   return {
-    theme: THEME_IDS.includes(s.theme as ThemeId) ? (s.theme as ThemeId) : base.theme,
+    // Firmament became the signature theme: journals still on the old default (Velvet) move to it once.
+    theme:
+      s.themeVersion !== 2 && (s.theme === "velvet" || !s.theme)
+        ? "firmament"
+        : THEME_IDS.includes(s.theme as ThemeId)
+          ? (s.theme as ThemeId)
+          : base.theme,
+    themeVersion: 2,
     mode: s.mode === "day" ? "day" : "night",
     weekStart: s.weekStart === "sunday" ? "sunday" : "monday",
     discreet: Boolean(s.discreet),

@@ -15,6 +15,8 @@ export type Settings = {
   customProblems: string[];
   defaultPartner: string;
   cycle: CycleSettings;
+  /** 2 = Firmament became the default theme (Oct 31, 2026). */
+  themeVersion?: number;
 };
 
 export type Profile = {
