@@ -10,8 +10,8 @@
    While these stay as placeholders, Vela runs fully offline on the device.
    ─────────────────────────────────────────────────────────────────────────── */
 
-export const SUPABASE_URL = "SUPABASE_URL";
-export const SUPABASE_ANON_KEY = "SUPABASE_ANON_KEY";
+export const SUPABASE_URL = "https://bybldbmwxucdvhfqspnf.supabase.co";
+export const SUPABASE_ANON_KEY = "sb_publishable_5He-O0ak3eJcniBfgBQnHA_yRKjyHi7";
 
 export const cloudConfigured =
   /^https:\/\/[^\s"]+$/.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 20 && !SUPABASE_ANON_KEY.includes("SUPABASE_");
