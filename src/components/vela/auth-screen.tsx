@@ -7,7 +7,7 @@ import { MIN_PASSPHRASE } from "@/lib/vela/vault-crypto";
 import { openFromCloud, resetSyncMeta, useCloud } from "@/lib/vela/sync";
 import type { CopyKey } from "@/lib/vela/copy";
 import { cn } from "@/lib/cn";
-import { Mark } from "./mark";
+import { FlameHalo, Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
 import { Button, ConfirmDialog, fieldClass, PasswordInput } from "./ui";
 
@@ -55,10 +55,11 @@ export function AuthScreen() {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10">
       <div className="text-center">
-        <div className="mx-auto size-24">
+        <div className="vela-flame-stage mx-auto size-24">
+          <FlameHalo />
           <Mark alive className="relative size-24" />
         </div>
-        <h1 className="vela-rise mt-5 font-display text-4xl tracking-brand" style={{ animationDelay: "120ms" }}>
+        <h1 className="vela-rise vela-wordmark mt-5 font-display text-4xl tracking-brand" style={{ animationDelay: "120ms" }}>
           VELA
         </h1>
         <p className="vela-rise mt-2 text-xs tracking-widest text-dim uppercase" style={{ animationDelay: "220ms" }}>

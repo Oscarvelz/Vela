@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId } from "react";
 import { cn } from "@/lib/cn";
 
 /* Vela mark: the amber flame itself with its halo, no tile, so it sits on any theme.
@@ -45,6 +45,34 @@ export function Mark({ className, alive = false }: { className?: string; alive?:
         </g>
       )}
     </svg>
+  );
+}
+
+/* The sign-in halo: light pouring out of the flame into the night, well past the mark itself.
+   Pure CSS radial layers (no blur, no canvas), animated only with transform/opacity (.vela-halo in styles.css).
+   Wrap it and the Mark in a .vela-flame-stage; it centres on the flame body. */
+export function FlameHalo() {
+  useEffect(() => {
+    // Pause every flame animation while the tab is hidden (battery).
+    const root = document.documentElement;
+    const sync = () => {
+      if (document.hidden) root.dataset.idle = "1";
+      else delete root.dataset.idle;
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      delete root.dataset.idle;
+    };
+  }, []);
+  return (
+    <div className="vela-halo" aria-hidden>
+      <span className="vela-halo-outer" />
+      <span className="vela-halo-rays" />
+      <span className="vela-halo-mid" />
+      <span className="vela-halo-core" />
+    </div>
   );
 }
 

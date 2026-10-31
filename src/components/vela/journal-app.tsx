@@ -12,7 +12,7 @@ import { CloudSync } from "./cloud-sync";
 import { HistoryView } from "./history-view";
 import { HomeView } from "./home-view";
 import { InsightsView } from "./insights-view";
-import { Mark } from "./mark";
+import { FlameHalo, Mark } from "./mark";
 import { SessionForm } from "./session-form";
 import { SettingsView } from "./settings-view";
 import { Button, ConfirmDialog, IconButton } from "./ui";
@@ -52,8 +52,11 @@ function Splash() {
   return (
     <div className="grid min-h-dvh place-items-center bg-bg">
       <div className="text-center">
-        <Mark alive className="mx-auto size-24" />
-        <p className="mt-4 font-display text-3xl tracking-brand">VELA</p>
+        <div className="vela-flame-stage mx-auto size-24">
+          <FlameHalo />
+          <Mark alive className="relative size-24" />
+        </div>
+        <p className="vela-wordmark mt-4 font-display text-3xl tracking-brand">VELA</p>
       </div>
     </div>
   );
