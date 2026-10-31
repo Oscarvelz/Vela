@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { THEMES } from "@/lib/vela/catalog";
 import { fmtShort } from "@/lib/vela/dates";
-import { bioFailCode, bioForUser, bioSupported, clearFingerprint, enrollFingerprint } from "@/lib/vela/fingerprint";
+import { FingerprintSettings } from "./bio";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
 import type { CopyKey } from "@/lib/vela/copy";
@@ -500,105 +500,7 @@ function PrivacySection() {
           {message}
         </p>
       ) : null}
-      <FingerprintControl />
-    </div>
-  );
-}
-
-function FingerprintControl() {
-  const t = useT();
-  const salt = useJournal((s) => s.vaultId);
-  const keyEpoch = useJournal((s) => s.keyEpoch);
-  const showToast = useJournal((s) => s.showToast);
-  const [pin, setPin] = useState("");
-  const [error, setError] = useState("");
-  const [askRemove, setAskRemove] = useState(false);
-  const [nonce, setNonce] = useState(0);
-  const enrolled = nonce >= 0 && keyEpoch >= 0 && Boolean(salt && bioForUser(salt));
-  if (!bioSupported()) {
-    return <p className="text-sm leading-relaxed text-dim">{t("bioUnsupported")}</p>;
-  }
-  if (enrolled) {
-    return (
-      <div className="space-y-2">
-        <p className="flex items-center gap-2 font-semibold">
-          <Fingerprint className="size-4 text-accent" />
-          {t("bioOn")}
-        </p>
-        <Button variant="ghost" onClick={() => setAskRemove(true)}>
-          {t("bioRemove")}
-        </Button>
-        <ConfirmDialog
-          open={askRemove}
-          title={t("bioRemoveQ")}
-          confirmLabel={t("yesDelete")}
-          cancelLabel={t("keep")}
-          onCancel={() => setAskRemove(false)}
-          onConfirm={() => {
-            clearFingerprint();
-            setAskRemove(false);
-            setNonce((value) => value + 1);
-          }}
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-2">
-      <p className="flex items-center gap-2 font-semibold">
-        <Fingerprint className="size-4 text-accent" />
-        {t("bioAdd")}
-      </p>
-      <p className="text-sm leading-relaxed text-dim">{t("bioAddHint")}</p>
-      <PasswordInput
-        className={fieldClass}
-        autoComplete="current-password"
-        value={pin}
-        placeholder={t("currentPinPh")}
-        onChange={(event) => setPin(event.target.value)}
-      />
-      <Button
-        onClick={() => {
-          const vaultId = useJournal.getState().vaultId;
-          if (!vaultId) return;
-          setError("");
-          void useJournal.getState().verifyPassphrase(pin).then(async (ok) => {
-            if (!ok) {
-              setError(t("incorrectPin"));
-              return;
-            }
-            try {
-              await enrollFingerprint(pin, vaultId);
-              setPin("");
-              setNonce((value) => value + 1);
-              showToast(t("bioSaved"));
-            } catch (err) {
-              const code = bioFailCode(err);
-              if (code === "cancel") return;
-              setError(
-                t(
-                  code === "insecure"
-                    ? "bioInsecure"
-                    : code === "unsupported"
-                      ? "bioUnsupported"
-                      : code === "already"
-                        ? "bioAlready"
-                        : code === "missing"
-                          ? "bioMissing"
-                          : "bioFailed",
-                ),
-              );
-            }
-          });
-        }}
-      >
-        {t("bioAdd")}
-      </Button>
-      {error ? (
-        <p className="text-sm text-danger" role="alert">
-          {error}
-        </p>
-      ) : null}
+      <FingerprintSettings />
     </div>
   );
 }

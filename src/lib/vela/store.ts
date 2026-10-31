@@ -11,7 +11,9 @@ import type { Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings
 import type { Lang } from "./copy";
 import { bumpGrace, claimGrace, dropGrace, parkKey } from "./grace";
 import { cleanCycle, defaultCycle, withDayLog, withEnd, withStart, withoutStart, type DayLog } from "./cycle";
-import { clearFingerprint, resetFingerprintPrompt } from "./fingerprint";
+import { clearFingerprint, rememberPass, resetFingerprintPrompt, rewrapFingerprint } from "./fingerprint";
+import { useBioUi } from "./bio-offer";
+import { bioText } from "./bio-copy";
 
 /** Old plaintext journal key (Grok build). Only read for the one-time migration. */
 export const DB_KEY = "afterglow_pwa_v1";
@@ -529,7 +531,7 @@ type Store = {
   setCloudPhase: (phase: CloudPhase) => void;
   createJournal: (name: string, passphrase: string, importLegacy: boolean) => Promise<"short" | "ok">;
   adoptJournal: (raw: unknown, key: VaultKey) => Promise<void>;
-  rekey: (key: VaultKey) => Promise<void>;
+  rekey: (key: VaultKey, passphrase?: string) => Promise<void>;
   unlock: (passphrase: string) => Promise<boolean>;
   verifyPassphrase: (passphrase: string) => Promise<boolean>;
   changePassphrase: (current: string, next: string) => Promise<"short" | "bad" | "ok">;
@@ -776,6 +778,7 @@ export const useJournal = create<Store>((set, get) => {
       const base = legacy ?? { ...lockedShell(language), partners: [], sessions: [], encounters: [] };
       const profile: Profile = { displayName: name.trim() || legacy?.profile?.displayName || "", createdAt: Date.now() };
       const journal: Journal = { ...base, settings: { ...base.settings, language }, profile, updatedAt: Date.now() };
+      rememberPass(passphrase);
       set({ journal, unlocked: true, vault: "locked", vaultId: vaultIdMem, lastActivity: Date.now() });
       await persist(journal);
       void parkKey(vk, vaultIdMem, journal.settings.autoLockMins);
@@ -796,10 +799,24 @@ export const useJournal = create<Store>((set, get) => {
       await persist(journal);
       void parkKey(vk, vaultIdMem, journal.settings.autoLockMins);
     },
-    rekey: async (vk) => {
+    rekey: async (vk, passphrase) => {
       if (!get().unlocked) return;
       sessionKey = vk;
-      clearFingerprint();
+      if (passphrase) {
+        // Keep fingerprint unlock: seal the new passphrase with the same fingerprint.
+        rememberPass(passphrase);
+        const vid = vaultIdMem;
+        void rewrapFingerprint(passphrase, vid).then((r) => {
+          useBioUi.getState().bump();
+          if (r === "ok") get().showToast(bioText("rewrapped"));
+          if (r === "cleared") {
+            get().showToast(bioText("rewrapLost"));
+            useBioUi.getState().setOffer(true);
+          }
+        });
+      } else {
+        clearFingerprint();
+      }
       set({ keyEpoch: get().keyEpoch + 1 });
       await persist(get().journal);
       void parkKey(vk, vaultIdMem, get().journal.settings.autoLockMins);
@@ -817,6 +834,7 @@ export const useJournal = create<Store>((set, get) => {
         journal.settings.language = language;
         if (!journal.profile) journal.profile = { displayName: "", createdAt: Date.now() };
         rememberUi(journal);
+        rememberPass(passphrase);
         set({ journal, unlocked: true, vaultId: vaultIdMem, lastActivity: Date.now() });
         void parkKey(vk, vaultIdMem, journal.settings.autoLockMins);
         return true;
@@ -840,7 +858,7 @@ export const useJournal = create<Store>((set, get) => {
       if (next.length < MIN_PASSPHRASE) return "short";
       if (!(await get().verifyPassphrase(current))) return "bad";
       const vk = await newVaultKey(next);
-      await get().rekey(vk);
+      await get().rekey(vk, next);
       return "ok";
     },
     importLegacy: async () => {
@@ -851,7 +869,6 @@ export const useJournal = create<Store>((set, get) => {
       commit({ ...merged, profile: get().journal.profile });
       await flushSaves();
       removeLegacyJournal();
-      clearFingerprint();
       set({ legacy: null });
       return get().journal.sessions.filter((s) => !before.has(s.id)).length;
     },

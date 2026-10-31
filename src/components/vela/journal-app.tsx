@@ -7,6 +7,7 @@ import type { TabId } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
 import { Starfield } from "./starfield";
 import { AuthScreen } from "./auth-screen";
+import { BioOffer } from "./bio";
 import { CalendarView } from "./calendar-view";
 import { CloudSync } from "./cloud-sync";
 import { HistoryView } from "./history-view";
@@ -76,6 +77,7 @@ function Gate() {
     <>
       {sky ? <Starfield dense={!unlocked} /> : null}
       {unlocked ? <Shell /> : <AuthScreen />}
+      {unlocked ? <BioOffer /> : null}
     </>
   );
 }

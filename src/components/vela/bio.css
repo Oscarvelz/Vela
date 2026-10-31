@@ -1,0 +1,151 @@
+/* Fingerprint unlock — Firmament navy + warm gold. */
+.vela-bio-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 7.5rem;
+  height: 7.5rem;
+  margin: 0 auto;
+  border-radius: 9999px;
+  color: #ebbd63;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(235, 189, 99, 0.2), rgba(235, 189, 99, 0.05) 55%, transparent 72%),
+    radial-gradient(circle at 50% 50%, #142154 0%, #0b1333 70%);
+  border: 1.5px solid rgba(235, 189, 99, 0.55);
+  box-shadow:
+    0 0 0 6px rgba(235, 189, 99, 0.06),
+    0 0 34px rgba(235, 189, 99, 0.28),
+    inset 0 1px 0 rgba(255, 236, 196, 0.18);
+  transition: transform 160ms ease, box-shadow 220ms ease, border-color 220ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.vela-bio-btn:hover,
+.vela-bio-btn:focus-visible {
+  border-color: #ebbd63;
+  box-shadow:
+    0 0 0 6px rgba(235, 189, 99, 0.1),
+    0 0 46px rgba(235, 189, 99, 0.42),
+    inset 0 1px 0 rgba(255, 236, 196, 0.22);
+  outline: none;
+}
+.vela-bio-btn:active {
+  transform: scale(0.96);
+}
+.vela-bio-btn svg {
+  width: 3.5rem;
+  height: 3.5rem;
+  filter: drop-shadow(0 0 8px rgba(235, 189, 99, 0.55));
+}
+.vela-bio-btn::before,
+.vela-bio-btn::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1.5px solid rgba(235, 189, 99, 0.5);
+  opacity: 0;
+  pointer-events: none;
+}
+.vela-bio-btn[data-asking="true"]::before {
+  animation: vela-bio-ring 1.8s ease-out infinite;
+}
+.vela-bio-btn[data-asking="true"]::after {
+  animation: vela-bio-ring 1.8s ease-out 0.9s infinite;
+}
+@keyframes vela-bio-ring {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+.vela-bio-small {
+  width: 4.25rem;
+  height: 4.25rem;
+}
+.vela-bio-small svg {
+  width: 2.1rem;
+  height: 2.1rem;
+}
+.vela-bio-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(4, 7, 20, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: vela-bio-fade 220ms ease both;
+}
+.vela-bio-sheet {
+  position: fixed;
+  z-index: 61;
+  left: 50%;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  width: min(28rem, calc(100% - 1.5rem));
+  transform: translateX(-50%);
+  border-radius: 1.5rem;
+  padding: 1.5rem 1.25rem 1.1rem;
+  color: #eef1ff;
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(235, 189, 99, 0.16), transparent 60%),
+    linear-gradient(180deg, #121d48 0%, #0a1130 100%);
+  border: 1px solid rgba(235, 189, 99, 0.35);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 40px rgba(235, 189, 99, 0.12);
+  animation: vela-bio-up 320ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+@media (min-width: 768px) {
+  .vela-bio-sheet {
+    bottom: auto;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    animation: vela-bio-fade 260ms ease both;
+  }
+}
+.vela-bio-sheet .vela-bio-gold {
+  color: #ebbd63;
+}
+.vela-bio-sheet .vela-bio-dim {
+  color: #b9c1e0;
+}
+.vela-bio-cta {
+  display: inline-flex;
+  width: 100%;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.9rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #1a1200;
+  background: linear-gradient(180deg, #f3cf82 0%, #ebbd63 55%, #d9a446 100%);
+  box-shadow: 0 6px 22px rgba(235, 189, 99, 0.35), inset 0 1px 0 rgba(255, 245, 220, 0.6);
+}
+.vela-bio-cta:disabled {
+  opacity: 0.6;
+}
+.vela-bio-ghost {
+  display: inline-flex;
+  width: 100%;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.9rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #eef1ff;
+  border: 1px solid rgba(185, 193, 224, 0.28);
+}
+@keyframes vela-bio-up {
+  from { opacity: 0; transform: translate(-50%, 24px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes vela-bio-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vela-bio-btn[data-asking="true"]::before,
+  .vela-bio-btn[data-asking="true"]::after,
+  .vela-bio-sheet,
+  .vela-bio-sheet-backdrop {
+    animation: none;
+  }
+}

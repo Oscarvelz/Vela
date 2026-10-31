@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
-import { ShieldAlert } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Fingerprint, ShieldAlert } from "lucide-react";
 import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
-import { askFingerprintOnOpen, bioFailCode, bioForUser, bioSupported, clearFingerprint, enrollFingerprint, unlockFingerprint } from "@/lib/vela/fingerprint";
-import { Fingerprint } from "lucide-react";
+import { bioForUser, bioSupported, fingerprintUnlock } from "@/lib/vela/fingerprint";
+import { useBioT } from "@/lib/vela/bio-copy";
+import { useBioUi } from "@/lib/vela/bio-offer";
+import { BioButton, bioErrorKey } from "./bio";
 import { MIN_PASSPHRASE } from "@/lib/vela/vault-crypto";
 import { openFromCloud, resetSyncMeta, useCloud } from "@/lib/vela/sync";
-import type { CopyKey } from "@/lib/vela/copy";
 import { cn } from "@/lib/cn";
 import { FlameHalo, Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
@@ -22,34 +23,6 @@ export function AuthScreen() {
   const user = useCloud((s) => s.user);
   const [error, setError] = useState("");
   const [fresh, setFresh] = useState(false);
-
-  const failText = (code: string) => {
-    const key = (
-      code === "mismatch"
-        ? "bioMismatch"
-        : code === "insecure"
-          ? "bioInsecure"
-          : code === "unsupported"
-            ? "bioUnsupported"
-            : code === "already"
-              ? "bioAlready"
-              : code === "missing"
-                ? "bioMissing"
-                : "bioFailed"
-    ) satisfies CopyKey;
-    return t(key);
-  };
-
-  useEffect(() => {
-    if (vault !== "locked" || !vaultId) return;
-    askFingerprintOnOpen(
-      vaultId,
-      (passphrase) => useJournal.getState().unlock(passphrase),
-      (code) => setError(failText(code)),
-    );
-    // Ask once per visit to the lock screen. Lock resets that flag.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vault, vaultId]);
 
   const cloudCopy = vault === "none" && user && remote && !fresh;
 
@@ -85,7 +58,7 @@ export function AuthScreen() {
         ) : cloudCopy ? (
           <CloudOpenForm onFresh={() => setFresh(true)} />
         ) : (
-          <CreateForm failText={failText} />
+          <CreateForm />
         )}
       </div>
       <div className="vela-rise ag-panel mt-4 rounded-card border border-border px-5 py-5" style={{ animationDelay: "470ms" }}>
@@ -96,15 +69,139 @@ export function AuthScreen() {
   );
 }
 
+/** Wait until the page is visible and focused (WebAuthn refuses an unfocused page). */
+function whenFocused(run: () => void) {
+  if (document.visibilityState === "visible" && document.hasFocus()) {
+    const id = window.setTimeout(run, 180);
+    return () => window.clearTimeout(id);
+  }
+  let done = false;
+  const go = () => {
+    if (done || document.visibilityState !== "visible") return;
+    done = true;
+    cleanup();
+    window.setTimeout(run, 180);
+  };
+  const cleanup = () => {
+    window.removeEventListener("focus", go);
+    document.removeEventListener("visibilitychange", go);
+  };
+  window.addEventListener("focus", go);
+  document.addEventListener("visibilitychange", go);
+  return () => {
+    done = true;
+    cleanup();
+  };
+}
+
 function UnlockForm({ error, setError }: { error: string; setError: (v: string) => void }) {
   const t = useT();
+  const bt = useBioT();
+  const vaultId = useJournal((s) => s.vaultId);
+  const tick = useBioUi((s) => s.tick);
+  const enrolled = tick >= 0 && bioSupported() && Boolean(vaultId && bioForUser(vaultId));
+  const [mode, setMode] = useState<"bio" | "pass">(enrolled ? "bio" : "pass");
+  const [asking, setAsking] = useState(false);
+  const [tried, setTried] = useState(false);
+  const busy = useRef(false);
+
+  const ask = useCallback(
+    (retryOnBlur = true) => {
+      if (busy.current || !vaultId) return;
+      busy.current = true;
+      setAsking(true);
+      setError("");
+      const started = Date.now();
+      void fingerprintUnlock(vaultId, (p) => useJournal.getState().unlock(p)).then((res) => {
+        busy.current = false;
+        setAsking(false);
+        setTried(true);
+        if (res.ok) return;
+        if (res.code === "busy") return;
+        if (res.code === "cancel") {
+          // Chrome rejects at once when the page isn't focused yet (app just opened): ask again on focus.
+          if (retryOnBlur && Date.now() - started < 600 && !document.hasFocus()) whenFocused(() => ask(false));
+          return;
+        }
+        if (res.code === "mismatch" || res.code === "missing") {
+          useBioUi.getState().bump();
+          setMode("pass");
+        }
+        setError(t(bioErrorKey(res.code)));
+      });
+    },
+    [vaultId, setError, t],
+  );
+
+  // Open → the fingerprint prompt starts by itself. Coming back to the app on the lock screen asks again.
+  useEffect(() => {
+    if (!enrolled || mode !== "bio") return;
+    const stop = whenFocused(() => ask());
+    const onVisible = () => {
+      if (document.visibilityState === "visible") whenFocused(() => ask());
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enrolled, mode]);
+
+  if (enrolled && mode === "bio") {
+    return (
+      <div className="space-y-3 text-center" data-testid="bio-lock">
+        <h2 className="font-display text-3xl">{bt("touchTitle")}</h2>
+        <p className="text-sm leading-relaxed text-dim">{bt("touchBody")}</p>
+        <div className="py-3">
+          <BioButton asking={asking} label={bt("touchBtn")} onClick={() => ask(false)} />
+        </div>
+        <p className="min-h-5 text-sm text-accent" aria-live="polite">
+          {asking ? bt("touchAsking") : tried && !error ? bt("touchRetry") : ""}
+        </p>
+        {error ? (
+          <p className="text-sm text-danger" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          className="mx-auto block min-h-11 px-3 text-sm font-semibold text-dim underline underline-offset-4"
+          data-testid="use-pass"
+          onClick={() => {
+            setError("");
+            setMode("pass");
+          }}
+        >
+          {bt("usePass")}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <PassUnlock
+      error={error}
+      setError={setError}
+      onFinger={
+        enrolled
+          ? () => {
+              setError("");
+              setMode("bio");
+            }
+          : undefined
+      }
+    />
+  );
+}
+
+function PassUnlock({ error, setError, onFinger }: { error: string; setError: (v: string) => void; onFinger?: () => void }) {
+  const t = useT();
+  const bt = useBioT();
   const unlock = useJournal((s) => s.unlock);
   const forgetDevice = useJournal((s) => s.forgetDevice);
   const [pass, setPass] = useState("");
   const [pending, setPending] = useState(false);
   const [askForget, setAskForget] = useState(false);
-  const vaultId = useJournal((s) => s.vaultId);
-  const bioReady = Boolean(vaultId && bioSupported() && bioForUser(vaultId));
   return (
     <form
       className="space-y-3"
@@ -140,33 +237,10 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
       <Button type="submit" className="w-full" disabled={pending || !pass}>
         {pending ? t("unlocking") : t("unlock")}
       </Button>
-      {bioReady ? (
-        <button
-          type="button"
-          className="ag-bio-btn mx-auto flex flex-col items-center gap-1.5 pt-2 text-xs font-semibold text-dim"
-          disabled={pending}
-          onClick={() => {
-            setError("");
-            setPending(true);
-            unlockFingerprint(vaultId)
-              .then((passphrase) => unlock(passphrase).then((ok) => {
-                if (!ok) {
-                  clearFingerprint();
-                  setError(t("bioMismatch"));
-                }
-              }))
-              .catch((err) => {
-                const code = bioFailCode(err);
-                if (code !== "cancel") setError(t("bioFailed"));
-              })
-              .finally(() => setPending(false));
-          }}
-        >
-          <span className="grid size-14 place-items-center rounded-full">
-            <Fingerprint className="size-7" />
-          </span>
-          {t("bioUnlock")}
-        </button>
+      {onFinger ? (
+        <Button variant="ghost" className="w-full" onClick={onFinger} data-testid="use-finger">
+          <Fingerprint className="size-4 text-accent" /> {bt("useFinger")}
+        </Button>
       ) : null}
       <button type="button" className="mx-auto block min-h-10 text-xs text-dim underline" onClick={() => setAskForget(true)}>
         {t("forgotPass")}
@@ -228,7 +302,7 @@ function CloudOpenForm({ onFresh }: { onFresh: () => void }) {
   );
 }
 
-function CreateForm({ failText }: { failText: (code: string) => string }) {
+function CreateForm() {
   const t = useT();
   const createJournal = useJournal((s) => s.createJournal);
   const legacy = useJournal((s) => s.legacy);
@@ -250,21 +324,14 @@ function CreateForm({ failText }: { failText: (code: string) => string }) {
         if (pass !== pass2) return setError(t("passMismatch"));
         if (!ack) return setError(t("passWarnNeed"));
         setPending(true);
-        void createJournal(name, pass, Boolean(legacy) && useLegacy).then(async (result) => {
+        void createJournal(name, pass, Boolean(legacy) && useLegacy).then((result) => {
           setPending(false);
           if (result === "short") {
             setError(t("pinPh"));
             return;
           }
           resetSyncMeta();
-          const vaultId = useJournal.getState().vaultId;
-          if (bioSupported() && vaultId) {
-            try {
-              await enrollFingerprint(pass, vaultId);
-            } catch (err) {
-              if (bioFailCode(err) !== "cancel") useJournal.getState().showToast(failText(bioFailCode(err)));
-            }
-          }
+          // Fingerprint is offered by a one-tap sheet once the journal opens.
         });
       }}
     >

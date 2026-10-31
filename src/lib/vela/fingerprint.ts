@@ -173,7 +173,11 @@ function encryptPin(key: CryptoKey, pin: string) {
 function decryptPin(key: CryptoKey, rec: BioRecord) {
   return crypto.subtle
     .decrypt({ name: "AES-GCM", iv: b64ToBytes(rec.iv) }, key, b64ToBytes(rec.data))
-    .then((buf) => new TextDecoder().decode(buf));
+    .then((buf) => new TextDecoder().decode(buf))
+    .catch(() => {
+      // The sealed copy can't be opened any more (damaged or from an old key).
+      throw new Error("Fingerprint data on this device is missing. Add it again in Settings.");
+    });
 }
 
 function webAuthnCreate(profileKey: string) {
@@ -266,7 +270,7 @@ export function enrollFingerprint(pin: string, profileKey: string) {
   });
 }
 
-export function unlockFingerprint(profileKey: string, mediation?: CredentialMediationRequirement) {
+export function unlockFingerprint(profileKey: string) {
   const rec = bioForUser(profileKey);
   if (!rec) return Promise.reject(new Error("Fingerprint isn't set up for this account on this device."));
   const request: PublicKeyCredentialRequestOptions = {
@@ -278,9 +282,7 @@ export function unlockFingerprint(profileKey: string, mediation?: CredentialMedi
   if (rec.prf && rec.salt) {
     request.extensions = { prf: { eval: { first: b64ToBytes(rec.salt) } } } as AuthenticationExtensionsClientInputs;
   }
-  const options: CredentialRequestOptions = { publicKey: request };
-  if (mediation) options.mediation = mediation;
-  return navigator.credentials.get(options).then((assertion) => {
+  return navigator.credentials.get({ publicKey: request }).then((assertion) => {
     if (!assertion || assertion.type !== "public-key") throw new Error("Fingerprint was cancelled.");
     const cred = assertion as PublicKeyCredential;
     if (rec.prf) {
@@ -295,39 +297,141 @@ export function unlockFingerprint(profileKey: string, mediation?: CredentialMedi
   });
 }
 
-let bioAsked = false;
-let bioPlainTried = false;
-
-export function resetFingerprintPrompt() {
-  bioAsked = false;
-  bioPlainTried = false;
+/* ---------- session memory ----------
+   While the journal is open, the passphrase it was opened with is kept in this
+   tab's memory only (the derived key is in memory too), so fingerprint can be
+   turned on with one tap. Locking forgets it. Never written anywhere. */
+let sessionPassMem = "";
+export function rememberPass(passphrase: string) {
+  sessionPassMem = passphrase;
+}
+export function sessionPass() {
+  return sessionPassMem;
 }
 
-export function askFingerprintOnOpen(
-  profileKey: string,
-  tryOpen: (passphrase: string) => Promise<boolean>,
-  onFail: (code: "insecure" | "unsupported" | "already" | "missing" | "failed" | "mismatch") => void,
-) {
-  if (bioAsked) return;
-  if (!bioForUser(profileKey) || !bioSupported()) return;
-  bioAsked = true;
-  const opened = (passphrase: string) => {
-    void tryOpen(passphrase).then((ok) => {
-      if (ok) return;
-      clearFingerprint();
-      bioAsked = false;
-      onFail("mismatch");
+/** Called on lock: forget the passphrase held for this session. */
+export function resetFingerprintPrompt() {
+  sessionPassMem = "";
+}
+
+/** True when this phone has a fingerprint / screen-lock authenticator WebAuthn can use. */
+export function platformAvailable(): Promise<boolean> {
+  if (!bioSupported()) return Promise.resolve(false);
+  try {
+    const fn = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable;
+    if (typeof fn !== "function") return Promise.resolve(true);
+    return fn.call(PublicKeyCredential).catch(() => false);
+  } catch {
+    return Promise.resolve(false);
+  }
+}
+
+/** Ask the browser to keep Vela's storage (so the fingerprint key isn't evicted). */
+export function keepStorage() {
+  try {
+    void navigator.storage?.persist?.().catch(() => undefined);
+  } catch {
+    /* optional */
+  }
+}
+
+/* ---------- "don't ask again" on this device ---------- */
+const SKIP_LS = "vela-bio-skip";
+export function offerSkipped(vaultId: string) {
+  try {
+    return Boolean(vaultId) && localStorage.getItem(SKIP_LS) === vaultId;
+  } catch {
+    return false;
+  }
+}
+export function setOfferSkipped(vaultId: string, skip: boolean) {
+  try {
+    if (skip) localStorage.setItem(SKIP_LS, vaultId);
+    else localStorage.removeItem(SKIP_LS);
+  } catch {
+    /* keep going */
+  }
+}
+
+/** Enroll with the passphrase held for this session (one tap after unlock). */
+export function enrollWithSession(vaultId: string) {
+  const pass = sessionPassMem;
+  if (!pass) return Promise.reject(new Error("Enter your passphrase first."));
+  return enrollFingerprint(pass, vaultId).then(() => {
+    setOfferSkipped(vaultId, false);
+    keepStorage();
+  });
+}
+
+/**
+ * The passphrase changed: seal the new one with the same fingerprint.
+ * Device-key mode needs no prompt; PRF mode asks for the fingerprint once.
+ * If that fails the old record is removed (it would only hold the old passphrase).
+ */
+export function rewrapFingerprint(passphrase: string, vaultId: string): Promise<"none" | "ok" | "cleared"> {
+  const rec = bioForUser(vaultId);
+  if (!rec) {
+    clearFingerprint();
+    return Promise.resolve("none");
+  }
+  const seal = (key: CryptoKey) =>
+    encryptPin(key, passphrase).then((box) => {
+      saveBioRecord({ ...rec, iv: box.iv, data: box.data });
+      return "ok" as const;
     });
-  };
-  const quiet = (err: unknown) => {
-    const code = bioFailCode(err);
-    if (code === "cancel") return;
-    if (!bioPlainTried && code === "unsupported") {
-      bioPlainTried = true;
-      unlockFingerprint(profileKey).then(opened).catch(quiet);
-      return;
+  const work = rec.prf
+    ? navigator.credentials
+        .get({
+          publicKey: {
+            challenge: bioBytes(32),
+            allowCredentials: [{ type: "public-key", id: b64ToBytes(rec.credentialId) }],
+            userVerification: "required",
+            timeout: 60000,
+            extensions: { prf: { eval: { first: b64ToBytes(rec.salt || "") } } },
+          } as PublicKeyCredentialRequestOptions,
+        })
+        .then((assertion) => {
+          const secret = assertion ? prfSecret(assertion as PublicKeyCredential) : null;
+          if (!secret) throw new Error("missing");
+          return crypto.subtle.importKey("raw", secret, "AES-GCM", false, ["encrypt"]).then(seal);
+        })
+    : bioGetKey(rec.keyId || "").then((key) => {
+        if (!key) throw new Error("missing");
+        return seal(key);
+      });
+  return work.catch(() => {
+    clearFingerprint();
+    return "cleared" as const;
+  });
+}
+
+export type BioOutcome =
+  | { ok: true }
+  | { ok: false; code: "cancel" | "insecure" | "unsupported" | "already" | "missing" | "failed" | "mismatch" | "busy" };
+
+let inFlight = false;
+
+/**
+ * One fingerprint unlock attempt. A stale record (wrong passphrase / lost key) is
+ * removed so the passphrase path takes over cleanly.
+ */
+export async function fingerprintUnlock(vaultId: string, tryOpen: (passphrase: string) => Promise<boolean>): Promise<BioOutcome> {
+  if (inFlight) return { ok: false, code: "busy" };
+  inFlight = true;
+  try {
+    const pass = await unlockFingerprint(vaultId);
+    const opened = await tryOpen(pass);
+    if (opened) {
+      sessionPassMem = pass;
+      return { ok: true };
     }
-    onFail(code);
-  };
-  unlockFingerprint(profileKey, "immediate" as CredentialMediationRequirement).then(opened).catch(quiet);
+    clearFingerprint();
+    return { ok: false, code: "mismatch" };
+  } catch (err) {
+    const code = bioFailCode(err);
+    if (code === "missing") clearFingerprint();
+    return { ok: false, code };
+  } finally {
+    inFlight = false;
+  }
 }

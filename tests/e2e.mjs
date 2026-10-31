@@ -10,7 +10,7 @@ const PARTNER = "Zephyrine Fakename";
 const NOTE = "Moonlit-fake-note-4821";
 const LEGACY_PARTNER = "Legacyperson Fakeson";
 const LEGACY_NOTE = "OldPlainNote-9917";
-const SHOTS = "/workspace/work/vela/tests/shots";
+const SHOTS = process.env.SHOTS || "/workspace/work/vela/tests/shots";
 mkdirSync(SHOTS, { recursive: true });
 
 const results = [];
@@ -64,6 +64,12 @@ async function dumpStorage(page) {
   });
 }
 
+// Reopening the app ends its session (sessionStorage), which also ends the pull-to-refresh grace.
+async function reopen(page) {
+  await page.evaluate(() => sessionStorage.removeItem("vela_grace")).catch(() => undefined);
+  await page.reload();
+}
+
 async function createJournal(page, pass) {
   await page.fill("#name", "Tester");
   await page.fill("#create-pass", pass);
@@ -79,7 +85,7 @@ async function unlock(page, pass) {
   await page.click('button[type=submit]:has-text("Unlock")');
 }
 
-for (const width of [412, 1366]) {
+for (const width of (process.env.WIDTHS ? process.env.WIDTHS.split(",").map(Number).filter(Boolean) : [412, 1366])) {
   const tag = `w${width}`;
   const ctx = await browser.newContext({ viewport: { width, height: width < 600 ? 900 : 860 }, acceptDownloads: true });
   const page = await ctx.newPage();
@@ -116,7 +122,7 @@ for (const width of [412, 1366]) {
   ok(`${tag} old plaintext key absent`, !("afterglow_pwa_v1" in s1.ls));
 
   // reload → locked
-  await page.reload();
+  await reopen(page);
   await page.waitForSelector("#unlock-pass", { timeout: 20000 });
   ok(`${tag} reload shows lock screen`, !(await page.isVisible(".ag-tabbar")));
   ok(`${tag} locked page has no diary text`, !(await page.content()).includes(PARTNER));
@@ -152,7 +158,7 @@ for (const width of [412, 1366]) {
     await page.fill('input[placeholder="New passphrase (at least 8 characters)"]', PASS2);
     await page.click('button:has-text("Change and re-encrypt")');
     await page.waitForTimeout(2500);
-    await page.reload();
+    await reopen(page);
     await unlock(page, PASS);
     await page.waitForSelector('[role=alert]', { timeout: 20000 });
     ok(`${tag} old passphrase no longer opens after change`, true);
@@ -178,7 +184,7 @@ for (const width of [412, 1366]) {
     });
     ok(`${tag} service worker active`, Boolean(controlled), String(controlled));
     await ctx.setOffline(true);
-    await page.reload();
+    await reopen(page);
     await unlock(page, PASS2);
     await page.waitForSelector(".ag-tabbar", { timeout: 30000 });
     await page.click('.ag-tabbar button:has-text("History")');
@@ -190,7 +196,7 @@ for (const width of [412, 1366]) {
 }
 
 // legacy plaintext migration
-{
+if (!process.env.SKIP_LEGACY) {
   const ctx = await browser.newContext({ viewport: { width: 412, height: 900 } });
   const page = await ctx.newPage();
   await page.goto(URL);
@@ -210,7 +216,7 @@ for (const width of [412, 1366]) {
     },
     [LEGACY_PARTNER, LEGACY_NOTE],
   );
-  await page.reload();
+  await reopen(page);
   await page.waitForSelector('[data-testid="legacy-setup"]', { timeout: 20000 });
   ok("legacy plaintext journal detected at setup", true);
   await createJournal(page, PASS);

@@ -336,7 +336,7 @@ export function Switch({
     >
       <span
         className={cn(
-          "absolute top-0.5 size-6 rounded-full transition-transform",
+          "absolute top-0.5 left-0 size-6 rounded-full transition-transform",
           checked ? "translate-x-7 bg-accent" : "translate-x-0.5 bg-dim",
         )}
       />

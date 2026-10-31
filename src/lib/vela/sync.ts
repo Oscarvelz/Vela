@@ -11,6 +11,7 @@ import { currentKey, journalFromUnknown, mergeJournals, useJournal, type CloudPh
 import type { Journal } from "./types";
 import { open, openWithPassphrase, seal } from "./vault-crypto";
 import { readSync, writeSync, type SyncMeta } from "./vault-db";
+import { rememberPass } from "./fingerprint";
 
 type CloudState = {
   authReady: boolean;
@@ -226,6 +227,7 @@ export async function openFromCloud(passphrase: string): Promise<boolean> {
     hold = true;
     try {
       await useJournal.getState().adoptJournal(data, vk);
+      rememberPass(passphrase);
     } finally {
       hold = false;
     }
@@ -247,7 +249,7 @@ export async function adoptRemotePassphrase(passphrase: string): Promise<boolean
     merged.settings = { ...merged.settings, language: mine.settings.language };
     hold = true;
     try {
-      await useJournal.getState().rekey(vk);
+      await useJournal.getState().rekey(vk, passphrase);
       useJournal.getState().replaceJournal(merged);
     } finally {
       hold = false;
