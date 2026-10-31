@@ -1014,7 +1014,30 @@ input[type="range"].ag-range::-moz-range-thumb {
 [data-mode="day"] .cy-arc-ovulation { filter: none; }
 .cy-today-halo { fill: color-mix(in srgb, var(--ag-accent) 26%, transparent); transform-box: fill-box; transform-origin: center; animation: cy-halo 3.2s ease-in-out infinite; }
 .cy-today-dot { fill: var(--ag-bg); stroke: var(--ag-accent); stroke-width: 3.5; }
-.cy-center { position: absolute; inset: 17%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.cy-center { position: absolute; inset: 17%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; border-radius: 50%; color: inherit; background: none; border: 0; padding: 0; }
+.cy-center-in { display: flex; flex-direction: column; align-items: center; animation: cy-center-in .22s ease both; }
+.cy-center.is-scrub { cursor: pointer; }
+.cy-dial-svg { touch-action: none; }
+.cy-center { touch-action: pan-y; }
+.cy-dial { -webkit-user-select: none; user-select: none; outline: none; }
+.cy-dial:focus-visible .cy-dial-svg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--ag-accent) 60%, transparent)); }
+.cy-dial-svg { cursor: grab; }
+.cy-dial.is-dragging .cy-dial-svg { cursor: grabbing; }
+.cy-arc-lit { opacity: 1 !important; filter: drop-shadow(0 0 6px currentColor); }
+.cy-arc-period.cy-arc-lit { color: var(--cy-period); }
+.cy-arc-fertile.cy-arc-lit { color: var(--cy-fertile); }
+.cy-moment { fill: var(--ag-accent); opacity: .9; }
+.cy-moment-dot { width: 5px; height: 5px; border-radius: 999px; background: var(--ag-accent); }
+.cy-knob-ring { fill: color-mix(in srgb, var(--ag-text) 12%, transparent); stroke: var(--ag-text); stroke-width: 2.5; filter: drop-shadow(0 2px 6px rgba(0,0,0,.45)); transition: cx .12s ease, cy .12s ease; }
+.cy-knob-core { fill: var(--ag-text); transition: cx .12s ease, cy .12s ease; }
+.cy-knob-period { stroke: var(--cy-period); }
+.cy-knob-fertile { stroke: var(--cy-fertile); }
+.cy-knob-ovulation { stroke: var(--cy-ovulation); }
+.cy-dial.is-dragging .cy-knob-ring, .cy-dial.is-dragging .cy-knob-core { transition: none; }
+.cy-phase-chip { display: inline-flex; align-items: center; gap: .4rem; min-height: 30px; padding: 0 .7rem; border-radius: 999px; font-size: 11px; border: 1px solid var(--ag-border); background: color-mix(in srgb, var(--ag-surface-2) 60%, transparent); transition: border-color .2s ease, background-color .2s ease, transform .15s ease; }
+.cy-phase-chip:active { transform: scale(.96); }
+.cy-phase-chip.is-on { border-color: color-mix(in srgb, var(--ag-accent) 70%, transparent); background: color-mix(in srgb, var(--ag-accent) 14%, transparent); }
+@keyframes cy-center-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 @keyframes cy-arcs-in { from { opacity: 0; transform: rotate(-14deg) scale(.96); } to { opacity: 1; transform: none; } }
 @keyframes cy-halo { 0%, 100% { opacity: .55; transform: scale(.9); } 50% { opacity: 1; transform: scale(1.18); } }
 
@@ -1050,7 +1073,8 @@ input[type="range"].ag-range::-moz-range-thumb {
 .cy-rise { animation: cy-sheet-in .35s ease both; }
 
 @media (prefers-reduced-motion: reduce) {
-  .cy-arcs, .cy-today-halo, .cy-sheet, .cy-scrim, .cy-rise { animation: none !important; }
+  .cy-arcs, .cy-today-halo, .cy-sheet, .cy-scrim, .cy-rise, .cy-center-in { animation: none !important; }
+  .cy-knob-ring, .cy-knob-core { transition: none; }
   .cy-week-day { transition: none; }
 }
 

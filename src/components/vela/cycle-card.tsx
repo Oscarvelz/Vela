@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Check, Droplet, Settings2, X } from "lucide-react";
 import {
   cycleMarks,
@@ -213,8 +213,11 @@ function arcPath(from: number, to: number) {
 }
 
 export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnapshot>; keyLine: string }) {
-  const t = useT();
+  const { t, partner } = useCycleWords();
+  const lang = useLang();
   const cycle = useJournal((s) => s.journal.settings.cycle);
+  const sessions = useJournal((s) => s.journal.sessions);
+  const openCycleDay = useJournal((s) => s.openCycleDay);
   const today = todayStr();
   const start = snap.cycleStart ?? today;
   const length = Math.max(snap.ringLength, 14);
@@ -232,58 +235,222 @@ export function CycleDial({ snap, keyLine }: { snap: ReturnType<typeof cycleSnap
     }
     return out;
   }, [cycle, start, length, today]);
+  // Moments (sessions) inside this cycle, by ring index: shows where they fell against the window.
+  const moments = useMemo(() => {
+    const end = addDays(start, length - 1);
+    const out = new Map<number, number>();
+    for (const session of sessions) {
+      if (session.date < start || session.date > end) continue;
+      const index = daysUntil(start, session.date);
+      out.set(index, (out.get(index) ?? 0) + 1);
+    }
+    return out;
+  }, [sessions, start, length]);
   const step = 360 / length;
   const gap = Math.min(1.6, step * 0.18);
-  const dayIndex = snap.day ? Math.min(snap.day, length) - 1 : 0;
-  const [tx, ty] = polar(dayIndex * step + step / 2);
+  const todayIndex = snap.day ? Math.min(snap.day, length) - 1 : 0;
+  const [sel, setSel] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [hinted, setHinted] = useState(() => {
+    try { return localStorage.getItem("vela-cy-scrub") === "1"; } catch { return true; }
+  });
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const shown = sel ?? todayIndex;
+  const scrubbing = sel !== null && sel !== todayIndex;
+  const shownDate = addDays(start, shown);
+
+  function choose(index: number) {
+    const next = ((index % length) + length) % length;
+    setSel((current) => {
+      if (current !== next && typeof navigator !== "undefined") navigator.vibrate?.(4);
+      return next;
+    });
+    if (!hinted) {
+      setHinted(true);
+      try { localStorage.setItem("vela-cy-scrub", "1"); } catch { /* ignore */ }
+    }
+  }
+  function indexAt(clientX: number, clientY: number) {
+    const box = svgRef.current?.getBoundingClientRect();
+    if (!box) return null;
+    const dx = clientX - (box.left + box.width / 2);
+    const dy = clientY - (box.top + box.height / 2);
+    const dist = Math.hypot(dx, dy) / (box.width / 240);
+    if (!dragging && (dist < R - 30 || dist > R + 30)) return null; // taps start on the ring only
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+    return Math.floor((((angle % 360) + 360) % 360) / step);
+  }
+
+  const marks = useMemo(() => cycleMarks(cycle, start, addDays(start, length - 1), today), [cycle, start, length, today]);
+  const info = scrubbing ? dayInfo(cycle, shownDate, today) : null;
+  const stage: CycleStage = info?.stage ?? snap.stage;
+  const offset = daysUntil(today, shownDate);
+  const relative =
+    offset === 0 ? t("cyTodayWord") : offset === 1 ? t("cyIn1") : offset === -1 ? t("cyAgo1") : offset > 0 ? fill(t("cyInN"), { n: offset }) : fill(t("cyAgoN"), { n: -offset });
+  const phaseNote = info ? (info.stage === "ovulation" ? t("cyOvulationNote") : info.stage === "fertile" ? t("cyFertileNote") : "") : "";
+  const count = moments.get(shown) ?? 0;
+  const chips = useMemo(() => {
+    const seen = new Set<CyclePhase>();
+    return runs.filter((run) => (seen.has(run.phase) ? false : (seen.add(run.phase), true)));
+  }, [runs]);
+
+  const [tx, ty] = polar(todayIndex * step + step / 2);
+  const [sx, sy] = polar(shown * step + step / 2);
   const ticks = Array.from({ length }, (_, index) => index);
+  const shownMark = marks[shownDate];
   return (
-    <div className="cy-dial mt-1" role="img" aria-label={`${t("cycleDay")} ${snap.day ?? ""} · ${t(stageKey(snap.stage))} · ${keyLine}`}>
-      <svg viewBox="0 0 240 240" aria-hidden>
-        <circle cx={C} cy={C} r={R} fill="none" stroke="var(--cy-track)" strokeWidth={STROKE} />
-        {ticks.map((index) => {
-          const [x1, y1] = polar(index * step, R - STROKE / 2 - 5);
-          const [x2, y2] = polar(index * step, R - STROKE / 2 - (index % 7 === 0 ? 10 : 7));
-          return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--ag-dim)" strokeOpacity={index % 7 === 0 ? 0.55 : 0.22} strokeWidth={1} strokeLinecap="round" />;
-        })}
-        <g className="cy-arcs">
-          {runs
-            .filter((run) => run.phase !== "ovulation")
-            .map((run) => (
-              <path
-                key={`${run.from}-${run.phase}-${run.predicted}`}
-                d={arcPath(run.from * step + gap / 2, run.to * step - gap / 2)}
-                fill="none"
-                strokeWidth={STROKE}
-                strokeLinecap="butt"
-                className={cn(`cy-arc-${run.phase}`, run.predicted && "cy-arc-pred")}
-              />
-            ))}
-          {runs
-            .filter((run) => run.phase === "ovulation")
-            .map((run) => {
-              const [ox, oy] = polar(run.from * step + step / 2);
-              return <circle key={`ov-${run.from}`} cx={ox} cy={oy} r={STROKE / 2 + 2.5} className={cn("cy-ov-dot", run.predicted && "cy-ov-pred")} />;
+    <div className="mt-1">
+      <div
+        className={cn("cy-dial", dragging && "is-dragging")}
+        role="slider"
+        tabIndex={0}
+        aria-label={t("cyDialAria")}
+        aria-valuemin={1}
+        aria-valuemax={length}
+        aria-valuenow={shown + 1}
+        aria-valuetext={`${fmtShort(shownDate, lang)} · ${t("cycleDay")} ${shown + 1} · ${t(stageKey(stage))} · ${scrubbing ? relative : keyLine}`}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowRight" || event.key === "ArrowUp") { event.preventDefault(); choose(shown + 1); }
+          else if (event.key === "ArrowLeft" || event.key === "ArrowDown") { event.preventDefault(); choose(shown - 1); }
+          else if (event.key === "Home" || event.key === "Escape") { event.preventDefault(); setSel(null); }
+        }}
+      >
+        <svg
+          ref={svgRef}
+          viewBox="0 0 240 240"
+          aria-hidden
+          className="cy-dial-svg"
+          onPointerDown={(event) => {
+            const index = indexAt(event.clientX, event.clientY);
+            if (index === null) return;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setDragging(true);
+            choose(index);
+          }}
+          onPointerMove={(event) => {
+            if (!dragging) return;
+            const index = indexAt(event.clientX, event.clientY);
+            if (index !== null) choose(index);
+          }}
+          onPointerUp={() => setDragging(false)}
+          onPointerCancel={() => setDragging(false)}
+        >
+          <circle cx={C} cy={C} r={R} fill="none" stroke="var(--cy-track)" strokeWidth={STROKE} />
+          {ticks.map((index) => {
+            const [x1, y1] = polar(index * step, R - STROKE / 2 - 5);
+            const [x2, y2] = polar(index * step, R - STROKE / 2 - (index % 7 === 0 ? 10 : 7));
+            return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--ag-dim)" strokeOpacity={index % 7 === 0 ? 0.55 : 0.22} strokeWidth={1} strokeLinecap="round" />;
+          })}
+          <g className="cy-arcs">
+            {runs
+              .filter((run) => run.phase !== "ovulation")
+              .map((run) => (
+                <path
+                  key={`${run.from}-${run.phase}-${run.predicted}`}
+                  d={arcPath(run.from * step + gap / 2, run.to * step - gap / 2)}
+                  fill="none"
+                  strokeWidth={STROKE}
+                  strokeLinecap="butt"
+                  className={cn(`cy-arc-${run.phase}`, run.predicted && "cy-arc-pred", scrubbing && shown >= run.from && shown < run.to && "cy-arc-lit")}
+                />
+              ))}
+            {runs
+              .filter((run) => run.phase === "ovulation")
+              .map((run) => {
+                const [ox, oy] = polar(run.from * step + step / 2);
+                return <circle key={`ov-${run.from}`} cx={ox} cy={oy} r={STROKE / 2 + 2.5} className={cn("cy-ov-dot", run.predicted && "cy-ov-pred")} />;
+              })}
+          </g>
+          <g className="cy-moments">
+            {[...moments.keys()].map((index) => {
+              const [mx, my] = polar(index * step + step / 2, R + STROKE / 2 + 6);
+              return <circle key={`m-${index}`} cx={mx} cy={my} r={moments.get(index)! > 1 ? 2.6 : 2} className="cy-moment" />;
             })}
-        </g>
-        {snap.day ? (
-          <>
-            <circle cx={tx} cy={ty} r={13} className="cy-today-halo" />
-            <circle cx={tx} cy={ty} r={7.5} className="cy-today-dot" />
-          </>
-        ) : null}
-      </svg>
-      <div className="cy-center">
-        <span className="text-[10px] font-semibold tracking-[0.22em] text-dim uppercase">{t("cycleDay")}</span>
-        <span className="font-display text-[3.4rem] leading-[0.95] tabular-nums" data-testid="cycle-day">
-          {snap.day ?? "—"}
-        </span>
-        <span className="mt-1 flex items-center gap-1.5 text-sm font-semibold">
-          <span className={cn("size-2 rounded-full", stageDot(snap.stage))} />
-          {t(stageKey(snap.stage))}
-        </span>
-        <span className={cn("mt-1 max-w-[11rem] text-xs leading-snug", snap.late > 0 ? "cy-text-period font-semibold" : "text-dim")}>{keyLine}</span>
+          </g>
+          {snap.day ? (
+            <>
+              <circle cx={tx} cy={ty} r={13} className="cy-today-halo" />
+              <circle cx={tx} cy={ty} r={7.5} className="cy-today-dot" />
+            </>
+          ) : null}
+          {scrubbing ? (
+            <g className="cy-knob">
+              <circle cx={sx} cy={sy} r={11.5} className={cn("cy-knob-ring", shownMark && shownMark.phase !== "quiet" && `cy-knob-${shownMark.phase}`)} />
+              <circle cx={sx} cy={sy} r={4} className="cy-knob-core" />
+            </g>
+          ) : null}
+        </svg>
+        <button
+          type="button"
+          className={cn("cy-center", scrubbing && "is-scrub")}
+          tabIndex={-1}
+          aria-hidden
+          onClick={() => setSel(null)}
+        >
+          <span key={scrubbing ? shownDate : "today"} className="cy-center-in">
+            <span className={cn("text-[10px] font-semibold text-dim uppercase", scrubbing ? "tracking-[0.1em]" : "tracking-[0.22em]")}>
+              {scrubbing ? `${t("cycleDay")} · ${parseDate(shownDate).toLocaleDateString(lang === "es" ? "es" : "en", { weekday: "short", month: "short", day: "numeric" })}` : t("cycleDay")}
+            </span>
+            <span className={cn("font-display leading-[0.95] tabular-nums", scrubbing ? "text-[3rem]" : "text-[3.4rem]")} data-testid="cycle-day">
+              {scrubbing ? shown + 1 : (snap.day ?? "—")}
+            </span>
+            <span className="mt-1 flex items-center gap-1.5 text-sm font-semibold">
+              <span className={cn("size-2 rounded-full", stageDot(stage))} />
+              {t(stageKey(stage))}
+            </span>
+            <span className={cn("mt-1 max-w-[11rem] text-xs leading-snug", !scrubbing && snap.late > 0 ? "cy-text-period font-semibold" : "text-dim")}>
+              {scrubbing ? (
+                <>
+                  {relative}
+                  {offset > 0 ? ` · ${t("cyLegendPredicted").toLowerCase()}` : ""}
+                </>
+              ) : (
+                keyLine
+              )}
+            </span>
+            {count > 0 ? (
+              <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
+                <span className="cy-moment-dot" />
+                {count === 1 ? t("cyMoment1") : fill(t("cyMomentsN"), { n: count })}
+              </span>
+            ) : null}
+          </span>
+        </button>
       </div>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5" data-testid="cycle-phase-chips">
+        {chips.map((run) => (
+          <button
+            key={run.phase}
+            type="button"
+            onClick={() => choose(run.from)}
+            className={cn("cy-phase-chip", scrubbing && shown >= run.from && shown < run.to && "is-on")}
+            aria-label={`${t("cyJumpTo")} ${t(phaseKey(run.phase))}`}
+          >
+            <span className={cn("size-2 rounded-full", stageDot(run.phase))} />
+            <span className="font-semibold">{t(run.phase === "ovulation" ? "cyLegendOvulation" : run.phase === "period" ? "cyLegendPeriod" : "cyLegendFertile")}</span>
+            <span className="text-dim tabular-nums">{run.to - run.from > 1 ? `${run.from + 1}–${run.to}` : `${run.from + 1}`}</span>
+          </button>
+        ))}
+      </div>
+      {scrubbing ? (
+        <div className="cy-rise mt-2 flex flex-wrap items-center justify-center gap-2">
+          {phaseNote ? <p className="cy-text-fertile w-full text-center text-xs font-semibold">{phaseNote}</p> : null}
+          <button type="button" className="min-h-[37px] rounded-full border border-border px-3 text-[0.8rem] font-semibold" onClick={() => setSel(null)}>
+            {t("cyBackToday")}
+          </button>
+          {shownDate <= today ? (
+            partner ? (
+              <PeriodDateActions date={shownDate} compact />
+            ) : (
+              <button type="button" className="min-h-[37px] rounded-full px-3 text-[0.8rem] font-semibold text-accent" onClick={() => openCycleDay(shownDate)}>
+                {cycle.days[shownDate] ? t("cyEditDay") : t("cyLogDay")}
+              </button>
+            )
+          ) : null}
+        </div>
+      ) : !hinted ? (
+        <p className="mt-2 text-center text-[11px] text-dim">{t("cyScrubHint")}</p>
+      ) : null}
     </div>
   );
 }
