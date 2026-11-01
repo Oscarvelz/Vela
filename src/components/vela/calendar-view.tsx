@@ -160,10 +160,16 @@ export function CalendarView() {
         </div>
         <p className="mt-2 text-center text-[11px] leading-snug text-dim">{t("swipeMonths")}</p>
         {cycle.enabled && cycle.starts.length > 0 ? <CycleLegend /> : null}
-        <p className="mt-2 text-sm text-dim">
-          <span className="text-accent">·</span> {sessions.length} {t("totalSessionsL")}{" "}
-          <span className="text-accent">·</span> {active} {t("activeDaysL")}
-        </p>
+        <div className="cal-stats mt-4 grid grid-cols-2 border-t border-border pt-3" data-testid="cal-stats">
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="font-display text-[1.6rem] leading-none text-fg tabular-nums">{sessions.length}</span>
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-dim">{t("totalSessionsL")}</span>
+          </div>
+          <div className="flex flex-col items-center gap-0.5 border-l border-border">
+            <span className="font-display text-[1.6rem] leading-none text-fg tabular-nums">{active}</span>
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-dim">{t("activeDaysL")}</span>
+          </div>
+        </div>
       </Card>
       <div className="mt-5 lg:mt-0">
         <h2 className="mb-3 font-display text-3xl">{fmtDate(selected, lang)}</h2>
