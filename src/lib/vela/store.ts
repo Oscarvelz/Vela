@@ -27,7 +27,7 @@ import {
   trackerTombstone,
   type CycleTracker,
 } from "./cycle-trackers";
-import { bioForUser, bioIsStale, clearFingerprint, rememberPass, resetFingerprintPrompt, rewrapFingerprint, setBioStale } from "./fingerprint";
+import { bioForUser, bioIsStale, clearFingerprint, keepStorage, rememberPass, resetFingerprintPrompt, rewrapFingerprint, setBioStale } from "./fingerprint";
 import { useBioUi } from "./bio-offer";
 import { bioText } from "./bio-copy";
 
@@ -595,7 +595,9 @@ type Store = {
   toast: string | null;
   lastActivity: number;
   /** "none": no journal on this device yet · "locked": there is an encrypted journal on this device. */
-  vault: "loading" | "none" | "locked";
+  vault: "loading" | "none" | "locked" | "unavailable";
+  /** The passphrase was typed on this device in this session (unlock or opening the account copy). */
+  passTyped: boolean;
   /** The journal key is parked on this device: the lock screen only needs the app lock, never the passphrase. */
   keyParked: boolean;
   vaultId: string;
@@ -794,6 +796,7 @@ export const useJournal = create<Store>((set, get) => {
     lockNote: "",
     keyParked: false,
     vault: "loading",
+    passTyped: false,
     vaultId: "",
     keyEpoch: 0,
     legacy: null,
@@ -819,13 +822,26 @@ export const useJournal = create<Store>((set, get) => {
     toast: null,
     lastActivity: Date.now(),
     hydrate: async (opts) => {
+      // A failed read is never "no journal": that would show the setup screen to someone who has one.
+      // Retry a few times (a phone can refuse IndexedDB for a moment right after launch or an update),
+      // then say the journal couldn't be opened yet and offer to try again.
       let stored = null;
-      try {
-        stored = await readVault();
-      } catch {
-        stored = null;
+      let readOk = false;
+      for (let attempt = 0; attempt < 4 && !readOk; attempt += 1) {
+        try {
+          stored = await readVault();
+          readOk = true;
+        } catch {
+          await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+        }
+      }
+      if (!readOk) {
+        set({ journal: lockedShell(), vault: "unavailable", keyParked: false, ready: true, unlocked: false });
+        return;
       }
       vaultIdMem = stored?.vaultId ?? "";
+      // The journal and its key must never be evicted under storage pressure.
+      if (stored) void keepStorage();
       migrateLock(vaultIdMem, lastUser()?.id ?? null);
       const env0 = stored ? asEnvelope(stored.envelope) : null;
       const parked = stored && env0 ? await claimGrace(stored.vaultId) : null;
@@ -1013,7 +1029,7 @@ export const useJournal = create<Store>((set, get) => {
         if (!journal.profile) journal.profile = { displayName: "", createdAt: Date.now() };
         rememberUi(journal);
         rememberPass(used);
-        set({ journal, unlocked: true, vaultId: vaultIdMem, keyParked: true, lastActivity: Date.now(), lockNote: "" });
+        set({ journal, unlocked: true, vaultId: vaultIdMem, keyParked: true, passTyped: true, lastActivity: Date.now(), lockNote: "" });
         markSeen();
         void parkKey(vk, vaultIdMem, unlockedAt);
         // The fingerprint held an older passphrase (changed in another window/device): seal this one.

@@ -69,6 +69,26 @@ export function bioForUser(profileKey: string) {
   return rec;
 }
 
+/**
+ * The sealed passphrase on this device, for this journal if possible, otherwise whatever this device sealed
+ * (the journal id can drift: a journal re-adopted from the account gets a new id). Only a candidate: the
+ * passphrase it holds still has to open the journal before anything is used.
+ */
+export function bioCandidate(vaultId: string) {
+  return bioForUser(vaultId) ?? bioRecord();
+}
+
+/** The sealed passphrase opened this journal under another id: tie it to this one (no prompt, same seal). */
+export function rebindFingerprint(vaultId: string) {
+  const rec = bioRecord();
+  if (!rec || !vaultId || rec.username === vaultId) return;
+  try {
+    localStorage.setItem(BIO_LS, JSON.stringify({ ...rec, username: vaultId }));
+  } catch {
+    /* keep going */
+  }
+}
+
 function openBioDb() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(BIO_DB, 1);
@@ -231,6 +251,7 @@ export function webAuthnCreate(profileKey: string) {
 }
 
 function saveBioRecord(rec: BioRecord) {
+  sealFailedMem = false;
   const prev = bioRecord();
   localStorage.setItem(BIO_LS, JSON.stringify(rec));
   if (prev?.keyId && prev.keyId !== rec.keyId) void bioDeleteKey(prev.keyId);
@@ -271,7 +292,7 @@ export function enrollFingerprint(pin: string, profileKey: string) {
 }
 
 export function unlockFingerprint(profileKey: string) {
-  const rec = bioForUser(profileKey);
+  const rec = bioCandidate(profileKey);
   if (!rec) return Promise.reject(new Error("Fingerprint isn't set up for this account on this device."));
   const request: PublicKeyCredentialRequestOptions = {
     challenge: bioBytes(32),
@@ -326,13 +347,35 @@ export function platformAvailable(): Promise<boolean> {
   }
 }
 
-/** Ask the browser to keep Vela's storage (so the fingerprint key isn't evicted). */
-export function keepStorage() {
+/** Ask the browser to keep Vela's storage (so the journal key and the fingerprint seal are never evicted). */
+export function keepStorage(): Promise<boolean | null> {
   try {
-    void navigator.storage?.persist?.().catch(() => undefined);
+    const st = navigator.storage;
+    if (!st?.persist) return Promise.resolve(null);
+    return st
+      .persisted()
+      .then((already) => (already ? true : st.persist()))
+      .catch(() => null);
   } catch {
-    /* optional */
+    return Promise.resolve(null);
   }
+}
+export function storagePersisted(): Promise<boolean | null> {
+  try {
+    return navigator.storage?.persisted ? navigator.storage.persisted().catch(() => null) : Promise.resolve(null);
+  } catch {
+    return Promise.resolve(null);
+  }
+}
+
+/** Does the device-key mode seal still have its key (IndexedDB "vela-bio")? Diagnostics only. */
+export function bioKeyPresent(): Promise<boolean | null> {
+  const rec = bioRecord();
+  if (!rec) return Promise.resolve(null);
+  if (rec.prf) return Promise.resolve(true);
+  return bioGetKey(rec.keyId || "")
+    .then((k) => Boolean(k))
+    .catch(() => false);
 }
 
 /* ---------- "don't ask again" on this device ---------- */
@@ -411,6 +454,11 @@ export type BioOutcome =
 
 let inFlight = false;
 let bioStale = false;
+let sealFailedMem = false;
+/** The sealed passphrase couldn't be opened this session (no PRF output, device key gone…): seal it anew. */
+export function sealFailed() {
+  return sealFailedMem;
+}
 /** The fingerprint opened an older passphrase: re-seal it after the next passphrase unlock. */
 export function bioIsStale() {
   return bioStale;
@@ -432,6 +480,8 @@ export async function fingerprintUnlock(vaultId: string, tryOpen: (passphrase: s
     if (opened) {
       sessionPassMem = pass;
       bioStale = false;
+      sealFailedMem = false;
+      rebindFingerprint(vaultId);
       return { ok: true };
     }
     // The sealed passphrase no longer opens this journal (changed in another window or device) or
@@ -440,9 +490,11 @@ export async function fingerprintUnlock(vaultId: string, tryOpen: (passphrase: s
     bioStale = true;
     return { ok: false, code: "mismatch" };
   } catch (err) {
-    const code = bioFailCode(err);
-    if (code === "missing") clearFingerprint();
-    return { ok: false, code };
+    sealFailedMem = true;
+    // Never delete the sealed passphrase here. A phone that doesn't hand back the fingerprint key this once
+    // (PRF not returned, a provider hiccup) would otherwise lose it for good and ask for the passphrase from
+    // then on. It is replaced only by a new seal (after the passphrase is typed) or removed on purpose.
+    return { ok: false, code: bioFailCode(err) };
   } finally {
     inFlight = false;
   }

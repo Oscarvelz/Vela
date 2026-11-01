@@ -11,7 +11,7 @@ import { currentKey, journalFromUnknown, mergeJournals, useJournal, type CloudPh
 import type { Journal } from "./types";
 import { open, openWithCandidates, seal } from "./vault-crypto";
 import { readSync, writeSync, type SyncMeta } from "./vault-db";
-import { rememberPass } from "./fingerprint";
+import { bioFailCode, bioRecord, rebindFingerprint, rememberPass, unlockFingerprint } from "./fingerprint";
 import { adoptOwner } from "./app-lock";
 
 type CloudState = {
@@ -244,7 +244,7 @@ async function syncOnce() {
 }
 
 /** New device: open the account's encrypted journal with the passphrase. */
-export async function openFromCloud(passphrase: string): Promise<boolean> {
+export async function openFromCloud(passphrase: string, opts: { sealed?: boolean } = {}): Promise<boolean> {
   const user = useCloud.getState().user;
   const remote = useCloud.getState().remote;
   if (!user || !remote) return false;
@@ -256,6 +256,8 @@ export async function openFromCloud(passphrase: string): Promise<boolean> {
     try {
       await useJournal.getState().adoptJournal(data, vk);
       rememberPass(used);
+      useJournal.setState({ passTyped: !opts.sealed });
+      if (opts.sealed) rebindFingerprint(useJournal.getState().vaultId);
     } finally {
       hold = false;
     }
@@ -264,6 +266,22 @@ export async function openFromCloud(passphrase: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * No journal on this device, but the account has one and this phone still holds the fingerprint-sealed
+ * passphrase (the journal was removed or lost here, the seal wasn't): the fingerprint opens the account copy.
+ */
+export async function openFromCloudWithFingerprint(): Promise<"ok" | "none" | "mismatch" | string> {
+  const rec = bioRecord();
+  if (!rec) return "none";
+  let pass = "";
+  try {
+    pass = await unlockFingerprint(rec.username);
+  } catch (err) {
+    return bioFailCode(err);
+  }
+  return (await openFromCloud(pass, { sealed: true })) ? "ok" : "mismatch";
 }
 
 /** The account copy uses another passphrase: open it, adopt that key, merge, push. */

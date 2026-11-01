@@ -559,7 +559,10 @@ if (RUN("O")) {
   await p.click('button[type=submit]:has-text("Open my journal")');
   ok("O … the passphrase opens it", await opensSoon(p));
   ok("O … data back from the account", (await sessions(p)) === 1);
-  ok("O … no fingerprint setup asked again", !(await p.waitForSelector('[data-testid="bio-offer"]', { timeout: 2500 }).then(() => true, () => false)));
+  // The passphrase was just typed and this phone's fingerprint holds no sealed copy for this journal: the
+  // one-tap "keep your fingerprint as the key" is offered (reset fix, Nov 1 2026), not a fresh setup.
+  ok("O … only the one-tap re-seal is offered (fingerprint already set up)", await p.waitForSelector('[data-testid="bio-offer"][data-reseal="true"]', { timeout: 4000 }).then(() => true, () => false));
+  await p.click('[data-testid="bio-offer-later"]').catch(() => undefined);
   await p.waitForTimeout(2200);
   const go = await gets(p);
   await p.locator('.ag-header [data-testid="header-lock"]').click();

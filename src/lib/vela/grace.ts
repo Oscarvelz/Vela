@@ -106,3 +106,13 @@ export async function claimGrace(vaultId: string): Promise<{ vk: VaultKey; unloc
     return null;
   }
 }
+
+/** Diagnostics only: is a key parked on this device, and is it for this journal? (yes/no, nothing else) */
+export async function graceFacts(vaultId: string): Promise<{ parked: boolean | null; forThis: boolean | null }> {
+  try {
+    const rec = (await tx<Parked>("readonly", (s) => s.get(SLOT))) ?? null;
+    return { parked: Boolean(rec?.key), forThis: rec?.key ? rec.vaultId === vaultId : false };
+  } catch {
+    return { parked: null, forThis: null };
+  }
+}

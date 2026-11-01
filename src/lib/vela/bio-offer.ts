@@ -1,29 +1,40 @@
 /* When to offer the app lock ("Lock Vela with your fingerprint"): once per owner, dismissible. */
 import { create } from "zustand";
-import { bioSupported, platformAvailable } from "./fingerprint";
+import { bioForUser, bioSupported, platformAvailable, sealFailed, sessionPass } from "./fingerprint";
 import { appLockOn, lockRecord, offerDone } from "./app-lock";
 
 type BioUi = {
   /** The one-tap offer sheet is showing. */
   offer: boolean;
+  /** The offer re-seals the passphrase for a phone whose fingerprint is already the app lock. */
+  reseal: boolean;
   /** Bumped whenever the fingerprint record changes, so views re-read it. */
   tick: number;
-  setOffer: (offer: boolean) => void;
+  setOffer: (offer: boolean, reseal?: boolean) => void;
   bump: () => void;
 };
 
 export const useBioUi = create<BioUi>((set, get) => ({
   offer: false,
+  reseal: false,
   tick: 0,
-  setOffer: (offer) => set({ offer }),
+  setOffer: (offer, reseal = false) => set({ offer, reseal: offer ? reseal : false }),
   bump: () => set({ tick: get().tick + 1 }),
 }));
 
-/** Show the offer once if this phone can do it, app lock is on, and no fingerprint is set up yet. */
-export async function maybeOfferFingerprint(vaultId: string) {
+/**
+ * Show the offer when this phone can do it and the app lock is on, and either
+ * - no fingerprint is set up yet (once per owner, dismissible), or
+ * - the passphrase was just typed on this device and the fingerprint doesn't hold a sealed copy of it for this
+ *   journal. Then it is offered right away, whatever was dismissed before: sealing it is what lets this phone
+ *   open the journal with the fingerprint alone even if the parked key is ever lost, so the passphrase is
+ *   never asked here again.
+ */
+export async function maybeOfferFingerprint(vaultId: string, passTyped = false) {
   if (!vaultId || !bioSupported() || !appLockOn()) return false;
-  if (lockRecord() || offerDone()) return false;
+  const reseal = passTyped && Boolean(sessionPass()) && (!bioForUser(vaultId) || sealFailed());
+  if (!reseal && (lockRecord() || offerDone())) return false;
   if (!(await platformAvailable())) return false;
-  useBioUi.getState().setOffer(true);
+  useBioUi.getState().setOffer(true, reseal && Boolean(lockRecord()));
   return true;
 }

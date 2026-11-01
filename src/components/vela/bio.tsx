@@ -55,8 +55,10 @@ export function BioOffer() {
   const bt = useBioT();
   const t = useT();
   const vaultId = useJournal((s) => s.vaultId);
+  const passTyped = useJournal((s) => s.passTyped);
   const showToast = useJournal((s) => s.showToast);
   const offer = useBioUi((s) => s.offer);
+  const reseal = useBioUi((s) => s.reseal);
   const setOffer = useBioUi((s) => s.setOffer);
   const bump = useBioUi((s) => s.bump);
   const [pending, setPending] = useState(false);
@@ -64,27 +66,30 @@ export function BioOffer() {
 
   useEffect(() => {
     // Give the journal a moment to paint before asking.
-    const id = window.setTimeout(() => void maybeOfferFingerprint(vaultId), 700);
+    // Right after the passphrase was typed it comes up at once; otherwise give the journal a moment to paint.
+    const id = window.setTimeout(() => void maybeOfferFingerprint(vaultId, passTyped), passTyped ? 250 : 700);
     return () => window.clearTimeout(id);
-  }, [vaultId]);
+  }, [vaultId, passTyped]);
 
   if (!offer) return null;
   const close = () => {
     markOfferDone();
     setOffer(false);
     setError("");
+    // Asked once per typed passphrase: "Not now" isn't asked again until the passphrase is typed again.
+    useJournal.setState({ passTyped: false });
   };
   return (
     <>
       <div className="vela-bio-sheet-backdrop" onClick={close} aria-hidden />
-      <div className="vela-bio-sheet" role="dialog" aria-modal="true" aria-labelledby="bio-offer-title" data-testid="bio-offer">
+      <div className="vela-bio-sheet" role="dialog" aria-modal="true" aria-labelledby="bio-offer-title" data-testid="bio-offer" data-reseal={reseal ? "true" : "false"}>
         <div className="vela-bio-btn vela-bio-small" aria-hidden>
           <Fingerprint strokeWidth={1.5} />
         </div>
         <h2 id="bio-offer-title" className="mt-4 text-center font-display text-2xl leading-tight">
-          {bt("offerTitle")}
+          {bt(reseal ? "resealTitle" : "offerTitle")}
         </h2>
-        <p className="vela-bio-dim mt-2 text-center text-sm leading-relaxed">{bt("offerBody")}</p>
+        <p className="vela-bio-dim mt-2 text-center text-sm leading-relaxed">{bt(reseal ? "resealBody" : "offerBody")}</p>
         <p className="vela-bio-gold mt-3 flex items-center justify-center gap-1.5 text-xs font-semibold">
           <ShieldCheck className="size-3.5" /> {bt("offerSafe")}
         </p>

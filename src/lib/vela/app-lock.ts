@@ -12,7 +12,7 @@
    - The credential is kept per owner (the signed-in account, or "local" when there is none), like Faro's
      faro.lock.<uid>, so signing out and back in, or removing the journal from this device, never asks to set
      the fingerprint up again. All of this is per device and not private (localStorage). */
-import { b64ToBytes, bioBytes, bioFailCode, bioForUser, bioSupported, bytesToB64, enrollFingerprint, keepStorage } from "./fingerprint";
+import { b64ToBytes, bioBytes, bioFailCode, bioForUser, bioRecord, bioSupported, bytesToB64, enrollFingerprint, keepStorage } from "./fingerprint";
 
 const OWNER_LS = "vela.lock.owner";
 const REC_LS = (owner: string) => `vela.lock.${owner}`;
@@ -65,19 +65,66 @@ export function adoptOwner(uid: string, trusted: boolean) {
   const cur = lockOwner();
   if (cur === uid) return;
   if (ownerSet() && !trusted) return;
-  const prev = lockRecord(cur);
-  if (prev && !lockRecord(uid)) lsSet(REC_LS(uid), JSON.stringify(prev));
+  const prev = lockRecord(cur) ?? lockRecord();
+  if (prev && !lockRecord(uid)) lsSet(REC_LS(uid), JSON.stringify({ credentialId: prev.credentialId, at: prev.at || Date.now() }));
   lsSet(OWNER_LS, uid);
 }
 
 /* ---- the credential ---- */
-export function lockRecord(owner = lockOwner()): LockRecord | null {
+function readRecord(key: string): LockRecord | null {
   try {
-    const rec = JSON.parse(lsGet(REC_LS(owner)) || "null") as LockRecord | null;
+    const rec = JSON.parse(lsGet(key) || "null") as LockRecord | null;
     return rec && typeof rec.credentialId === "string" && rec.credentialId ? rec : null;
   } catch {
     return null;
   }
+}
+const NOT_RECORDS = new Set([OWNER_LS, AFTER_LS, SEEN_LS, MIGRATED_LS]);
+/** Every app-lock credential kept on this device, whoever it was saved for. */
+function deviceRecords(): LockRecord[] {
+  const out: LockRecord[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith("vela.lock.") || NOT_RECORDS.has(k) || k.startsWith("vela.lock.offered.")) continue;
+      const rec = readRecord(k);
+      if (rec) out.push(rec);
+    }
+  } catch {
+    /* storage blocked */
+  }
+  return out.sort((a, b) => (b.at || 0) - (a.at || 0));
+}
+export type LockSource = "owner" | "local" | "other" | "sealed" | "none";
+/**
+ * Where this device's fingerprint enrolment was found. The fingerprint belongs to the phone, not to whoever
+ * is signed in, so an enrolment saved for another owner (signed out, the account not known yet at boot, a
+ * session still loading or offline) or only as the sealed passphrase still counts: Vela never decides
+ * "no fingerprint here" just because it couldn't tell whose it was.
+ */
+export function lockSource(): LockSource {
+  const owner = lockOwner();
+  if (readRecord(REC_LS(owner))) return "owner";
+  if (owner !== "local" && readRecord(REC_LS("local"))) return "local";
+  if (deviceRecords().length) return "other";
+  if (bioRecord()) return "sealed";
+  return "none";
+}
+/** `owner` given: exactly that owner's record. No owner: this device's enrolment, found wherever it was kept. */
+export function lockRecord(owner?: string): LockRecord | null {
+  if (owner !== undefined) return readRecord(REC_LS(owner));
+  const own = lockOwner();
+  const exact = readRecord(REC_LS(own)) ?? (own !== "local" ? readRecord(REC_LS("local")) : null) ?? deviceRecords()[0] ?? null;
+  if (exact) return exact;
+  const sealed = bioRecord();
+  return sealed ? { credentialId: sealed.credentialId, at: 0 } : null;
+}
+/** Copies an enrolment found elsewhere on this device to the current owner, so it is found directly next time. */
+export function healLockRecord() {
+  const own = lockOwner();
+  if (readRecord(REC_LS(own))) return;
+  const found = lockRecord();
+  if (found) lsSet(REC_LS(own), JSON.stringify({ credentialId: found.credentialId, at: found.at || Date.now() } satisfies LockRecord));
 }
 function saveRecord(credentialId: string, owner = lockOwner()) {
   lsSet(REC_LS(owner), JSON.stringify({ credentialId, at: Date.now() } satisfies LockRecord));
@@ -199,15 +246,32 @@ export function quietResume() {
 export function migrateLock(vaultId: string, lastUserId: string | null) {
   const done = lsGet(MIGRATED_LS) === "1";
   if (!ownerSet()) lsSet(OWNER_LS, lastUserId || "local");
+  // Every boot, not once: an enrolment kept under another owner (or only as the sealed passphrase) becomes
+  // this owner's app lock.
+  if (!readRecord(REC_LS(lockOwner()))) healLockRecord();
+  // Only called after the journal store was read successfully (hydrate returns early otherwise), so an empty
+  // vaultId here really means "no journal on this device".
   if (!done) {
     lsSet(MIGRATED_LS, "1");
-    const old = vaultId ? bioForUser(vaultId) : null;
+    const old = (vaultId ? bioForUser(vaultId) : null) ?? bioRecord();
     if (old && !lockRecord()) saveRecord(old.credentialId);
     // Someone who said "Don't ask on this device" for the fingerprint isn't offered the app lock again.
     if (lsGet("vela-bio-skip") && !lockRecord()) markOfferDone();
     lsSet("vela_ask_pass", null);
     lsSet("vela_seen", null);
   }
+}
+
+/** Diagnostics only: what this device holds for the lock, as yes/no facts (no ids, no secrets). */
+export function lockFacts() {
+  return {
+    owner: ownerSet() ? (lockOwner() === "local" ? "local" : "account") : "unset",
+    source: lockSource(),
+    appLock: appLockOn(),
+    migrated: lsGet(MIGRATED_LS) === "1",
+    offerDone: offerDone(),
+    after: lockAfterMs(),
+  };
 }
 
 /* ---- WebAuthn ---- */
@@ -276,7 +340,7 @@ export async function enrollAppLock(vaultId: string, passphrase: string): Promis
     }
     markOfferDone();
     setAppLockOn(true);
-    keepStorage();
+    void keepStorage();
   } finally {
     asking = false;
   }

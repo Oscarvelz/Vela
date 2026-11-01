@@ -229,9 +229,16 @@ ok("broken seal + no key: passphrase field with a message", /fingerprint|Fingerp
 await page.fill("#unlock-pass", PASS2);
 await page.click('button[type=submit]:has-text("Unlock")');
 ok("passphrase opens it", await unlockedSoon());
+// reset fix (Nov 1 2026): right after the passphrase, the broken seal is offered to be sealed again
+ok("… the fingerprint is offered right away to seal it again", await page.waitForSelector('[data-testid="bio-offer"]', { timeout: 5000 }).then(() => true, () => false));
+await page.click('[data-testid="bio-offer-yes"]');
+await page.waitForSelector('[data-testid="bio-offer"]', { state: "detached", timeout: 15000 }).catch(() => undefined);
 await page.waitForTimeout(2200);
 await page.locator('.ag-header [data-testid="header-lock"]').click();
 ok("after that, Lock → the fingerprint alone opens it (key parked again)", (await unlockedSoon()) && !(await page.isVisible("#unlock-pass")));
+await dropKey();
+await reopen();
+ok("… and with the key gone again, the new seal opens it (no passphrase)", (await unlockedSoon()) && !(await page.isVisible("#unlock-pass")));
 
 ok("no page errors", errors.length === 0, errors.join(" | "));
 await browser.close();

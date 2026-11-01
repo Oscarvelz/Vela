@@ -21,6 +21,7 @@ import {
 import { THEMES } from "@/lib/vela/catalog";
 import { fmtShort } from "@/lib/vela/dates";
 import { AppLockSettings, PassphraseNote, useLockBadge } from "./bio";
+import { LockDiagnostics } from "./lock-diag";
 import { notePicker } from "@/lib/vela/app-lock";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
@@ -469,6 +470,7 @@ function PrivacySection() {
       </div>
       <AppLockSettings />
       <PassphraseNote />
+      <LockDiagnostics />
       <p className="font-semibold">{t("changePin")}</p>
       <PassphraseInput id="change-current" className={fieldClass} value={current} placeholder={t("currentPinPh")} onChange={(event) => setCurrent(event.target.value)} />
       <PassphraseInput id="change-next" className={fieldClass} value={next} placeholder={t("newPinPh")} onChange={(event) => setNext(event.target.value)} />

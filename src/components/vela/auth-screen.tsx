@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Fingerprint, ShieldAlert } from "lucide-react";
 import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
-import { bioFailCode, bioForUser, bioSupported, fingerprintUnlock, platformAvailable } from "@/lib/vela/fingerprint";
+import { bioCandidate, bioFailCode, bioRecord, bioSupported, fingerprintUnlock, platformAvailable } from "@/lib/vela/fingerprint";
 import { appLockOn, enrollAppLock, gateReady, lockRecord, verifyAppLock } from "@/lib/vela/app-lock";
 import { useBioT } from "@/lib/vela/bio-copy";
 import { useBioUi } from "@/lib/vela/bio-offer";
 import { BioButton, bioErrorKey } from "./bio";
 import { MIN_PASSPHRASE } from "@/lib/vela/vault-crypto";
-import { openFromCloud, resetSyncMeta, useCloud } from "@/lib/vela/sync";
+import { openFromCloud, openFromCloudWithFingerprint, resetSyncMeta, useCloud } from "@/lib/vela/sync";
+import { LockDiagnostics } from "./lock-diag";
 import { cn } from "@/lib/cn";
 import { FlameHalo, Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
@@ -22,10 +23,18 @@ export function AuthScreen() {
   const setLanguage = useJournal((s) => s.setLanguage);
   const remote = useCloud((s) => s.remote);
   const user = useCloud((s) => s.user);
+  const authReady = useCloud((s) => s.authReady);
+  const sessionGone = useCloud((s) => s.sessionGone);
   const [error, setError] = useState("");
   const [fresh, setFresh] = useState(false);
+  const [diag, setDiag] = useState(false);
+  const taps = useRef<number[]>([]);
 
   const cloudCopy = vault === "none" && user && remote && !fresh;
+  // No journal on this phone yet: never show the setup form while the account is still being checked
+  // (session restoring, the account copy loading) or offline with an account remembered here. Setup is for
+  // someone who really has no journal, not a slow start.
+  const finding = vault === "none" && !fresh && !cloudCopy && (!authReady || (user && remote === undefined) || (!user && sessionGone));
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10">
@@ -34,7 +43,20 @@ export function AuthScreen() {
           <FlameHalo />
           <Mark alive className="relative size-24" />
         </div>
-        <h1 className="vela-rise vela-wordmark mt-5 font-display text-4xl tracking-brand" style={{ animationDelay: "120ms" }}>
+        <h1
+          className="vela-rise vela-wordmark mt-5 font-display text-4xl tracking-brand"
+          style={{ animationDelay: "120ms" }}
+          data-testid="lock-wordmark"
+          onClick={() => {
+            // Five quick taps on the name show the lock diagnostics (for support; yes/no facts only).
+            const now = Date.now();
+            taps.current = [...taps.current.filter((at) => now - at < 2500), now];
+            if (taps.current.length >= 5) {
+              taps.current = [];
+              setDiag((v) => !v);
+            }
+          }}
+        >
           VELA
         </h1>
         <p className="vela-rise mt-2 text-xs tracking-widest text-dim uppercase" style={{ animationDelay: "220ms" }}>
@@ -56,12 +78,21 @@ export function AuthScreen() {
       <div className="vela-rise ag-panel mt-4 rounded-card border border-border px-5 py-5" style={{ animationDelay: "380ms" }}>
         {vault === "locked" ? (
           <UnlockForm error={error} setError={setError} />
+        ) : vault === "unavailable" ? (
+          <StoreRetry />
         ) : cloudCopy ? (
           <CloudOpenForm onFresh={() => setFresh(true)} />
+        ) : finding ? (
+          <Finding gone={!user && sessionGone} onFresh={() => setFresh(true)} />
         ) : (
           <CreateForm />
         )}
       </div>
+      {diag ? (
+        <div className="mt-4">
+          <LockDiagnostics startOpen />
+        </div>
+      ) : null}
       {vault === "locked" && keyParked ? null : (
         <div className="vela-rise ag-panel mt-4 rounded-card border border-border px-5 py-5" style={{ animationDelay: "470ms" }}>
           <AccountPanel />
@@ -113,7 +144,7 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
   void tick;
   const gate = keyParked && gateReady();
   // No key on this device, but the fingerprint sealed the passphrase earlier: it can still open the journal.
-  const recover = !keyParked && bioSupported() && Boolean(vaultId && bioForUser(vaultId));
+  const recover = !keyParked && bioSupported() && Boolean(vaultId && bioCandidate(vaultId));
   const [mode, setMode] = useState<UnlockMode>(gate ? "gate" : recover ? "recover" : "pass");
   const [asking, setAsking] = useState(false);
   const [tried, setTried] = useState(false);
@@ -136,7 +167,7 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
     async (res: "ok" | "missing" | "invalid") => {
       if (res === "ok") return;
       useBioUi.getState().bump();
-      if (res === "missing" && vaultId && bioForUser(vaultId) && bioSupported()) {
+      if (res === "missing" && vaultId && bioCandidate(vaultId) && bioSupported()) {
         setMode("recover");
         return;
       }
@@ -179,10 +210,12 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
           return;
         }
         if (mode === "recover" && (res.code === "mismatch" || res.code === "missing" || res.code === "unsupported" || res.code === "insecure")) {
-          // The sealed passphrase can't open the journal now: the passphrase takes over.
+          // The sealed passphrase can't open the journal now: the passphrase takes over, once. The seal is kept
+          // (never deleted on a failed try), and right after the passphrase the fingerprint is offered again.
           useBioUi.getState().bump();
           setMode("pass");
-          setError(t(bioErrorKey(res.code)));
+          if (res.code === "mismatch") setError(t(bioErrorKey(res.code)));
+          else setKeyNote(true);
           return;
         }
         const gone = res.code === "missing" || res.code === "unsupported" || res.code === "insecure" || res.code === "none";
@@ -302,7 +335,7 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
   const canGate = keyParked && gateReady();
   // The key is on this device but no fingerprint is set up (or it was removed): set it up here instead.
   const canSetup = keyParked && platform && appLockOn() && bioSupported() && !lockRecord();
-  const canRecover = !keyParked && bioSupported() && Boolean(vaultId && bioForUser(vaultId));
+  const canRecover = !keyParked && bioSupported() && Boolean(vaultId && bioCandidate(vaultId));
   return (
     <PassUnlock
       error={error}
@@ -440,9 +473,56 @@ function PassUnlock({
 
 function CloudOpenForm({ onFresh }: { onFresh: () => void }) {
   const t = useT();
+  const bt = useBioT();
   const [pass, setPass] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  // This phone still holds the fingerprint-sealed passphrase: the fingerprint opens the account copy, and the
+  // passphrase field only shows if the fingerprint can't (or the person asks for it).
+  const sealed = bioSupported() && Boolean(bioRecord());
+  const [usePass, setUsePass] = useState(!sealed);
+  const [fingerBusy, setFingerBusy] = useState(false);
+  const busy = useRef(false);
+  const finger = useCallback(() => {
+    if (busy.current) return;
+    busy.current = true;
+    setFingerBusy(true);
+    setError("");
+    void openFromCloudWithFingerprint().then((res) => {
+      busy.current = false;
+      setFingerBusy(false);
+      if (res === "ok" || res === "cancel" || res === "busy") return;
+      setUsePass(true);
+      setError(t(bioErrorKey(res === "mismatch" ? "mismatch" : res)));
+    });
+  }, [t]);
+  useEffect(() => {
+    if (usePass) return;
+    return whenFocused(finger);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  if (!usePass) {
+    return (
+      <div className="space-y-3 text-center" data-testid="cloud-bio">
+        <h2 className="font-display text-2xl">{t("cloudFoundTitle")}</h2>
+        <p className="text-sm leading-relaxed text-dim">{bt("touchBody")}</p>
+        <div className="py-3">
+          <BioButton asking={fingerBusy} label={bt("cloudFinger")} onClick={finger} />
+        </div>
+        <p className="min-h-5 text-sm text-accent" aria-live="polite">
+          {fingerBusy ? bt("touchAsking") : ""}
+        </p>
+        <button
+          type="button"
+          className="mx-auto block min-h-11 px-3 text-sm font-semibold text-dim underline underline-offset-4"
+          data-testid="cloud-use-pass"
+          onClick={() => setUsePass(true)}
+        >
+          {bt("usePass")}
+        </button>
+      </div>
+    );
+  }
   return (
     <form
       className="space-y-3"
@@ -473,6 +553,11 @@ function CloudOpenForm({ onFresh }: { onFresh: () => void }) {
       <Button type="submit" className="w-full" disabled={pending || !pass}>
         {pending ? t("unlocking") : t("openCloud")}
       </Button>
+      {sealed ? (
+        <Button variant="ghost" className="w-full" onClick={finger} disabled={fingerBusy} data-testid="cloud-finger">
+          <Fingerprint className="size-4 text-accent" /> {bt("cloudFinger")}
+        </Button>
+      ) : null}
       <button type="button" className="mx-auto block min-h-10 text-xs text-dim underline" onClick={onFresh}>
         {t("createJournal")}
       </button>
@@ -575,5 +660,56 @@ function CreateForm() {
         {pending ? t("pleaseWait") : t("createJournal")}
       </Button>
     </form>
+  );
+}
+
+/** IndexedDB refused for now: the journal is not gone, so no setup form. */
+function StoreRetry() {
+  const bt = useBioT();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="space-y-3 text-center" data-testid="store-retry">
+      <h2 className="font-display text-2xl">{bt("storeTitle")}</h2>
+      <p className="text-sm leading-relaxed text-dim">{bt("storeBody")}</p>
+      <Button
+        className="w-full"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          useJournal.setState({ ready: true, vault: "loading" });
+          void useJournal
+            .getState()
+            .hydrate()
+            .finally(() => setBusy(false));
+        }}
+      >
+        {bt("storeRetry")}
+      </Button>
+    </div>
+  );
+}
+
+/** No journal on this phone yet, and the account is still being checked (or this phone is offline). */
+function Finding({ gone, onFresh }: { gone: boolean; onFresh: () => void }) {
+  const bt = useBioT();
+  const t = useT();
+  const [online, setOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const on = () => setOnline(navigator.onLine);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", on);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", on);
+    };
+  }, []);
+  return (
+    <div className="space-y-3 text-center" data-testid="finding">
+      <h2 className="font-display text-2xl">{gone ? t("sessionEndedTitle") : bt("findTitle")}</h2>
+      <p className="text-sm leading-relaxed text-dim">{gone ? t("sessionEndedBody") : online ? bt("findBody") : bt("findOffline")}</p>
+      <button type="button" className="mx-auto block min-h-10 text-xs text-dim underline" onClick={onFresh} data-testid="finding-new">
+        {bt("findNew")}
+      </button>
+    </div>
   );
 }

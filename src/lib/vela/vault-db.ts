@@ -14,17 +14,26 @@ let dbp: Promise<IDBDatabase> | null = null;
 
 function db() {
   if (!dbp) {
-    dbp = new Promise<IDBDatabase>((resolve, reject) => {
+    const p = new Promise<IDBDatabase>((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, 1);
       req.onupgradeneeded = () => {
         if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => {
-        dbp = null;
-        reject(req.error);
+      req.onsuccess = () => {
+        const d = req.result;
+        // The browser may close the connection (storage cleanup, another version): open a fresh one next time.
+        d.onclose = () => {
+          if (dbp === p) dbp = null;
+        };
+        resolve(d);
       };
+      req.onerror = () => reject(req.error);
     });
+    // A failed open is never cached: the next read tries again instead of failing for the rest of the session.
+    p.catch(() => {
+      if (dbp === p) dbp = null;
+    });
+    dbp = p;
   }
   return dbp;
 }
