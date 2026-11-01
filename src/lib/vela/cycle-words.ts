@@ -5,7 +5,7 @@ import { useT } from "./i18n";
 import { selectActiveCycle, useJournal } from "./store";
 
 /** Phrases that change with the tracking perspective ("I track my own" vs "I follow my partner's"). */
-export type CycleWordKey = "cyTitle" | "cyPeriodStarted" | "cyPeriodEnded" | "cyFirstTitle" | "cyFirstBody" | "cyMarkStart" | "cyMarkEnd";
+export type CycleWordKey = "cyTitle" | "cyPeriodStarted" | "cyPeriodEnded" | "cyFirstTitle" | "cyFirstBody" | "cyMarkStart" | "cyMarkEnd" | "cyConfirmStartQ" | "cyConfirmEndQ";
 
 const SELF: Record<CycleWordKey, CopyKey> = {
   cyTitle: "cycleTitle",
@@ -15,6 +15,8 @@ const SELF: Record<CycleWordKey, CopyKey> = {
   cyFirstBody: "cyFirstBody",
   cyMarkStart: "cyMarkStart",
   cyMarkEnd: "cyMarkEnd",
+  cyConfirmStartQ: "cyConfirmStartQ",
+  cyConfirmEndQ: "cyConfirmEndQ",
 };
 
 export function fill(text: string, values: Record<string, string | number>) {

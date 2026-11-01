@@ -85,7 +85,7 @@ const card = page.locator("#cycle-card");
 await card.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 96));
 await page.waitForTimeout(900);
 const dialLuna = await page.locator(".cy-dial").getAttribute("aria-valuetext");
-const title = await card.locator("p.uppercase").first().innerText();
+const title = await card.locator('[data-testid=cycle-title], p.uppercase').first().innerText();
 ok("new tracker is shown: Luna's title", /luna/i.test(title), title);
 await card.screenshot({ path: `${OUT}/${tag}-card-luna.png` });
 await page.evaluate(() => scrollTo(0, 0));

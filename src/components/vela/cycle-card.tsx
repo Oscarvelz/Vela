@@ -117,6 +117,21 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
   const [tune, setTune] = useState(false);
   const [regInfo, setRegInfo] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
+  // Period start/end change the whole forecast, so the main button asks once before acting,
+  // and a fresh start can be undone for a few seconds (Nov 1 2026: an accidental tap reset the track).
+  const [confirm, setConfirm] = useState<"start" | "end" | null>(null);
+  const [undoStart, setUndoStart] = useState<string | null>(null);
+  const removePeriodStart = useJournal((s) => s.removePeriodStart);
+  useEffect(() => {
+    if (!confirm) return;
+    const id = setTimeout(() => setConfirm(null), 7000);
+    return () => clearTimeout(id);
+  }, [confirm]);
+  useEffect(() => {
+    if (!undoStart) return;
+    const id = setTimeout(() => setUndoStart(null), 8000);
+    return () => clearTimeout(id);
+  }, [undoStart]);
   const fold = useFold(cycle.id, !inSheet);
   const foldId = useId();
   const today = todayStr();
@@ -146,19 +161,24 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
     label: w("cyPeriodStarted"),
     icon: "drop",
     testId: "cycle-start",
-    run: () => {
-      logPeriodStart(today);
-      showToast(t("cyStartToast"));
-    },
+    run: () => setConfirm("start"),
   };
   const ended: Act = {
     key: "end",
     label: w("cyPeriodEnded"),
     icon: "drop",
-    run: () => {
+    run: () => setConfirm("end"),
+  };
+  const confirmRun = () => {
+    if (confirm === "start") {
+      logPeriodStart(today);
+      setUndoStart(today);
+      showToast(t("cyStartToast"));
+    } else if (confirm === "end") {
       if (snap.cycleStart) setPeriodEnd(snap.cycleStart, today);
       showToast(t("cyEndToast"));
-    },
+    }
+    setConfirm(null);
   };
   const logToday: Act = { key: "log", label: t("cyLogToday"), icon: "log", run: () => openCycleDay(today) };
   // One amber action for what today most likely needs; the other stays one tap away, outlined.
@@ -176,7 +196,24 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
     primary = partner ? null : logToday;
     secondary = started;
   }
-  const idle = (
+  const idle = confirm ? (
+    <div className="cy-row cy-rise flex h-12 gap-2" data-testid="cycle-confirm">
+      <ActButton act={{ key: "cancel", label: t("cyConfirmNo"), run: () => setConfirm(null) }} ghost testId="cycle-confirm-no" />
+      <ActButton
+        act={{ key: "confirm", label: t(confirm === "start" ? "cyConfirmStart" : "cyConfirmEnd"), icon: "drop", run: confirmRun }}
+        testId="cycle-confirm-yes"
+      />
+    </div>
+  ) : undoStart && cycle.starts.includes(undoStart) ? (
+    <div className="cy-row cy-rise flex h-12 gap-2">
+      {primary ? <ActButton act={primary} testId="cycle-primary" /> : null}
+      <ActButton
+        act={{ key: "undo", label: t("cyUndo"), run: () => { removePeriodStart(undoStart); setUndoStart(null); } }}
+        ghost
+        testId="cycle-undo"
+      />
+    </div>
+  ) : (
     <div className="cy-row flex h-12 gap-2">
       {primary ? <ActButton act={primary} testId="cycle-primary" /> : null}
       {secondary ? <ActButton act={secondary} ghost testId={primary ? "cycle-secondary" : "cycle-primary"} /> : null}
@@ -186,7 +223,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
   const folded = fold.folded;
   const body = (
     <>
-      <CycleDial snap={snap} keyLine={keyLine} idle={idle} />
+      <CycleDial snap={snap} keyLine={keyLine} idle={idle} ask={confirm ? w(confirm === "start" ? "cyConfirmStartQ" : "cyConfirmEndQ") : undefined} />
       <WeekStrip
         picked={picked}
         onPick={(ds) => {
@@ -595,7 +632,7 @@ function useKnobSpring(target: number, dragging: boolean, finger: number | null)
   return { angle: state.current.angle, reset: (angle: number) => (state.current = { angle, vel: 0 }) };
 }
 
-export function CycleDial({ snap, keyLine, idle }: { snap: Snap; keyLine: string; idle?: ReactNode }) {
+export function CycleDial({ snap, keyLine, idle, ask }: { snap: Snap; keyLine: string; idle?: ReactNode; ask?: string }) {
   const { t, partner } = useCycleWords();
   const lang = useLang();
   const cycle = useJournal(selectActiveCycle);
@@ -766,6 +803,9 @@ export function CycleDial({ snap, keyLine, idle }: { snap: Snap; keyLine: string
       hint = t("cyLowEarlyNote");
       hintTone = "cy-bg-low";
     } else if (!lowGate.ready) hint = t("cyLowLearning");
+  } else if (ask) {
+    hint = ask;
+    hintTone = "cy-bg-period";
   } else if (!hinted) hint = t("cyScrubHint");
   else if (lowGate.ready && (low || early)) hint = t("cyLowWhyShort");
   else if (!lowGate.ready) hint = t("cyLowLearning");
