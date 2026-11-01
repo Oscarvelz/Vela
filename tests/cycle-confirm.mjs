@@ -38,5 +38,11 @@ ok("undo restores starts", JSON.stringify(await starts()) === JSON.stringify(bef
 // auto-dismiss
 await startBtn.click(); await page.waitForTimeout(7600);
 ok("confirm auto-dismisses", !(await page.locator('[data-testid="cycle-confirm"]').count()) && JSON.stringify(await starts()) === JSON.stringify(before));
+// A start within 14 days of another moves it instead of adding a 2-day "cycle".
+const near = await day(-26);
+await page.evaluate((d) => window.__velaStore.getState().logPeriodStart(d), near); await page.waitForTimeout(200);
+ok("nearby start moves the old one", JSON.stringify(await starts()) === JSON.stringify([s1, near]), await starts());
+await page.evaluate((d) => window.__velaStore.getState().logPeriodStart(d), d0); await page.waitForTimeout(200);
+ok("far start still adds", JSON.stringify(await starts()) === JSON.stringify([s1, near, d0]), await starts());
 ok("no page errors", errors.length === 0, errors);
 await browser.close(); process.exit(fails ? 1 : 0);

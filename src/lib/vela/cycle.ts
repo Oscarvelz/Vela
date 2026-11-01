@@ -558,8 +558,20 @@ export function libidoByPhase(cycle: CycleSettings, today: string) {
 
 /* ── Mutations (pure; the store wraps them) ─────────────────────────────── */
 
+/** Two starts closer than this can't both be real cycles, so a new start this close moves the old one (Nov 1 2026). */
+export const START_MERGE_DAYS = 14;
+
 export function withStart(cycle: CycleSettings, date: string): CycleSettings {
-  return cleanCycle({ ...cycle, enabled: true, starts: sortedStarts([...cycle.starts, date]) });
+  const ends = { ...cycle.ends };
+  const near = cycle.starts.filter((item) => item !== date && Math.abs(daysBetween(item, date)) < START_MERGE_DAYS);
+  let carried: string | undefined;
+  for (const old of near) {
+    if (ends[old] && ends[old] >= date) carried = ends[old];
+    delete ends[old];
+  }
+  if (carried && !ends[date]) ends[date] = carried;
+  const starts = cycle.starts.filter((item) => !near.includes(item));
+  return cleanCycle({ ...cycle, enabled: true, starts: sortedStarts([...starts, date]), ends });
 }
 
 export function withoutStart(cycle: CycleSettings, date: string): CycleSettings {
