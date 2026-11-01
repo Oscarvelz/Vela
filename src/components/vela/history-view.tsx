@@ -8,6 +8,7 @@ import { sessionsSorted } from "@/lib/vela/stats";
 import { useJournal } from "@/lib/vela/store";
 import { trackerForPartner, type CycleTracker } from "@/lib/vela/cycle-trackers";
 import type { Encounter, Session } from "@/lib/vela/types";
+import { GlanceCard } from "./glance-card";
 import { cn } from "@/lib/cn";
 import { phaseOn } from "@/lib/vela/cycle";
 import { Sparkle } from "./mark";
@@ -58,6 +59,7 @@ export function HistoryView() {
 
   return (
     <div className="space-y-4">
+      <GlanceCard />
       <input
         type="search"
         className={fieldClass}

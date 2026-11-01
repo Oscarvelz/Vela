@@ -1075,8 +1075,8 @@ input[type="range"].ag-range::-moz-range-thumb {
 
 /* Header pill */
 .cy-pill {
-  display: inline-flex; align-items: center; gap: .35rem; height: 1.45rem; padding: 0 .55rem 0 .45rem;
-  border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .02em; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: .28rem; height: 1.25rem; padding: 0 .45rem 0 .38rem; margin-right: .2rem;
+  border-radius: 999px; font-size: 10px; font-weight: 600; letter-spacing: .03em; white-space: nowrap; line-height: 1;
   color: var(--ag-text); border: 1px solid color-mix(in srgb, var(--ag-accent) 28%, transparent);
   background: color-mix(in srgb, var(--ag-surface-2) 70%, transparent);
   transition: border-color .2s ease, background-color .2s ease;
@@ -1702,4 +1702,13 @@ input[type="range"].ag-range::-moz-range-thumb {
   border-radius: 999px;
   color: var(--ag-accent);
   background: var(--ag-accent-soft);
+}
+
+/* Header on narrow phones: tighter glyph buttons so the one-line tagline fits (Nov 1 2026). */
+@media (max-width: 389px) {
+  .ag-orb.ag-hdr-btn { width: 2.15rem; height: 2.5rem; }
+  .ag-tagline { font-size: 8.5px; letter-spacing: .1em; }
+  .cy-pill { margin-right: .05rem; }
+  .ag-hdr-row { gap: .5rem; padding-inline: .75rem; }
+  .ag-tagline { letter-spacing: .07em; }
 }

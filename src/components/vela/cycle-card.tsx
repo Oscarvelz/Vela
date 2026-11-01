@@ -1567,7 +1567,7 @@ export function CyclePill() {
       <span className={cn("size-1.5 rounded-full", stageDot(snap.stage))} />
       {whose ? (
         <>
-          <span className="max-w-[4.5rem] truncate" data-testid="cycle-pill-whose">{whose}</span>
+          <span className="max-w-[3.2rem] truncate" data-testid="cycle-pill-whose">{whose}</span>
           <span className="text-dim">·</span>
         </>
       ) : null}
@@ -1575,8 +1575,7 @@ export function CyclePill() {
         {t("cyDayShort")}
         {snap.day}
       </span>
-      <span className="text-dim">·</span>
-      <span>{discreet ? t(stageKey(snap.stage, true)) : snap.late > 0 ? `${t("cyShortLate")} +${snap.late}` : t(PILL_KEY[snap.stage])}</span>
+      <span className="sr-only">{discreet ? t(stageKey(snap.stage, true)) : snap.late > 0 ? `${t("cyShortLate")} +${snap.late}` : t(PILL_KEY[snap.stage])}</span>
     </button>
   );
 }
