@@ -54,8 +54,9 @@ export function validKdf(raw: unknown): KdfParams | null {
   return { name: "PBKDF2", hash: "SHA-256", iterations: Math.floor(iterations) };
 }
 
-export async function deriveKey(passphrase: string, salt: string, kdf: KdfParams = defaultKdf()): Promise<VaultKey> {
-  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(passphrase.normalize("NFC")), "PBKDF2", false, [
+export async function deriveKey(passphrase: string, salt: string, kdf: KdfParams = defaultKdf(), normalize = true): Promise<VaultKey> {
+  const text = normalize ? passphrase.normalize("NFC") : passphrase;
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(text), "PBKDF2", false, [
     "deriveKey",
   ]);
   const key = await crypto.subtle.deriveKey(
@@ -98,4 +99,63 @@ export async function openWithPassphrase<T = unknown>(passphrase: string, env: E
   const vk = await deriveKey(passphrase, env.salt, env.kdf);
   const data = await open<T>(vk, env);
   return { vk, data };
+}
+
+/* ---- what a phone keyboard may have changed ----
+   The passphrase is always tried exactly as typed first (NFC, as it was created). Only when
+   that fails are a few look-alike spellings tried, each one a full PBKDF2 + AES-GCM check
+   against the journal itself, so nothing about the key, salt or iterations is weakened:
+   - the raw string without Unicode normalization (journals made before NFC was applied),
+   - NFKC (full-width / compatibility characters some keyboards insert),
+   - leading/trailing whitespace removed and no-break spaces turned into spaces
+     (swipe typing and suggestion taps add a trailing space),
+   - "smart" punctuation turned back into plain ASCII (’ ‘ “ ” – — …).
+   Case is never changed. */
+export type Candidate = { text: string; normalize: boolean };
+
+function plainSpaces(v: string) {
+  return v.replace(/[\u00a0\u2007\u202f]/g, " ");
+}
+function trimmed(v: string) {
+  return plainSpaces(v).replace(/^[\s\u200b\ufeff]+|[\s\u200b\ufeff]+$/g, "");
+}
+function desmart(v: string) {
+  return v
+    .replace(/[\u2018\u2019\u201a\u2032]/g, "'")
+    .replace(/[\u201c\u201d\u201e\u2033]/g, '"')
+    .replace(/\u2014/g, "--")
+    .replace(/[\u2013\u2212]/g, "-")
+    .replace(/\u2026/g, "...");
+}
+
+export function passphraseCandidates(typed: string): Candidate[] {
+  const out: Candidate[] = [{ text: typed, normalize: true }];
+  const seen = new Set([typed.normalize("NFC")]);
+  const add = (text: string, normalize = true) => {
+    const id = normalize ? text.normalize("NFC") : `raw:${text}`;
+    if (!text || seen.has(id) || (!normalize && seen.has(text))) return;
+    seen.add(id);
+    out.push({ text, normalize });
+  };
+  if (typed !== typed.normalize("NFC")) add(typed, false);
+  const nfkc = typed.normalize("NFKC");
+  add(nfkc);
+  add(trimmed(typed));
+  add(desmart(typed));
+  add(desmart(trimmed(nfkc)));
+  return out.slice(0, 6);
+}
+
+/** Opens an envelope with what was typed, trying the exact passphrase first, then the look-alikes. */
+export async function openWithCandidates<T = unknown>(typed: string, env: Envelope) {
+  for (const c of passphraseCandidates(typed)) {
+    try {
+      const vk = await deriveKey(c.text, env.salt, env.kdf, c.normalize);
+      const data = await open<T>(vk, env);
+      return { vk, data, used: c.text, exact: c.text === typed && c.normalize };
+    } catch {
+      /* next candidate */
+    }
+  }
+  throw new Error("wrong passphrase");
 }

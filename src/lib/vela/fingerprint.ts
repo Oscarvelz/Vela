@@ -410,6 +410,14 @@ export type BioOutcome =
   | { ok: false; code: "cancel" | "insecure" | "unsupported" | "already" | "missing" | "failed" | "mismatch" | "busy" };
 
 let inFlight = false;
+let bioStale = false;
+/** The fingerprint opened an older passphrase: re-seal it after the next passphrase unlock. */
+export function bioIsStale() {
+  return bioStale;
+}
+export function setBioStale(v: boolean) {
+  bioStale = v;
+}
 
 /**
  * One fingerprint unlock attempt. A stale record (wrong passphrase / lost key) is
@@ -423,9 +431,13 @@ export async function fingerprintUnlock(vaultId: string, tryOpen: (passphrase: s
     const opened = await tryOpen(pass);
     if (opened) {
       sessionPassMem = pass;
+      bioStale = false;
       return { ok: true };
     }
-    clearFingerprint();
+    // The sealed passphrase no longer opens this journal (changed in another window or device) or
+    // the journal couldn't be read just now. Keep the fingerprint: the next passphrase unlock
+    // re-seals it, so it works again without setting it up from scratch.
+    bioStale = true;
     return { ok: false, code: "mismatch" };
   } catch (err) {
     const code = bioFailCode(err);

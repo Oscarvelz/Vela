@@ -20,7 +20,7 @@ import {
 } from "@/lib/vela/fingerprint";
 import type { CopyKey } from "@/lib/vela/copy";
 import { cn } from "@/lib/cn";
-import { Button, ConfirmDialog, fieldClass, PasswordInput, Switch } from "./ui";
+import { Button, ConfirmDialog, fieldClass, PassphraseInput, Switch } from "./ui";
 
 export function bioErrorKey(code: string): CopyKey {
   return code === "mismatch"
@@ -218,9 +218,9 @@ export function FingerprintSettings() {
       {needPass && !enrolled ? (
         <div className="space-y-2">
           <p className="text-sm">{bt("setNeedPass")}</p>
-          <PasswordInput
+          <PassphraseInput
+            id="bio-pass"
             className={fieldClass}
-            autoComplete="current-password"
             value={pin}
             placeholder={t("currentPinPh")}
             onChange={(event) => setPin(event.target.value)}
@@ -230,10 +230,10 @@ export function FingerprintSettings() {
             onClick={() => {
               void useJournal
                 .getState()
-                .verifyPassphrase(pin)
-                .then((ok) => {
-                  if (!ok) setError(t("incorrectPin"));
-                  else enroll(pin);
+                .matchPassphrase(pin)
+                .then((used) => {
+                  if (used === null) setError(t("incorrectPin"));
+                  else enroll(used);
                 });
             }}
           >

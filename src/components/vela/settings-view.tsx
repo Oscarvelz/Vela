@@ -1,7 +1,9 @@
 import { useRef, useState, type ReactNode } from "react";
 import {
+  Check,
   ChevronDown,
   Download,
+  ShieldCheck,
   Fingerprint,
   Droplets,
   Heart,
@@ -30,13 +32,17 @@ import { Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
 import { useCloud } from "@/lib/vela/sync";
 import { CycleTune } from "./cycle-card";
-import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PasswordInput } from "./ui";
+import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PassphraseInput } from "./ui";
+import { bioForUser, bioSupported } from "@/lib/vela/fingerprint";
+import { useBioUi } from "@/lib/vela/bio-offer";
+import type { AskPolicy } from "@/lib/vela/grace";
 
 export function SettingsView() {
   const t = useT();
   const open = useJournal((s) => s.sections);
   const toggle = useJournal((s) => s.toggleSection);
   const displayName = useJournal((s) => s.journal.profile?.displayName ?? "");
+  const askPolicy = useJournal((st) => st.askPolicy);
   const partnerCount = useJournal((s) => s.journal.partners.length);
   const cloudPhase = useJournal((s) => s.cloudPhase);
   const sessionGone = useCloud((s) => s.sessionGone);
@@ -96,7 +102,7 @@ export function SettingsView() {
       <Accordion id="places" icon={<MapPin className="size-5" />} title={t("placesPositions")} open={open.places} onToggle={toggle}>
         <PlacesSection />
       </Accordion>
-      <Accordion id="privacy" icon={<Lock className="size-5" />} title={t("privacy")} open={open.privacy} onToggle={toggle}>
+      <Accordion id="privacy" icon={<Lock className="size-5" />} title={t("privacy")} badge={t(ASK_SHORT[askPolicy])} open={open.privacy} onToggle={toggle}>
         <PrivacySection />
       </Accordion>
       <Accordion
@@ -444,11 +450,82 @@ function CustomList({
   );
 }
 
+const ASK_COPY: Record<AskPolicy, [CopyKey, CopyKey]> = {
+  open: ["askOpen", "askOpenHint"],
+  "15m": ["ask15m", "ask15mHint"],
+  day: ["askDay", "askDayHint"],
+  week: ["askWeek", "askWeekHint"],
+  lock: ["askLock", "askLockHint"],
+};
+const ASK_SHORT: Record<AskPolicy, CopyKey> = { open: "askOpenShort", "15m": "ask15mShort", day: "askDayShort", week: "askWeekShort", lock: "askLockShort" };
+const ASK_ORDER: AskPolicy[] = ["open", "15m", "day", "week", "lock"];
+
+/** "Ask for my passphrase" — how long Vela stays open on this device after an unlock. */
+function AskPolicyPicker() {
+  const t = useT();
+  const policy = useJournal((s) => s.askPolicy);
+  const setPolicy = useJournal((s) => s.setAskPolicy);
+  const lock = useJournal((s) => s.lock);
+  const vaultId = useJournal((s) => s.vaultId);
+  const tick = useBioUi((s) => s.tick);
+  const finger = tick >= 0 && bioSupported() && Boolean(vaultId && bioForUser(vaultId));
+  return (
+    <div className="space-y-3" data-testid="ask-policy">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-semibold" id="ask-policy-label">
+          {t("askPass")}
+        </p>
+        <span className="shrink-0 text-xs tracking-wide text-dim uppercase">{t("askDevice")}</span>
+      </div>
+      <div className="ag-seg grid gap-1 rounded-card p-1" role="radiogroup" aria-labelledby="ask-policy-label">
+        {ASK_ORDER.map((value) => {
+          const on = policy === value;
+          const [label, hint] = ASK_COPY[value];
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              data-ask={value}
+              onClick={() => setPolicy(value)}
+              className={cn("ag-seg-btn flex min-h-12 items-center gap-3 rounded-[0.85rem] px-3 py-2 text-left", on ? "ag-pick" : "text-dim")}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                  on ? "border-current bg-[color-mix(in_srgb,var(--ag-accent)_22%,transparent)]" : "border-border",
+                )}
+              >
+                {on ? <Check className="size-3.5" strokeWidth={3} /> : null}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">{t(label)}</span>
+                {on ? <span className="mt-0.5 block text-xs leading-snug text-fg/75">{t(hint)}</span> : null}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="flex items-start gap-2 text-xs leading-relaxed text-dim" data-testid="ask-privacy">
+        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-accent" />
+        <span>
+          {t("askPrivacy")}
+          {finger && policy !== "lock" ? ` ${t("askFinger")}` : ""}
+        </span>
+      </p>
+      <Button className="w-full" onClick={lock} data-testid="lock-now">
+        <Lock className="size-4" /> {t("lockNow")}
+      </Button>
+    </div>
+  );
+}
+
 function PrivacySection() {
   const t = useT();
   const settings = useJournal((s) => s.journal.settings);
   const setDiscreet = useJournal((s) => s.setDiscreet);
-  const setAutoLock = useJournal((s) => s.setAutoLock);
   const changePassphrase = useJournal((s) => s.changePassphrase);
   const showToast = useJournal((s) => s.showToast);
   const [current, setCurrent] = useState("");
@@ -464,23 +541,10 @@ function PrivacySection() {
         </div>
         <Switch checked={settings.discreet} label={t("discreetMode")} onChange={setDiscreet} />
       </div>
-      <p className="text-sm font-semibold">{t("autoLock")}</p>
-      <MenuSelect
-        id="auto-lock"
-        label={t("autoLock")}
-        value={settings.autoLockMins}
-        onChange={setAutoLock}
-        options={[
-          { value: 0, label: t("never") },
-          { value: 1, label: t("oneMinute") },
-          { value: 5, label: t("fiveMinutes") },
-          { value: 15, label: t("fifteenMinutes") },
-          { value: 30, label: t("thirtyMinutes") },
-        ]}
-      />
+      <AskPolicyPicker />
       <p className="font-semibold">{t("changePin")}</p>
-      <PasswordInput className={fieldClass} autoComplete="current-password" value={current} placeholder={t("currentPinPh")} onChange={(event) => setCurrent(event.target.value)} />
-      <PasswordInput className={fieldClass} autoComplete="new-password" value={next} placeholder={t("newPinPh")} onChange={(event) => setNext(event.target.value)} />
+      <PassphraseInput id="change-current" className={fieldClass} value={current} placeholder={t("currentPinPh")} onChange={(event) => setCurrent(event.target.value)} />
+      <PassphraseInput id="change-next" className={fieldClass} value={next} placeholder={t("newPinPh")} onChange={(event) => setNext(event.target.value)} />
       <p className="text-xs leading-relaxed text-dim">{t("passWarn")}</p>
       <Button
         disabled={busy}

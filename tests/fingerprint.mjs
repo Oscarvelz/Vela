@@ -22,6 +22,11 @@ const browser = await chromium.launch({
   args: ["--no-sandbox", "--no-proxy-server"],
 });
 const ctx = await browser.newContext({ viewport: { width: WIDTH, height: WIDTH < 600 ? 900 : 860 } });
+// This suite checks the strictest lock flow: "Ask for my passphrase: Every time I open Vela".
+// (The default, "Only when I lock it", is covered by tests/unlock-fix.mjs.)
+await ctx.addInitScript(() => {
+  if (!localStorage.getItem("vela_ask_pass")) localStorage.setItem("vela_ask_pass", "open");
+});
 const page = await ctx.newPage();
 page.on("console", (m) => process.env.DEBUG && console.log("CONSOLE", m.text()));
 const errors = [];

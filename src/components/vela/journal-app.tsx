@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BarChart3, CalendarDays, List, Moon, Settings, Sun } from "lucide-react";
+import { BarChart3, CalendarDays, List, Lock, Moon, Settings, Sun } from "lucide-react";
 import { useT } from "@/lib/vela/i18n";
 import { sessionToDraft, useJournal } from "@/lib/vela/store";
 import { PLACES } from "@/lib/vela/catalog";
@@ -118,7 +118,10 @@ function useAutoLock() {
     const bump = () => touch();
     const onVisible = () => {
       if (document.visibilityState === "visible") maybeLock();
+      else useJournal.getState().noteHidden();
     };
+    const onHide = () => useJournal.getState().noteHidden();
+    window.addEventListener("pagehide", onHide);
     window.addEventListener("pointerdown", bump, { passive: true });
     window.addEventListener("keydown", bump, { passive: true });
     document.addEventListener("visibilitychange", onVisible);
@@ -127,6 +130,7 @@ function useAutoLock() {
       window.removeEventListener("pointerdown", bump);
       window.removeEventListener("keydown", bump);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pagehide", onHide);
       window.clearInterval(id);
     };
   }, [maybeLock, touch]);
@@ -313,6 +317,9 @@ function Shell() {
           <div className="ml-auto flex items-center gap-0.5">
             <IconButton className="ag-hdr-btn" label={mode === "night" ? t("switchToDay") : t("switchToNight")} onClick={toggleMode}>
               {mode === "night" ? <Sun className="size-[19px]" /> : <Moon className="size-[19px]" />}
+            </IconButton>
+            <IconButton className="ag-hdr-btn" label={t("lockVela")} data-testid="header-lock" onClick={() => useJournal.getState().lock()}>
+              <Lock className="size-[19px]" />
             </IconButton>
             <IconButton
               label={t("openSettings")}

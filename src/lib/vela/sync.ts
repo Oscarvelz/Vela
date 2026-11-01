@@ -9,9 +9,10 @@ import { forgetUser, getClient, keepSignedIn, lastUser, pullVault, pushVault, re
 import { cloudConfigured } from "./supabase-config";
 import { currentKey, journalFromUnknown, mergeJournals, useJournal, type CloudPhase } from "./store";
 import type { Journal } from "./types";
-import { open, openWithPassphrase, seal } from "./vault-crypto";
+import { open, openWithCandidates, seal } from "./vault-crypto";
 import { readSync, writeSync, type SyncMeta } from "./vault-db";
 import { rememberPass } from "./fingerprint";
+import { dropGrace } from "./grace";
 
 type CloudState = {
   authReady: boolean;
@@ -246,13 +247,13 @@ export async function openFromCloud(passphrase: string): Promise<boolean> {
   const remote = useCloud.getState().remote;
   if (!user || !remote) return false;
   try {
-    const { vk, data } = await openWithPassphrase(passphrase, remote.envelope);
+    const { vk, data, used } = await openWithCandidates(passphrase, remote.envelope);
     meta = { userId: user.id, baseRevision: remote.revision, dirty: false };
     saveMeta();
     hold = true;
     try {
       await useJournal.getState().adoptJournal(data, vk);
-      rememberPass(passphrase);
+      rememberPass(used);
     } finally {
       hold = false;
     }
@@ -268,13 +269,13 @@ export async function adoptRemotePassphrase(passphrase: string): Promise<boolean
   const remote = useCloud.getState().pendingRemote;
   if (!remote || !useJournal.getState().unlocked) return false;
   try {
-    const { vk, data } = await openWithPassphrase(passphrase, remote.envelope);
+    const { vk, data, used } = await openWithCandidates(passphrase, remote.envelope);
     const mine = useJournal.getState().journal;
     const merged = mergeJournals(mine, journalFromUnknown(data, mine.settings.language));
     merged.settings = { ...merged.settings, language: mine.settings.language };
     hold = true;
     try {
-      await useJournal.getState().rekey(vk, passphrase);
+      await useJournal.getState().rekey(vk, used);
       useJournal.getState().replaceJournal(merged);
     } finally {
       hold = false;
@@ -291,6 +292,9 @@ export async function adoptRemotePassphrase(passphrase: string): Promise<boolean
 }
 
 export async function signOut() {
+  // Signing out also ends "stay unlocked on this device": the journal locks and the parked key is wiped.
+  useJournal.getState().lock();
+  await dropGrace();
   const sb = await getClient();
   signingOut = true;
   forgetUser();

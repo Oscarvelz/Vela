@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 import { ChevronDown, Eye, EyeOff, Flame, Heart, Star } from "lucide-react";
 import { useT } from "@/lib/vela/i18n";
 import { cn } from "@/lib/cn";
@@ -390,6 +390,68 @@ export function Switch({
 
 
 /** A password / passphrase field with an eye button to show or hide what was typed. */
+/** True when the browser's password manager / autofill put the current value there. */
+export function filledByBrowser(el: HTMLInputElement | null) {
+  if (!el) return false;
+  if (el.dataset.autofilled === "1") return true;
+  for (const sel of [":autofill", ":-webkit-autofill"]) {
+    try {
+      if (el.matches(sel)) return true;
+    } catch {
+      /* selector not supported */
+    }
+  }
+  return false;
+}
+
+/**
+ * The journal passphrase field. It is not a website login, so password managers must neither fill
+ * it nor save it: all Oscar's apps share one origin, and Google Password Manager would otherwise
+ * drop the account (or another app's) password in here. Still type=password so phone keyboards
+ * stay in their private mode (no autocorrect, no learning, no auto-capital, no suggestion spaces).
+ */
+export const PassphraseInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "autoComplete">>(
+  function PassphraseInput({ className, onInput, ...props }, ref) {
+    const t = useT();
+    const [shown, setShown] = useState(false);
+    return (
+      <div className="relative">
+        <input
+          {...props}
+          ref={ref}
+          type={shown ? "text" : "password"}
+          name={props.name ?? `vela-journal-passphrase-${props.id ?? "field"}`}
+          autoComplete="one-time-code"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-bwignore="true"
+          data-form-type="other"
+          data-passphrase="1"
+          onInput={(event) => {
+            const ie = event.nativeEvent as InputEvent;
+            const typed = typeof ie.inputType === "string" && ie.inputType !== "" && ie.inputType !== "insertReplacementText";
+            event.currentTarget.dataset.autofilled = typed ? "0" : "1";
+            onInput?.(event);
+          }}
+          className={cn(className, "pr-12")}
+        />
+        <button
+          type="button"
+          className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-dim hover:text-fg"
+          aria-label={shown ? t("hidePassword") : t("showPassword")}
+          aria-pressed={shown}
+          onClick={() => setShown((v) => !v)}
+        >
+          {shown ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+        </button>
+      </div>
+    );
+  },
+);
+
 export function PasswordInput({ className, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
   const t = useT();
   const [shown, setShown] = useState(false);

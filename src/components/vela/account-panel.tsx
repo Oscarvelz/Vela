@@ -5,7 +5,7 @@ import { cloudConfigured } from "@/lib/vela/supabase-config";
 import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
 import { adoptRemotePassphrase, signOut, syncNow, useCloud } from "@/lib/vela/sync";
-import { Button, fieldClass, PasswordInput } from "./ui";
+import { Button, fieldClass, PassphraseInput, PasswordInput } from "./ui";
 
 function appUrl() {
   return `${location.origin}${import.meta.env.BASE_URL}`;
@@ -78,9 +78,9 @@ export function AccountPanel() {
               });
             }}
           >
-            <PasswordInput
+            <PassphraseInput
+              id="cloud-merge-pass"
               className={fieldClass}
-              autoComplete="current-password"
               placeholder={t("cloudPassPh")}
               value={pass}
               onChange={(event) => setPass(event.target.value)}
@@ -207,7 +207,11 @@ export function AccountPanel() {
           id="account-email"
           className={fieldClass}
           type="email"
-          autoComplete="email"
+          name="email"
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
@@ -216,6 +220,7 @@ export function AccountPanel() {
         </label>
         <PasswordInput
           id="account-password"
+          name="password"
           className={fieldClass}
           autoComplete={mode === "up" ? "new-password" : "current-password"}
           value={password}

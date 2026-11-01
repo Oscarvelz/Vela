@@ -11,7 +11,7 @@ import { openFromCloud, resetSyncMeta, useCloud } from "@/lib/vela/sync";
 import { cn } from "@/lib/cn";
 import { FlameHalo, Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
-import { Button, ConfirmDialog, fieldClass, PasswordInput } from "./ui";
+import { Button, ConfirmDialog, fieldClass, filledByBrowser, PassphraseInput } from "./ui";
 
 export function AuthScreen() {
   const t = useT();
@@ -104,6 +104,9 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
   const [asking, setAsking] = useState(false);
   const [tried, setTried] = useState(false);
   const busy = useRef(false);
+  /** Real failures/cancels in a row (an instant refusal because the page wasn't focused doesn't count). */
+  const misses = useRef(0);
+  const [fellBack, setFellBack] = useState(false);
 
   const ask = useCallback(
     (retryOnBlur = true) => {
@@ -116,16 +119,37 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
         busy.current = false;
         setAsking(false);
         setTried(true);
-        if (res.ok) return;
-        if (res.code === "busy") return;
-        if (res.code === "cancel") {
-          // Chrome rejects at once when the page isn't focused yet (app just opened): ask again on focus.
-          if (retryOnBlur && Date.now() - started < 600 && !document.hasFocus()) whenFocused(() => ask(false));
+        if (res.ok) {
+          misses.current = 0;
           return;
         }
-        if (res.code === "mismatch" || res.code === "missing") {
+        if (res.code === "busy") return;
+        const instant = Date.now() - started < 600;
+        if (res.code === "cancel") {
+          // Chrome rejects at once when the page isn't focused yet (app just opened): ask again on focus.
+          if (instant && !document.hasFocus()) {
+            if (retryOnBlur) whenFocused(() => ask(false));
+            return;
+          }
+          if (!instant) misses.current += 1;
+          if (misses.current >= 3) {
+            setFellBack(true);
+            setMode("pass");
+          }
+          return;
+        }
+        if (res.code === "mismatch" || res.code === "missing" || res.code === "unsupported" || res.code === "insecure") {
+          // The enrolled credential can't open the journal now: the passphrase takes over.
           useBioUi.getState().bump();
           setMode("pass");
+          setError(t(bioErrorKey(res.code)));
+          return;
+        }
+        misses.current += 1;
+        if (misses.current >= 3) {
+          setFellBack(true);
+          setMode("pass");
+          return;
         }
         setError(t(bioErrorKey(res.code)));
       });
@@ -180,13 +204,17 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
   }
   return (
     <PassUnlock
-      error={error}
+      error={error || (fellBack ? bt("touchFallback") : "")}
       setError={setError}
       onFinger={
         enrolled
           ? () => {
               setError("");
+              setFellBack(false);
+              misses.current = 0;
               setMode("bio");
+              // Tapping "Use fingerprint" asks right away.
+              window.setTimeout(() => ask(false), 0);
             }
           : undefined
       }
@@ -199,32 +227,61 @@ function PassUnlock({ error, setError, onFinger }: { error: string; setError: (v
   const bt = useBioT();
   const unlock = useJournal((s) => s.unlock);
   const forgetDevice = useJournal((s) => s.forgetDevice);
+  const lockNote = useJournal((s) => s.lockNote);
   const [pass, setPass] = useState("");
   const [pending, setPending] = useState(false);
   const [askForget, setAskForget] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
+  const inFlight = useRef(false);
   return (
     <form
       className="space-y-3"
+      autoComplete="off"
+      data-testid="pass-unlock"
       onSubmit={(event) => {
         event.preventDefault();
+        // One attempt at a time (Enter + tap, double tap), and always what the field shows now:
+        // an autofill or keyboard commit can change the field without React seeing it yet.
+        if (inFlight.current) return;
+        const el = field.current;
+        const value = el ? el.value : pass;
+        if (!value) return;
+        const autofilled = filledByBrowser(el);
+        inFlight.current = true;
         setPending(true);
         setError("");
-        void unlock(pass).then((ok) => {
-          setPending(false);
-          if (!ok) setError(t("incorrectPin"));
-          else setPass("");
-        });
+        void unlock(value)
+          .then((ok) => {
+            if (ok) {
+              setPass("");
+              return;
+            }
+            if (autofilled) {
+              // Don't leave the account (or another app's) password in place for the next try.
+              setPass("");
+              if (el) {
+                el.value = "";
+                el.dataset.autofilled = "0";
+                el.focus();
+              }
+              setError(t("passAutofilled"));
+            } else setError(t("incorrectPin"));
+          })
+          .finally(() => {
+            inFlight.current = false;
+            setPending(false);
+          });
       }}
     >
       <h2 className="text-center font-display text-3xl">{t("lockedTitle")}</h2>
-      <p className="text-center text-sm leading-relaxed text-dim">{t("lockedBody")}</p>
+      <p className="text-center text-sm leading-relaxed text-dim">{lockNote === "stale" ? t("lockedStale") : t("lockedBody")}</p>
       <label className="block text-sm font-semibold" htmlFor="unlock-pass">
         {t("pinFor")}
       </label>
-      <PasswordInput
+      <PassphraseInput
         id="unlock-pass"
+        ref={field}
         className={fieldClass}
-        autoComplete="current-password"
         placeholder={t("enterPin")}
         value={pass}
         onChange={(event) => setPass(event.target.value)}
@@ -234,7 +291,7 @@ function PassUnlock({ error, setError, onFinger }: { error: string; setError: (v
           {error}
         </p>
       ) : null}
-      <Button type="submit" className="w-full" disabled={pending || !pass}>
+      <Button type="submit" className="w-full" disabled={pending}>
         {pending ? t("unlocking") : t("unlock")}
       </Button>
       {onFinger ? (
@@ -280,9 +337,9 @@ function CloudOpenForm({ onFresh }: { onFresh: () => void }) {
     >
       <h2 className="text-center font-display text-2xl">{t("cloudFoundTitle")}</h2>
       <p className="text-center text-sm leading-relaxed text-dim">{t("cloudFoundBody")}</p>
-      <PasswordInput
+      <PassphraseInput
+        id="cloud-pass"
         className={fieldClass}
-        autoComplete="current-password"
         placeholder={t("enterPin")}
         value={pass}
         onChange={(event) => setPass(event.target.value)}
@@ -362,18 +419,16 @@ function CreateForm() {
       <label className="block text-sm font-semibold" htmlFor="create-pass">
         {t("pinPassword")}
       </label>
-      <PasswordInput
+      <PassphraseInput
         id="create-pass"
         className={fieldClass}
-        autoComplete="new-password"
         placeholder={t("pinPh")}
         value={pass}
         onChange={(event) => setPass(event.target.value)}
       />
-      <PasswordInput
+      <PassphraseInput
         id="create-pass2"
         className={fieldClass}
-        autoComplete="new-password"
         placeholder={t("confirmPassphrase")}
         aria-label={t("confirmPassphrase")}
         value={pass2}
