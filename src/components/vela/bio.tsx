@@ -1,26 +1,15 @@
 import { useEffect, useState } from "react";
-import { Fingerprint, ShieldCheck } from "lucide-react";
+import { Fingerprint, KeyRound, Lock, ShieldCheck } from "lucide-react";
 import "./bio.css";
 import { useJournal } from "@/lib/vela/store";
 import { useT } from "@/lib/vela/i18n";
 import { useBioT } from "@/lib/vela/bio-copy";
 import { maybeOfferFingerprint, useBioUi } from "@/lib/vela/bio-offer";
-import {
-  bioFailCode,
-  bioForUser,
-  bioSupported,
-  clearFingerprint,
-  enrollFingerprint,
-  enrollWithSession,
-  keepStorage,
-  platformAvailable,
-  rememberPass,
-  sessionPass,
-  setOfferSkipped,
-} from "@/lib/vela/fingerprint";
+import { bioFailCode, bioSupported, platformAvailable, sessionPass } from "@/lib/vela/fingerprint";
+import { appLockOn, enrollAppLock, LOCK_AFTER_OPTIONS, lockAfterMs, lockRecord, markOfferDone, setAppLockOn, setLockAfter } from "@/lib/vela/app-lock";
 import type { CopyKey } from "@/lib/vela/copy";
 import { cn } from "@/lib/cn";
-import { Button, ConfirmDialog, fieldClass, PassphraseInput, Switch } from "./ui";
+import { Button, Switch } from "./ui";
 
 export function bioErrorKey(code: string): CopyKey {
   return code === "mismatch"
@@ -61,7 +50,7 @@ export function BioButton({
   );
 }
 
-/** One-tap offer after a passphrase unlock: "Unlock with your fingerprint next time". */
+/** Once per owner, after the journal opens: "Lock Vela with your fingerprint". */
 export function BioOffer() {
   const bt = useBioT();
   const t = useT();
@@ -81,6 +70,7 @@ export function BioOffer() {
 
   if (!offer) return null;
   const close = () => {
+    markOfferDone();
     setOffer(false);
     setError("");
   };
@@ -112,7 +102,7 @@ export function BioOffer() {
             onClick={() => {
               setPending(true);
               setError("");
-              enrollWithSession(vaultId)
+              enrollAppLock(vaultId, sessionPass())
                 .then(() => {
                   bump();
                   close();
@@ -130,52 +120,49 @@ export function BioOffer() {
           <button type="button" className="vela-bio-ghost" onClick={close} data-testid="bio-offer-later">
             {bt("offerLater")}
           </button>
-          <button
-            type="button"
-            className="vela-bio-dim mx-auto block min-h-10 text-xs underline"
-            onClick={() => {
-              setOfferSkipped(vaultId, true);
-              close();
-            }}
-          >
-            {bt("offerNever")}
-          </button>
         </div>
       </div>
     </>
   );
 }
 
-/** Settings → Privacy: fingerprint unlock on / off, with a plain explanation. */
-export function FingerprintSettings() {
+const AFTER_KEY: Record<number, "after0" | "after10" | "after60" | "after300"> = { 0: "after0", 10000: "after10", 60000: "after60", 300000: "after300" };
+
+/** Short label for the Privacy & Security row. */
+export function useLockBadge() {
+  const bt = useBioT();
+  const tick = useBioUi((s) => s.tick);
+  void tick;
+  if (!appLockOn()) return bt("badgeOff");
+  return lockRecord() && bioSupported() ? bt("badgeOn") : bt("badgeNone");
+}
+
+/** Settings → Privacy: the app lock (fingerprint / screen lock) and how soon it locks after leaving. */
+export function AppLockSettings() {
   const t = useT();
   const bt = useBioT();
   const vaultId = useJournal((s) => s.vaultId);
-  const keyEpoch = useJournal((s) => s.keyEpoch);
+  const lock = useJournal((s) => s.lock);
   const showToast = useJournal((s) => s.showToast);
   const tick = useBioUi((s) => s.tick);
   const bump = useBioUi((s) => s.bump);
   const [platform, setPlatform] = useState<boolean | null>(null);
-  const [needPass, setNeedPass] = useState(false);
-  const [pin, setPin] = useState("");
   const [error, setError] = useState("");
-  const [askRemove, setAskRemove] = useState(false);
   const [pending, setPending] = useState(false);
   useEffect(() => {
     void platformAvailable().then(setPlatform);
   }, []);
-  const enrolled = tick >= 0 && keyEpoch >= 0 && Boolean(vaultId && bioForUser(vaultId));
+  void tick;
+  const on = appLockOn();
+  const enrolled = Boolean(lockRecord());
+  const after = lockAfterMs();
+  const supported = bioSupported() && platform !== false;
 
-  const enroll = (pass: string) => {
+  const enroll = () => {
     setPending(true);
     setError("");
-    enrollFingerprint(pass, vaultId)
+    enrollAppLock(vaultId, sessionPass())
       .then(() => {
-        rememberPass(pass);
-        setOfferSkipped(vaultId, false);
-        keepStorage();
-        setPin("");
-        setNeedPass(false);
         bump();
         showToast(t("bioSaved"));
       })
@@ -186,59 +173,72 @@ export function FingerprintSettings() {
       .finally(() => setPending(false));
   };
 
-  const supported = bioSupported() && platform !== false;
   return (
-    <div className="space-y-2 rounded-control border border-border px-3 py-3" data-testid="bio-settings">
+    <div className="vela-lock-card space-y-3 rounded-control border border-border px-3 py-3" data-testid="app-lock" data-on={on ? "true" : "false"} data-enrolled={enrolled ? "true" : "false"}>
       <div className="flex items-center justify-between gap-3">
-        <p className="flex items-center gap-2 font-semibold">
-          <Fingerprint className="size-4 text-accent" />
-          {bt("setTitle")}
-        </p>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="vela-lock-glyph" aria-hidden>
+            <Fingerprint className="size-5" strokeWidth={1.6} />
+          </span>
+          <span className="min-w-0">
+            <span className="block font-semibold">{bt("lockTitle")}</span>
+            <span className="block text-xs tracking-wide text-dim">{bt("lockSub")}</span>
+          </span>
+        </div>
         {supported ? (
           <Switch
-            checked={enrolled || needPass}
-            label={bt("setTitle")}
+            checked={on && enrolled}
+            label={bt("lockTitle")}
             onChange={(next) => {
+              setError("");
               if (!next) {
-                if (enrolled) setAskRemove(true);
-                else setNeedPass(false);
+                setAppLockOn(false);
+                bump();
+                showToast(bt("lockOffToast"));
                 return;
               }
-              if (!vaultId) return;
-              const pass = sessionPass();
-              if (pass) enroll(pass);
-              else setNeedPass(true);
+              setAppLockOn(true);
+              bump();
+              if (!enrolled) enroll();
             }}
           />
         ) : null}
       </div>
-      <p className="text-sm leading-relaxed text-dim">
-        {!bioSupported() ? t("bioUnsupported") : platform === false ? bt("setNoSensor") : enrolled ? bt("setOnBody") : bt("setOffBody")}
+      <p className="text-sm leading-relaxed text-dim" data-testid="app-lock-status">
+        {!bioSupported() ? t("bioUnsupported") : platform === false ? bt("setNoSensor") : !on ? bt("lockOffBody") : enrolled ? bt("lockOnBody") : bt("lockSetupBody")}
       </p>
-      {needPass && !enrolled ? (
+      {supported && on && !enrolled ? (
+        <Button className="w-full" disabled={pending} onClick={enroll} data-testid="lock-setup">
+          <Fingerprint className="size-4" /> {bt("lockSetup")}
+        </Button>
+      ) : null}
+      {on && (enrolled || !supported) ? (
         <div className="space-y-2">
-          <p className="text-sm">{bt("setNeedPass")}</p>
-          <PassphraseInput
-            id="bio-pass"
-            className={fieldClass}
-            value={pin}
-            placeholder={t("currentPinPh")}
-            onChange={(event) => setPin(event.target.value)}
-          />
-          <Button
-            disabled={pending || !pin}
-            onClick={() => {
-              void useJournal
-                .getState()
-                .matchPassphrase(pin)
-                .then((used) => {
-                  if (used === null) setError(t("incorrectPin"));
-                  else enroll(used);
-                });
-            }}
-          >
-            <Fingerprint className="size-4" /> {bt("setTurnOn")}
-          </Button>
+          <p className="text-sm font-semibold" id="lock-after-label">
+            {bt("lockAfter")}
+          </p>
+          <div className="ag-seg grid grid-cols-[1.45fr_1fr_1fr_1fr] gap-1 rounded-card p-1" role="radiogroup" aria-labelledby="lock-after-label" data-testid="lock-after">
+            {LOCK_AFTER_OPTIONS.map((ms) => {
+              const picked = after === ms;
+              return (
+                <button
+                  key={ms}
+                  type="button"
+                  role="radio"
+                  aria-checked={picked}
+                  data-after={ms}
+                  onClick={() => {
+                    setLockAfter(ms);
+                    bump();
+                  }}
+                  className={cn("ag-seg-btn min-h-11 whitespace-nowrap rounded-[0.85rem] px-1 text-[0.82rem] font-semibold", picked ? "ag-pick" : "text-dim")}
+                >
+                  {bt(AFTER_KEY[ms])}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs leading-relaxed text-dim">{bt("afterHint")}</p>
         </div>
       ) : null}
       {error ? (
@@ -246,20 +246,30 @@ export function FingerprintSettings() {
           {error}
         </p>
       ) : null}
-      <ConfirmDialog
-        open={askRemove}
-        title={t("bioRemoveQ")}
-        confirmLabel={t("bioRemove")}
-        cancelLabel={t("keep")}
-        onCancel={() => setAskRemove(false)}
-        onConfirm={() => {
-          clearFingerprint();
-          setOfferSkipped(vaultId, true);
-          setAskRemove(false);
-          bump();
-          showToast(bt("bioOff"));
-        }}
-      />
+      {on ? (
+        <Button className="w-full" variant="ghost" onClick={lock} data-testid="lock-now">
+          <Lock className="size-4" /> {t("lockNow")}
+        </Button>
+      ) : null}
+      {supported && on && enrolled ? (
+        <button type="button" className="mx-auto block min-h-10 text-xs text-dim underline underline-offset-4" disabled={pending} onClick={enroll} data-testid="lock-redo">
+          {bt("lockRedo")}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Settings → Privacy: what the passphrase is for now. */
+export function PassphraseNote() {
+  const bt = useBioT();
+  return (
+    <div className="vela-pass-note flex items-start gap-3 rounded-control px-3 py-3" data-testid="pass-note">
+      <KeyRound className="mt-0.5 size-4 shrink-0 text-accent" />
+      <div className="min-w-0">
+        <p className="text-sm font-semibold">{bt("passNoteTitle")}</p>
+        <p className="mt-1 text-xs leading-relaxed text-dim">{bt("passNoteBody")}</p>
+      </div>
     </div>
   );
 }

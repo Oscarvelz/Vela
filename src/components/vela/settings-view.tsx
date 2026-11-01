@@ -20,7 +20,8 @@ import {
 } from "lucide-react";
 import { THEMES } from "@/lib/vela/catalog";
 import { fmtShort } from "@/lib/vela/dates";
-import { FingerprintSettings } from "./bio";
+import { AppLockSettings, PassphraseNote, useLockBadge } from "./bio";
+import { notePicker } from "@/lib/vela/app-lock";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { MAX_TRACKERS, followsPartner, visibleTrackers, type CycleTracker } from "@/lib/vela/cycle-trackers";
@@ -33,16 +34,13 @@ import { AccountPanel } from "./account-panel";
 import { useCloud } from "@/lib/vela/sync";
 import { CycleTune } from "./cycle-card";
 import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PassphraseInput } from "./ui";
-import { bioForUser, bioSupported } from "@/lib/vela/fingerprint";
-import { useBioUi } from "@/lib/vela/bio-offer";
-import type { AskPolicy } from "@/lib/vela/grace";
 
 export function SettingsView() {
   const t = useT();
   const open = useJournal((s) => s.sections);
   const toggle = useJournal((s) => s.toggleSection);
   const displayName = useJournal((s) => s.journal.profile?.displayName ?? "");
-  const askPolicy = useJournal((st) => st.askPolicy);
+  const lockBadge = useLockBadge();
   const partnerCount = useJournal((s) => s.journal.partners.length);
   const cloudPhase = useJournal((s) => s.cloudPhase);
   const sessionGone = useCloud((s) => s.sessionGone);
@@ -102,7 +100,7 @@ export function SettingsView() {
       <Accordion id="places" icon={<MapPin className="size-5" />} title={t("placesPositions")} open={open.places} onToggle={toggle}>
         <PlacesSection />
       </Accordion>
-      <Accordion id="privacy" icon={<Lock className="size-5" />} title={t("privacy")} badge={t(ASK_SHORT[askPolicy])} open={open.privacy} onToggle={toggle}>
+      <Accordion id="privacy" icon={<Lock className="size-5" />} title={t("privacy")} badge={lockBadge} open={open.privacy} onToggle={toggle}>
         <PrivacySection />
       </Accordion>
       <Accordion
@@ -450,78 +448,6 @@ function CustomList({
   );
 }
 
-const ASK_COPY: Record<AskPolicy, [CopyKey, CopyKey]> = {
-  open: ["askOpen", "askOpenHint"],
-  "15m": ["ask15m", "ask15mHint"],
-  day: ["askDay", "askDayHint"],
-  week: ["askWeek", "askWeekHint"],
-  lock: ["askLock", "askLockHint"],
-};
-const ASK_SHORT: Record<AskPolicy, CopyKey> = { open: "askOpenShort", "15m": "ask15mShort", day: "askDayShort", week: "askWeekShort", lock: "askLockShort" };
-const ASK_ORDER: AskPolicy[] = ["open", "15m", "day", "week", "lock"];
-
-/** "Ask for my passphrase" — how long Vela stays open on this device after an unlock. */
-function AskPolicyPicker() {
-  const t = useT();
-  const policy = useJournal((s) => s.askPolicy);
-  const setPolicy = useJournal((s) => s.setAskPolicy);
-  const lock = useJournal((s) => s.lock);
-  const vaultId = useJournal((s) => s.vaultId);
-  const tick = useBioUi((s) => s.tick);
-  const finger = tick >= 0 && bioSupported() && Boolean(vaultId && bioForUser(vaultId));
-  return (
-    <div className="space-y-3" data-testid="ask-policy">
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="font-semibold" id="ask-policy-label">
-          {t("askPass")}
-        </p>
-        <span className="shrink-0 text-xs tracking-wide text-dim uppercase">{t("askDevice")}</span>
-      </div>
-      <div className="ag-seg grid gap-1 rounded-card p-1" role="radiogroup" aria-labelledby="ask-policy-label">
-        {ASK_ORDER.map((value) => {
-          const on = policy === value;
-          const [label, hint] = ASK_COPY[value];
-          return (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              data-ask={value}
-              onClick={() => setPolicy(value)}
-              className={cn("ag-seg-btn flex min-h-12 items-center gap-3 rounded-[0.85rem] px-3 py-2 text-left", on ? "ag-pick" : "text-dim")}
-            >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-full border",
-                  on ? "border-current bg-[color-mix(in_srgb,var(--ag-accent)_22%,transparent)]" : "border-border",
-                )}
-              >
-                {on ? <Check className="size-3.5" strokeWidth={3} /> : null}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold">{t(label)}</span>
-                {on ? <span className="mt-0.5 block text-xs leading-snug text-fg/75">{t(hint)}</span> : null}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="flex items-start gap-2 text-xs leading-relaxed text-dim" data-testid="ask-privacy">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-accent" />
-        <span>
-          {t("askPrivacy")}
-          {finger && policy !== "lock" ? ` ${t("askFinger")}` : ""}
-        </span>
-      </p>
-      <Button className="w-full" onClick={lock} data-testid="lock-now">
-        <Lock className="size-4" /> {t("lockNow")}
-      </Button>
-    </div>
-  );
-}
-
 function PrivacySection() {
   const t = useT();
   const settings = useJournal((s) => s.journal.settings);
@@ -541,7 +467,8 @@ function PrivacySection() {
         </div>
         <Switch checked={settings.discreet} label={t("discreetMode")} onChange={setDiscreet} />
       </div>
-      <AskPolicyPicker />
+      <AppLockSettings />
+      <PassphraseNote />
       <p className="font-semibold">{t("changePin")}</p>
       <PassphraseInput id="change-current" className={fieldClass} value={current} placeholder={t("currentPinPh")} onChange={(event) => setCurrent(event.target.value)} />
       <PassphraseInput id="change-next" className={fieldClass} value={next} placeholder={t("newPinPh")} onChange={(event) => setNext(event.target.value)} />
@@ -568,7 +495,6 @@ function PrivacySection() {
           {message}
         </p>
       ) : null}
-      <FingerprintSettings />
     </div>
   );
 }
@@ -875,7 +801,14 @@ function DataSection() {
       <Button variant="ghost" className="w-full" onClick={exportCSV}>
         <Download className="size-4" /> {t("exportCsv")}
       </Button>
-      <Button variant="ghost" className="w-full" onClick={() => fileRef.current?.click()}>
+      <Button
+        variant="ghost"
+        className="w-full"
+        onClick={() => {
+          notePicker();
+          fileRef.current?.click();
+        }}
+      >
         <Upload className="size-4" /> {t("importJson")}
       </Button>
       <input

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { PLACES, POSITIONS, PROBLEMS, namedPlace, type Mode, type RatingStyle, type ThemeId, type WeekStart } from "./catalog";
 import { coverDates, coveringEncounter } from "./encounters";
-import { MIN_PASSPHRASE, asEnvelope, newVaultKey, open, openWithCandidates, randomBytes, seal, toB64, type VaultKey } from "./vault-crypto";
+import { MIN_PASSPHRASE, asEnvelope, newVaultKey, open, openWithCandidates, randomBytes, seal, toB64, type Envelope, type VaultKey } from "./vault-crypto";
 import { deleteSync, deleteVault, readUi, readVault, writeUi, writeVault } from "./vault-db";
 import { addDays, nowTime, pad, todayStr } from "./dates";
 import type { BatchEntry } from "./batch";
@@ -9,7 +9,9 @@ import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
 import type { Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings, TabId } from "./types";
 import type { Lang } from "./copy";
-import { OPEN_AWAY_MS, claimGrace, dropGrace, markSeen, parkKey, readPolicy, readSeen, stillOpen, writePolicy, type AskPolicy } from "./grace";
+import { claimGrace, dropGrace, parkKey } from "./grace";
+import { appLockOn, clearSeen, gateAsking, gateReady, lockAfterMs, markSeen, migrateLock, pickerJustOpened, quietResume } from "./app-lock";
+import { lastUser } from "./cloud";
 import { cleanCycle, withDayLog, withEnd, withStart, withoutStart, type CycleSettings, type DayLog } from "./cycle";
 import {
   MAX_TRACKERS,
@@ -326,9 +328,12 @@ let vaultIdMem = "";
 /** Salt of the envelope this tab last read or wrote on disk. A different salt on disk means another
     window re-keyed the journal: this tab's key is stale and must never write over it. */
 let diskSalt = "";
-/** Time of the last real unlock (passphrase or fingerprint), for "Once a day / week". */
+/** Time of the last unlock (passphrase, fingerprint gate or parked key). */
 let unlockedAt = 0;
+/** When the page was hidden while the journal was open (0: not counting, e.g. a picker or the prompt). */
 let hiddenAt = 0;
+/** A hide this soon after opening is the fingerprint sheet closing, not leaving (loop guard). */
+const PROMPT_SETTLE_MS = 2_000;
 let staleHandler: () => void = () => undefined;
 
 /* Other windows of Vela on this device (installed app + a browser tab). */
@@ -589,14 +594,20 @@ type Store = {
   compare: CompareMode;
   toast: string | null;
   lastActivity: number;
-  /** "none": no journal on this device yet · "locked": an encrypted journal waits for the passphrase. */
+  /** "none": no journal on this device yet · "locked": there is an encrypted journal on this device. */
   vault: "loading" | "none" | "locked";
+  /** The journal key is parked on this device: the lock screen only needs the app lock, never the passphrase. */
+  keyParked: boolean;
   vaultId: string;
   keyEpoch: number;
   legacy: Journal | null;
-  hydrate: () => Promise<void>;
+  /** `resume`: reopen without the app lock (another window changed the key while this one was open). */
+  hydrate: (opts?: { resume?: boolean }) => Promise<void>;
   touch: () => void;
-  maybeLock: () => void;
+  /** The page came back into view: lock if it was away longer than this device's "lock after leaving". */
+  noteVisible: () => void;
+  /** Opens the journal with the key parked on this device (after the app lock said yes). */
+  openParked: () => Promise<"ok" | "missing" | "invalid">;
   lock: () => void;
   _lockHere: (opts: { drop: boolean; broadcast: boolean }) => void;
   replaceJournal: (raw: unknown) => void;
@@ -610,9 +621,6 @@ type Store = {
   verifyPassphrase: (passphrase: string) => Promise<boolean>;
   /** The spelling of `passphrase` that opens this device's journal (see passphraseCandidates), or null. */
   matchPassphrase: (passphrase: string) => Promise<string | null>;
-  /** "Ask for my passphrase" on this device. */
-  askPolicy: AskPolicy;
-  setAskPolicy: (policy: AskPolicy) => void;
   /** Why the lock screen is showing, when it isn't the usual reason. */
   lockNote: "" | "stale";
   noteHidden: () => void;
@@ -758,12 +766,33 @@ export const useJournal = create<Store>((set, get) => {
     patchSettings({ cycles, cycle: asLegacyCycle(cycles[0]), cycleSelected: selectedId(cycles, settings.cycleSelected) });
   };
 
+  /** Opens the journal on disk with `vk` (the parked key). False when that key doesn't open it. */
+  const openWith = async (vk: VaultKey, env: Envelope): Promise<boolean> => {
+    try {
+      const data = await open(vk, env);
+      sessionKey = vk;
+      diskSalt = env.salt;
+      unlockedAt = Date.now();
+      hiddenAt = 0;
+      const language = get().journal.settings.language;
+      const journal = journalFromUnknown(data, language);
+      journal.settings.language = language;
+      if (!journal.profile) journal.profile = { displayName: "", createdAt: Date.now() };
+      rememberUi(journal);
+      set({ journal, legacy: readLegacyJournal(), vault: "locked", vaultId: vaultIdMem, unlocked: true, keyParked: true, lastActivity: Date.now(), lockNote: "" });
+      markSeen();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   return {
     ready: false,
     journal: lockedShell(),
     unlocked: false,
-    askPolicy: readPolicy(),
     lockNote: "",
+    keyParked: false,
     vault: "loading",
     vaultId: "",
     keyEpoch: 0,
@@ -789,7 +818,7 @@ export const useJournal = create<Store>((set, get) => {
     compare: "months",
     toast: null,
     lastActivity: Date.now(),
-    hydrate: async () => {
+    hydrate: async (opts) => {
       let stored = null;
       try {
         stored = await readVault();
@@ -797,58 +826,75 @@ export const useJournal = create<Store>((set, get) => {
         stored = null;
       }
       vaultIdMem = stored?.vaultId ?? "";
+      migrateLock(vaultIdMem, lastUser()?.id ?? null);
       const env0 = stored ? asEnvelope(stored.envelope) : null;
-      if (stored && env0) {
-        const parked = await claimGrace(stored.vaultId);
-        if (parked) {
-          const vk = parked.vk;
-          try {
-            const data = await open(vk, env0);
-            sessionKey = vk;
-            diskSalt = env0.salt;
-            unlockedAt = parked.unlockedAt;
-            const language = readLang();
-            const journal = journalFromUnknown(data, language);
-            if (!journal.profile) journal.profile = { displayName: "", createdAt: Date.now() };
-            rememberUi(journal);
-            set({ journal, legacy: readLegacyJournal(), vault: "locked", vaultId: vaultIdMem, ready: true, unlocked: true, lastActivity: Date.now(), askPolicy: readPolicy() });
-            markSeen(true);
-            return;
-          } catch {
-            await dropGrace();
-          }
-        }
+      const parked = stored && env0 ? await claimGrace(stored.vaultId) : null;
+      // Every fresh launch asks for the app lock, except the silent reload that installs an update.
+      if (parked && gateReady() && !opts?.resume && !quietResume()) {
+        set({ journal: lockedShell(), legacy: readLegacyJournal(), vault: "locked", vaultId: vaultIdMem, keyParked: true, ready: true, unlocked: false, lastActivity: Date.now() });
+        return;
+      }
+      if (parked && stored && env0 && (await openWith(parked.vk, env0))) {
+        set({ ready: true });
+        return;
       }
       set({
         journal: lockedShell(),
         legacy: readLegacyJournal(),
-        vault: stored && asEnvelope(stored.envelope) ? "locked" : "none",
+        vault: stored && env0 ? "locked" : "none",
         vaultId: vaultIdMem,
+        keyParked: false,
         ready: true,
         unlocked: false,
         lastActivity: Date.now(),
       });
     },
+    openParked: async () => {
+      const stored = await readVault().catch(() => null);
+      const env = stored ? asEnvelope(stored.envelope) : null;
+      if (!stored || !env) return "missing";
+      vaultIdMem = stored.vaultId;
+      const parked = await claimGrace(stored.vaultId);
+      if (!parked) {
+        set({ keyParked: false });
+        return "missing";
+      }
+      if (await openWith(parked.vk, env)) return "ok";
+      // The parked key no longer opens this journal (passphrase changed on another device): ask once.
+      await dropGrace();
+      set({ keyParked: false });
+      return "invalid";
+    },
     touch: () => {
       set({ lastActivity: Date.now() });
-      if (get().unlocked) markSeen();
     },
     noteHidden: () => {
-      hiddenAt = Date.now();
-      if (get().unlocked) markSeen(true);
-    },
-    maybeLock: () => {
-      const { unlocked, lastActivity } = get();
-      if (!unlocked) return;
-      const policy = readPolicy();
+      if (hiddenAt) return; // already away
       const now = Date.now();
-      const visible = document.visibilityState === "visible";
-      const away = hiddenAt && visible ? now - hiddenAt : 0;
-      if (visible) hiddenAt = 0;
-      if (policy === "open" && away >= OPEN_AWAY_MS) return get().lock();
-      if (!stillOpen(policy, unlockedAt || now, lastActivity, now)) get().lock();
+      if (!get().unlocked) return;
+      markSeen();
+      // Only a hide while the journal is open counts as leaving. The fingerprint sheet hides the page while
+      // locked, and a file picker opened from inside Vela is not leaving.
+      if (gateAsking() || pickerJustOpened(now)) return;
+      hiddenAt = now;
+      // "Immediately": lock now, unless this is the fingerprint sheet closing right after it opened Vela.
+      if (lockAfterMs() === 0 && gateReady() && now - unlockedAt > PROMPT_SETTLE_MS) get().lock();
     },
-    lock: () => get()._lockHere({ drop: true, broadcast: true }),
+    noteVisible: () => {
+      const left = hiddenAt;
+      hiddenAt = 0;
+      if (!get().unlocked || !left) return;
+      const now = Date.now();
+      markSeen();
+      const awayMs = now - left;
+      // The sheet flickering as it closes (hidden for a moment right after unlocking) is not leaving.
+      const settling = left - unlockedAt < PROMPT_SETTLE_MS && awayMs < PROMPT_SETTLE_MS;
+      if (gateReady() && awayMs > lockAfterMs() && !settling) get().lock();
+    },
+    // Locking hides the journal behind the app lock; the key stays parked, so coming back needs no passphrase.
+    // With the app lock on but no fingerprint / screen lock usable here, the passphrase is the only lock left:
+    // then (and only then) Lock wipes the key, as before.
+    lock: () => get()._lockHere({ drop: appLockOn() && !gateReady(), broadcast: true }),
     _lockHere: (opts: { drop: boolean; broadcast: boolean }) => {
       const wasOpen = get().unlocked;
       resetFingerprintPrompt();
@@ -857,10 +903,14 @@ export const useJournal = create<Store>((set, get) => {
       const language = get().journal.settings.language;
       // Pending writes already captured their key; drop ours so memory no longer holds it.
       void flushSaves();
+      const hadKey = Boolean(sessionKey);
       sessionKey = null;
+      hiddenAt = 0;
+      clearSeen();
       set({
         journal: lockedShell(language),
         vault: vaultIdMem ? "locked" : get().vault,
+        keyParked: opts.drop ? false : hadKey || get().keyParked,
         tab: "home",
         histQ: "",
         histPartner: "",
@@ -899,7 +949,8 @@ export const useJournal = create<Store>((set, get) => {
       rememberPass(passphrase);
       unlockedAt = Date.now();
       diskSalt = vk.salt;
-      set({ journal, unlocked: true, vault: "locked", vaultId: vaultIdMem, lastActivity: Date.now(), lockNote: "" });
+      set({ journal, unlocked: true, vault: "locked", vaultId: vaultIdMem, keyParked: true, lastActivity: Date.now(), lockNote: "" });
+      markSeen();
       await persist(journal);
       void parkKey(vk, vaultIdMem, unlockedAt);
       if (legacy) {
@@ -917,7 +968,8 @@ export const useJournal = create<Store>((set, get) => {
       if (!journal.profile) journal.profile = { displayName: "", createdAt: Date.now() };
       unlockedAt = Date.now();
       diskSalt = vk.salt;
-      set({ journal, unlocked: true, vault: "locked", vaultId: vaultIdMem, lastActivity: Date.now(), lockNote: "" });
+      set({ journal, unlocked: true, vault: "locked", vaultId: vaultIdMem, keyParked: true, lastActivity: Date.now(), lockNote: "" });
+      markSeen();
       await persist(journal);
       void parkKey(vk, vaultIdMem, unlockedAt);
     },
@@ -961,7 +1013,8 @@ export const useJournal = create<Store>((set, get) => {
         if (!journal.profile) journal.profile = { displayName: "", createdAt: Date.now() };
         rememberUi(journal);
         rememberPass(used);
-        set({ journal, unlocked: true, vaultId: vaultIdMem, lastActivity: Date.now(), lockNote: "" });
+        set({ journal, unlocked: true, vaultId: vaultIdMem, keyParked: true, lastActivity: Date.now(), lockNote: "" });
+        markSeen();
         void parkKey(vk, vaultIdMem, unlockedAt);
         // The fingerprint held an older passphrase (changed in another window/device): seal this one.
         if (bioIsStale() && bioForUser(vaultIdMem)) {
@@ -988,15 +1041,6 @@ export const useJournal = create<Store>((set, get) => {
         return null;
       }
     },
-    setAskPolicy: (policy) => {
-      writePolicy(policy);
-      set({ askPolicy: policy });
-      // A new choice counts from now; the parked key is re-filed under it.
-      if (get().unlocked && sessionKey) {
-        unlockedAt = Date.now();
-        void parkKey(sessionKey, vaultIdMem, unlockedAt);
-      }
-    },
     changePassphrase: async (current, next) => {
       if (!get().unlocked) return "bad";
       if (next.length < MIN_PASSPHRASE) return "short";
@@ -1021,6 +1065,7 @@ export const useJournal = create<Store>((set, get) => {
       set({ legacy: null });
     },
     forgetDevice: async () => {
+      clearSeen();
       sessionKey = null;
       vaultIdMem = "";
       diskSalt = "";
@@ -1029,7 +1074,7 @@ export const useJournal = create<Store>((set, get) => {
       void dropGrace();
       await deleteVault().catch(() => undefined);
       await deleteSync().catch(() => undefined);
-      set({ journal: lockedShell(get().journal.settings.language), unlocked: false, vault: "none", vaultId: "" });
+      set({ journal: lockedShell(get().journal.settings.language), unlocked: false, vault: "none", vaultId: "", keyParked: false });
     },
     setTab: (tab) => set({ tab }),
     setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
@@ -1589,7 +1634,7 @@ function reopenAfterStale() {
   const pending = st.unlocked ? st.journal : null;
   st._lockHere({ drop: false, broadcast: false });
   useJournal.setState({ lockNote: "stale" });
-  void st.hydrate().then(() => {
+  void st.hydrate({ resume: true }).then(() => {
     const now = useJournal.getState();
     if (!now.unlocked) {
       useJournal.setState({ lockNote: "stale" });

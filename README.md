@@ -12,8 +12,12 @@ Live site: **https://oscarvelz.github.io/Vela/**
   auto-lock) wipes it from memory.
 - If you sign in, only the **encrypted** journal is uploaded to your account. The server
   stores ciphertext and cannot read it.
-- A fingerprint can open the diary on a device: it unlocks a copy of your passphrase that is
-  kept, encrypted, on that device only.
+- The passphrase is for encryption only: you enter it **once per device**. The key it derives
+  stays on that device (a non-extractable key in IndexedDB), so it is asked again only on a new
+  device, after removing the journal from this one, or to recover or change it.
+- Opening Vela is guarded by the **app lock**, like the Journey diary: the phone's fingerprint /
+  screen lock, asked on every fresh launch and when you come back after leaving for more than
+  10 seconds (Settings → Privacy & Security: immediately / 10 s / 1 min / 5 min, or off).
 - **If you forget the passphrase, the journal cannot be recovered.** There is no reset —
   not by you, not by anyone. Write it down somewhere safe.
 

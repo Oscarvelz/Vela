@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Fingerprint, ShieldAlert } from "lucide-react";
 import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
-import { bioForUser, bioSupported, fingerprintUnlock } from "@/lib/vela/fingerprint";
+import { bioFailCode, bioForUser, bioSupported, fingerprintUnlock, platformAvailable } from "@/lib/vela/fingerprint";
+import { appLockOn, enrollAppLock, gateReady, lockRecord, verifyAppLock } from "@/lib/vela/app-lock";
 import { useBioT } from "@/lib/vela/bio-copy";
 import { useBioUi } from "@/lib/vela/bio-offer";
 import { BioButton, bioErrorKey } from "./bio";
@@ -16,7 +17,7 @@ import { Button, ConfirmDialog, fieldClass, filledByBrowser, PassphraseInput } f
 export function AuthScreen() {
   const t = useT();
   const vault = useJournal((s) => s.vault);
-  const vaultId = useJournal((s) => s.vaultId);
+  const keyParked = useJournal((s) => s.keyParked);
   const language = useJournal((s) => s.journal.settings.language);
   const setLanguage = useJournal((s) => s.setLanguage);
   const remote = useCloud((s) => s.remote);
@@ -61,9 +62,11 @@ export function AuthScreen() {
           <CreateForm />
         )}
       </div>
-      <div className="vela-rise ag-panel mt-4 rounded-card border border-border px-5 py-5" style={{ animationDelay: "470ms" }}>
-        <AccountPanel />
-      </div>
+      {vault === "locked" && keyParked ? null : (
+        <div className="vela-rise ag-panel mt-4 rounded-card border border-border px-5 py-5" style={{ animationDelay: "470ms" }}>
+          <AccountPanel />
+        </div>
+      )}
       <p className="mt-6 text-center text-xs leading-relaxed text-dim">{t("privateByDesign")}</p>
     </div>
   );
@@ -94,19 +97,55 @@ function whenFocused(run: () => void) {
   };
 }
 
+type UnlockMode = "gate" | "recover" | "pass";
+
+/**
+ * The lock screen. With the journal key parked on this device (the usual case) it only asks for the app lock:
+ * fingerprint / screen lock, like Journey. The passphrase is asked only when this device has no usable key
+ * (new device, removed journal, key no longer valid), and as the last resort when the fingerprint keeps failing.
+ */
 function UnlockForm({ error, setError }: { error: string; setError: (v: string) => void }) {
   const t = useT();
   const bt = useBioT();
   const vaultId = useJournal((s) => s.vaultId);
+  const keyParked = useJournal((s) => s.keyParked);
   const tick = useBioUi((s) => s.tick);
-  const enrolled = tick >= 0 && bioSupported() && Boolean(vaultId && bioForUser(vaultId));
-  const [mode, setMode] = useState<"bio" | "pass">(enrolled ? "bio" : "pass");
+  void tick;
+  const gate = keyParked && gateReady();
+  // No key on this device, but the fingerprint sealed the passphrase earlier: it can still open the journal.
+  const recover = !keyParked && bioSupported() && Boolean(vaultId && bioForUser(vaultId));
+  const [mode, setMode] = useState<UnlockMode>(gate ? "gate" : recover ? "recover" : "pass");
   const [asking, setAsking] = useState(false);
   const [tried, setTried] = useState(false);
+  const [fallen, setFallen] = useState(false);
+  const [keyNote, setKeyNote] = useState(!keyParked && Boolean(lockRecord()) && !recover);
+  const [platform, setPlatform] = useState(false);
+  useEffect(() => {
+    void platformAvailable().then(setPlatform);
+  }, []);
   const busy = useRef(false);
   /** Real failures/cancels in a row (an instant refusal because the page wasn't focused doesn't count). */
   const misses = useRef(0);
-  const [fellBack, setFellBack] = useState(false);
+
+  // App lock turned off on this device: nothing to ask, the parked key opens it.
+  useEffect(() => {
+    if (keyParked && !appLockOn()) void useJournal.getState().openParked();
+  }, [keyParked]);
+
+  const afterOpen = useCallback(
+    async (res: "ok" | "missing" | "invalid") => {
+      if (res === "ok") return;
+      useBioUi.getState().bump();
+      if (res === "missing" && vaultId && bioForUser(vaultId) && bioSupported()) {
+        setMode("recover");
+        return;
+      }
+      setKeyNote(res === "missing");
+      if (res === "invalid") setError(t("bioMismatch"));
+      setMode("pass");
+    },
+    [vaultId, setError, t],
+  );
 
   const ask = useCallback(
     (retryOnBlur = true) => {
@@ -115,7 +154,16 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
       setAsking(true);
       setError("");
       const started = Date.now();
-      void fingerprintUnlock(vaultId, (p) => useJournal.getState().unlock(p)).then((res) => {
+      const attempt: Promise<{ ok: true } | { ok: false; code: string }> =
+        mode === "recover"
+          ? fingerprintUnlock(vaultId, (p) => useJournal.getState().unlock(p))
+          : verifyAppLock().then(async (res) => {
+              if (!res.ok) return res;
+              const opened = await useJournal.getState().openParked();
+              if (opened !== "ok") void afterOpen(opened);
+              return { ok: true as const };
+            });
+      void attempt.then((res) => {
         busy.current = false;
         setAsking(false);
         setTried(true);
@@ -125,41 +173,34 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
         }
         if (res.code === "busy") return;
         const instant = Date.now() - started < 600;
-        if (res.code === "cancel") {
+        if (res.code === "cancel" && instant && !document.hasFocus()) {
           // Chrome rejects at once when the page isn't focused yet (app just opened): ask again on focus.
-          if (instant && !document.hasFocus()) {
-            if (retryOnBlur) whenFocused(() => ask(false));
-            return;
-          }
-          if (!instant) misses.current += 1;
-          if (misses.current >= 3) {
-            setFellBack(true);
-            setMode("pass");
-          }
+          if (retryOnBlur) whenFocused(() => ask(false));
           return;
         }
-        if (res.code === "mismatch" || res.code === "missing" || res.code === "unsupported" || res.code === "insecure") {
-          // The enrolled credential can't open the journal now: the passphrase takes over.
+        if (mode === "recover" && (res.code === "mismatch" || res.code === "missing" || res.code === "unsupported" || res.code === "insecure")) {
+          // The sealed passphrase can't open the journal now: the passphrase takes over.
           useBioUi.getState().bump();
           setMode("pass");
           setError(t(bioErrorKey(res.code)));
           return;
         }
+        const gone = res.code === "missing" || res.code === "unsupported" || res.code === "insecure" || res.code === "none";
         misses.current += 1;
-        if (misses.current >= 3) {
-          setFellBack(true);
-          setMode("pass");
+        if (gone || misses.current >= 3) {
+          // The fingerprint keeps failing or the credential is gone: offer to set it up again first.
+          setFallen(true);
           return;
         }
-        setError(t(bioErrorKey(res.code)));
+        if (res.code !== "cancel") setError(t(bioErrorKey(res.code)));
       });
     },
-    [vaultId, setError, t],
+    [vaultId, mode, setError, t, afterOpen],
   );
 
-  // Open → the fingerprint prompt starts by itself. Coming back to the app on the lock screen asks again.
+  // Open → the prompt starts by itself. Coming back to the app on the lock screen asks again.
   useEffect(() => {
-    if (!enrolled || mode !== "bio") return;
+    if (mode === "pass" || fallen) return;
     const stop = whenFocused(() => ask());
     const onVisible = () => {
       if (document.visibilityState === "visible") whenFocused(() => ask());
@@ -170,51 +211,112 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
       document.removeEventListener("visibilitychange", onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enrolled, mode]);
+  }, [mode, fallen]);
 
-  if (enrolled && mode === "bio") {
+  const [enrolling, setEnrolling] = useState(false);
+  const reenrol = () => {
+    if (enrolling) return;
+    setEnrolling(true);
+    setError("");
+    enrollAppLock(vaultId, "")
+      .then(async () => {
+        misses.current = 0;
+        setFallen(false);
+        useBioUi.getState().bump();
+        const opened = await useJournal.getState().openParked();
+        if (opened !== "ok") void afterOpen(opened);
+      })
+      .catch((err) => {
+        const code = bioFailCode(err);
+        if (code !== "cancel") setError(t(bioErrorKey(code)));
+      })
+      .finally(() => setEnrolling(false));
+  };
+
+  if (mode !== "pass") {
     return (
-      <div className="space-y-3 text-center" data-testid="bio-lock">
+      <div className="space-y-3 text-center" data-testid="bio-lock" data-mode={mode}>
         <h2 className="font-display text-3xl">{bt("touchTitle")}</h2>
         <p className="text-sm leading-relaxed text-dim">{bt("touchBody")}</p>
         <div className="py-3">
-          <BioButton asking={asking} label={bt("touchBtn")} onClick={() => ask(false)} />
+          <BioButton
+            asking={asking}
+            label={bt("touchBtn")}
+            onClick={() => {
+              misses.current = fallen ? 0 : misses.current;
+              setFallen(false);
+              ask(false);
+            }}
+          />
         </div>
         <p className="min-h-5 text-sm text-accent" aria-live="polite">
-          {asking ? bt("touchAsking") : tried && !error ? bt("touchRetry") : ""}
+          {asking ? bt("touchAsking") : tried && !error && !fallen ? bt("touchRetry") : ""}
         </p>
         {error ? (
           <p className="text-sm text-danger" role="alert">
             {error}
           </p>
         ) : null}
-        <button
-          type="button"
-          className="mx-auto block min-h-11 px-3 text-sm font-semibold text-dim underline underline-offset-4"
-          data-testid="use-pass"
-          onClick={() => {
-            setError("");
-            setMode("pass");
-          }}
-        >
-          {bt("usePass")}
-        </button>
+        {fallen ? (
+          <div className="vela-gate-fall space-y-2 text-left" data-testid="gate-fall" role="status">
+            <p className="font-semibold">{bt("gateFallTitle")}</p>
+            <p className="text-sm leading-relaxed text-dim">{bt("gateFallBody")}</p>
+            <div className="grid gap-2 pt-1">
+              {mode === "gate" ? (
+                <Button className="w-full" disabled={enrolling} onClick={reenrol} data-testid="gate-reenrol">
+                  <Fingerprint className="size-4" /> {bt("gateReenrol")}
+                </Button>
+              ) : null}
+              <Button
+                variant="ghost"
+                className="w-full"
+                data-testid="gate-retry"
+                onClick={() => {
+                  misses.current = 0;
+                  setFallen(false);
+                  setError("");
+                  window.setTimeout(() => ask(false), 0);
+                }}
+              >
+                {bt("gateRetry")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {fallen || mode === "recover" ? (
+          <button
+            type="button"
+            className="mx-auto block min-h-11 px-3 text-sm font-semibold text-dim underline underline-offset-4"
+            data-testid="use-pass"
+            onClick={() => {
+              setError("");
+              setMode("pass");
+            }}
+          >
+            {mode === "gate" ? bt("gatePassLast") : bt("usePass")}
+          </button>
+        ) : null}
       </div>
     );
   }
+  const canGate = keyParked && gateReady();
+  // The key is on this device but no fingerprint is set up (or it was removed): set it up here instead.
+  const canSetup = keyParked && platform && appLockOn() && bioSupported() && !lockRecord();
+  const canRecover = !keyParked && bioSupported() && Boolean(vaultId && bioForUser(vaultId));
   return (
     <PassUnlock
-      error={error || (fellBack ? bt("touchFallback") : "")}
+      error={error}
+      note={keyNote ? bt("gateKeyLost") : ""}
       setError={setError}
+      onSetup={canSetup ? reenrol : undefined}
+      setupBusy={enrolling}
       onFinger={
-        enrolled
+        canGate || canRecover
           ? () => {
               setError("");
-              setFellBack(false);
+              setFallen(false);
               misses.current = 0;
-              setMode("bio");
-              // Tapping "Use fingerprint" asks right away.
-              window.setTimeout(() => ask(false), 0);
+              setMode(canGate ? "gate" : "recover");
             }
           : undefined
       }
@@ -222,7 +324,21 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
   );
 }
 
-function PassUnlock({ error, setError, onFinger }: { error: string; setError: (v: string) => void; onFinger?: () => void }) {
+function PassUnlock({
+  error,
+  note,
+  setError,
+  onFinger,
+  onSetup,
+  setupBusy,
+}: {
+  error: string;
+  note?: string;
+  setError: (v: string) => void;
+  onFinger?: () => void;
+  onSetup?: () => void;
+  setupBusy?: boolean;
+}) {
   const t = useT();
   const bt = useBioT();
   const unlock = useJournal((s) => s.unlock);
@@ -274,7 +390,7 @@ function PassUnlock({ error, setError, onFinger }: { error: string; setError: (v
       }}
     >
       <h2 className="text-center font-display text-3xl">{t("lockedTitle")}</h2>
-      <p className="text-center text-sm leading-relaxed text-dim">{lockNote === "stale" ? t("lockedStale") : t("lockedBody")}</p>
+      <p className="text-center text-sm leading-relaxed text-dim">{lockNote === "stale" ? t("lockedStale") : note || t("lockedBody")}</p>
       <label className="block text-sm font-semibold" htmlFor="unlock-pass">
         {t("pinFor")}
       </label>
@@ -294,6 +410,11 @@ function PassUnlock({ error, setError, onFinger }: { error: string; setError: (v
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? t("unlocking") : t("unlock")}
       </Button>
+      {onSetup ? (
+        <Button variant="ghost" className="w-full" onClick={onSetup} disabled={setupBusy} data-testid="pass-setup-finger">
+          <Fingerprint className="size-4 text-accent" /> {bt("lockSetup")}
+        </Button>
+      ) : null}
       {onFinger ? (
         <Button variant="ghost" className="w-full" onClick={onFinger} data-testid="use-finger">
           <Fingerprint className="size-4 text-accent" /> {bt("useFinger")}

@@ -149,3 +149,33 @@
     animation: none;
   }
 }
+
+/* Settings → App lock card + passphrase note (follows the theme; gold accent). */
+.vela-lock-glyph {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  color: var(--ag-accent);
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--ag-accent) 22%, transparent), color-mix(in srgb, var(--ag-accent) 6%, transparent) 70%);
+  border: 1px solid color-mix(in srgb, var(--ag-accent) 45%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--ag-accent) 18%, transparent);
+}
+.vela-lock-card[data-on="false"] .vela-lock-glyph {
+  color: var(--ag-dim, currentColor);
+  box-shadow: none;
+  border-color: var(--ag-border, rgba(127, 127, 127, 0.3));
+  background: transparent;
+}
+.vela-pass-note {
+  border: 1px solid color-mix(in srgb, var(--ag-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--ag-accent) 7%, transparent);
+}
+.vela-gate-fall {
+  border: 1px solid color-mix(in srgb, #ebbd63 35%, transparent);
+  background: color-mix(in srgb, #ebbd63 6%, transparent);
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+}

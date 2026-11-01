@@ -12,7 +12,7 @@ import type { Journal } from "./types";
 import { open, openWithCandidates, seal } from "./vault-crypto";
 import { readSync, writeSync, type SyncMeta } from "./vault-db";
 import { rememberPass } from "./fingerprint";
-import { dropGrace } from "./grace";
+import { adoptOwner } from "./app-lock";
 
 type CloudState = {
   authReady: boolean;
@@ -47,6 +47,8 @@ function noteNoSession() {
 function noteSession(user: CloudUser | null) {
   if (user) {
     rememberUser(user);
+    const st = useJournal.getState();
+    adoptOwner(user.id, st.unlocked || st.vault === "none");
     useCloud.setState({ sessionGone: false, lastEmail: user.email });
   } else noteNoSession();
 }
@@ -291,10 +293,16 @@ export async function adoptRemotePassphrase(passphrase: string): Promise<boolean
   }
 }
 
-export async function signOut() {
-  // Signing out also ends "stay unlocked on this device": the journal locks and the parked key is wiped.
-  useJournal.getState().lock();
-  await dropGrace();
+/**
+ * Signs out of the account. The journal stays on this device, encrypted, with its key, behind the app lock;
+ * the fingerprint stays enrolled for this account (signing back in never asks to set it up again).
+ * `forget`: also remove the journal and its key from this device, so the passphrase is needed to open it here again.
+ */
+export async function signOut(opts: { forget?: boolean } = {}) {
+  if (opts.forget) {
+    await useJournal.getState().forgetDevice();
+    resetSyncMeta();
+  } else useJournal.getState().lock();
   const sb = await getClient();
   signingOut = true;
   forgetUser();

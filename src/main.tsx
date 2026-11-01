@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { JournalApp } from "@/components/vela/journal-app";
 import { useJournal } from "@/lib/vela/store";
+import { gateAsking } from "@/lib/vela/app-lock";
 
 // Test-only hook (fake data seeding). Compiled out of the real build: VITE_E2E is never set for docs/.
 if (import.meta.env.VITE_E2E === "1") (window as unknown as { __velaStore: typeof useJournal }).__velaStore = useJournal;
@@ -19,12 +20,25 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
     navigator.serviceWorker
       .register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL })
       .then((reg) => {
+        // A new version took over: reload only while the journal is closed (lock screen or setup), never in the
+        // middle of an entry and never while the fingerprint sheet is up. If it is open, the update waits for the
+        // next time it locks. Reloading on the lock screen never opens anything: the app lock asks as before.
+        let pending = false;
+        const apply = () => {
+          if (!pending || useJournal.getState().unlocked || gateAsking()) return;
+          pending = false;
+          location.reload();
+        };
+        useJournal.subscribe((state, prev) => {
+          // Right as it locks, before the fingerprint sheet comes up.
+          if (prev.unlocked && !state.unlocked) apply();
+        });
         reg.addEventListener("updatefound", () => {
           const next = reg.installing;
           next?.addEventListener("statechange", () => {
-            // A new version took over: reload only when the journal is not open, so nothing is interrupted.
-            if (next.state === "activated" && navigator.serviceWorker.controller && !document.querySelector(".ag-tabbar")) {
-              location.reload();
+            if (next.state === "activated" && navigator.serviceWorker.controller) {
+              pending = true;
+              apply();
             }
           });
         });

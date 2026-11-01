@@ -1,6 +1,7 @@
-/* When to offer "Unlock with fingerprint next time" after a passphrase unlock. */
+/* When to offer the app lock ("Lock Vela with your fingerprint"): once per owner, dismissible. */
 import { create } from "zustand";
-import { bioForUser, bioSupported, offerSkipped, platformAvailable, sessionPass } from "./fingerprint";
+import { bioSupported, platformAvailable } from "./fingerprint";
+import { appLockOn, lockRecord, offerDone } from "./app-lock";
 
 type BioUi = {
   /** The one-tap offer sheet is showing. */
@@ -18,10 +19,10 @@ export const useBioUi = create<BioUi>((set, get) => ({
   bump: () => set({ tick: get().tick + 1 }),
 }));
 
-/** Show the offer if this phone can do it, it isn't on yet, and the user didn't say "don't ask". */
+/** Show the offer once if this phone can do it, app lock is on, and no fingerprint is set up yet. */
 export async function maybeOfferFingerprint(vaultId: string) {
-  if (!vaultId || !bioSupported() || !sessionPass()) return false;
-  if (bioForUser(vaultId) || offerSkipped(vaultId)) return false;
+  if (!vaultId || !bioSupported() || !appLockOn()) return false;
+  if (lockRecord() || offerDone()) return false;
   if (!(await platformAvailable())) return false;
   useBioUi.getState().setOffer(true);
   return true;

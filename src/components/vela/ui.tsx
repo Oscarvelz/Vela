@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 import { ChevronDown, Eye, EyeOff, Flame, Heart, Star } from "lucide-react";
 import { useT } from "@/lib/vela/i18n";
@@ -99,7 +100,8 @@ export function ConfirmDialog({
   children?: ReactNode;
 }) {
   if (!open) return null;
-  return (
+  // Rendered on <body>, so no parent's stacking context (settings pane, tab bar) can cover its buttons.
+  return createPortal(
     <ConfirmDialogBody
       title={title}
       name={name}
@@ -111,7 +113,8 @@ export function ConfirmDialog({
       onCancel={onCancel}
     >
       {children}
-    </ConfirmDialogBody>
+    </ConfirmDialogBody>,
+    document.body,
   );
 }
 

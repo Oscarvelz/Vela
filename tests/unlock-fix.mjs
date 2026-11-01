@@ -3,8 +3,9 @@
 // used to run the same checks against the pre-fix build), SHOTS (screenshot dir).
 //
 // A1 password-manager autofill · A2 keyboard artefacts · A3 stale key from another window
-// A4 submit races · B "Ask for my passphrase" (default, each option, Lock, sign out, forget,
-// migration) · F fingerprint alone is enough (virtual WebAuthn authenticator).
+// A4 submit races · B the passphrase is asked once per device (lock like Journey: no fingerprint set up here,
+// Lock, sign out, forget) · M migration · F fingerprint alone is enough (virtual WebAuthn authenticator).
+// The app-lock behaviour itself (leaving, pickers, reloads, sign-out, migration from dd94a16) is tests/journey-lock.mjs.
 import { chromium } from "/workspace/work/browser-test/node_modules/playwright-core/index.mjs";
 import { cpSync, mkdirSync, rmSync } from "node:fs";
 
@@ -104,11 +105,6 @@ async function openPrivacy(p) {
   await btn.waitFor({ timeout: 10000 });
   if ((await btn.getAttribute("aria-expanded")) !== "true") await btn.click();
   await p.waitForTimeout(400);
-}
-async function setPolicy(p, value) {
-  await openPrivacy(p);
-  await p.click(`[data-ask="${value}"]`);
-  await p.waitForTimeout(300);
 }
 const skew = (p, ms) =>
   p.evaluate((v) => {
@@ -291,82 +287,43 @@ if (ONLY === "A" && false) {
   process.exit(fails ? 1 : 0);
 }
 
-/* ───────────── B: "Ask for my passphrase" ───────────── */
+/* ───────────── B: the passphrase is asked once per device ───────────── */
 if (RUN("B")) {
   const ctx = await context();
   const p = await page(ctx);
   await create(p);
   await closeOffer(p);
-  ok("B default policy is 'Only when I lock it'", (await p.evaluate(() => localStorage.getItem("vela_ask_pass"))) === "lock");
   await openPrivacy(p);
-  ok("B setting shows the current choice", (await p.getAttribute('[data-ask="lock"]', "aria-checked")) === "true");
-  ok("B privacy note is shown", /unlocked phone/i.test((await p.textContent('[data-testid="ask-privacy"]')) || ""));
+  ok("B the old 'Ask for my passphrase' picker is gone", (await p.locator("[data-ask]").count()) === 0 && (await p.evaluate(() => localStorage.getItem("vela_ask_pass"))) === null);
+  ok("B app lock card shown (no sensor on this browser)", await p.isVisible('[data-testid="app-lock"]'));
+  ok("B passphrase note: only for encryption, asked once per device", /once on each device/i.test((await p.textContent('[data-testid="pass-note"]')) || ""));
   await p.reload();
-  ok("B default: reload opens without asking", await opensSoon(p));
+  ok("B reload opens without asking", await opensSoon(p));
   await p.close();
   let q = await page(ctx);
-  ok("B default: closing the app and opening again (new page) opens without asking", await isOpen(q));
+  ok("B closing the app and opening again (new page) opens without asking", await isOpen(q));
   await skew(q, 30 * 24 * 60 * MIN);
   await q.close();
   q = await page(ctx);
-  ok("B default: a month later still open", await isOpen(q));
-  ok("B default: no in-app idle lock after 6 min", await q.evaluate(() => { window.__velaStore.setState({ lastActivity: Date.now() - 6 * 60000 }); window.__velaStore.getState().maybeLock(); return window.__velaStore.getState().unlocked; }));
-  await skew(q, 0);
-
-  // each option
-  const cases = [
-    ["open", 10 * 1000, false, "every time: a new open asks"],
-    ["15m", 10 * MIN, true, "15 min: back after 10 min opens"],
-    ["15m", 16 * MIN, false, "15 min: back after 16 min asks"],
-    ["day", 23 * 60 * MIN, true, "once a day: 23 h later opens"],
-    ["day", 25 * 60 * MIN, false, "once a day: 25 h later asks"],
-    ["week", 6 * 24 * 60 * MIN, true, "once a week: 6 days later opens"],
-    ["week", 8 * 24 * 60 * MIN, false, "once a week: 8 days later asks"],
-    ["lock", 60 * 24 * 60 * MIN, true, "only when I lock it: 60 days later opens"],
-  ];
-  for (const [policy, away, expectOpen, name] of cases) {
-    if (!(await isOpen(q))) await tryUnlock(q, PASS);
-    await setPolicy(q, policy);
-    await q.waitForTimeout(300);
-    await q.close();
-    const bump = await ctx.newPage();
-    await bump.addInitScript((v) => { if (sessionStorage.getItem("__skewSet")) return; sessionStorage.setItem("__skewSet", "1"); localStorage.setItem("__skew", String(v)); window.__skew = v; }, away);
-    await bump.goto(URL);
-    await bump.waitForSelector("#unlock-pass, .ag-tabbar", { timeout: 30000 });
-    const open = await isOpen(bump);
-    ok(`B ${name}`, open === expectOpen, `open=${open}`);
-    await skew(bump, 0);
-    q = bump;
-  }
-  // "every time": a same-session reload (pull-to-refresh) still opens
-  if (!(await isOpen(q))) await tryUnlock(q, PASS);
-  await setPolicy(q, "open");
-  await q.reload();
-  ok("B every time: pull-to-refresh in the same session stays open", await opensSoon(q));
-  ok("B every time: back from 2 min in the background locks", await q.evaluate(() => {
+  ok("B a month later still open (key parked on this device)", await isOpen(q));
+  ok("B no fingerprint here: leaving 5 min doesn't lock (nothing to lock behind)", await q.evaluate(() => {
     const s = window.__velaStore.getState();
     s.noteHidden();
-    window.__skew = 2 * 60000;
-    s.maybeLock();
-    return !window.__velaStore.getState().unlocked;
+    window.__skew += 5 * 60000;
+    s.noteVisible();
+    return window.__velaStore.getState().unlocked;
   }));
   await skew(q, 0);
-  await q.reload();
-  await q.waitForSelector("#unlock-pass", { timeout: 20000 });
-  await tryUnlock(q, PASS);
-  await setPolicy(q, "15m");
-  ok("B 15 min: idle 16 min in the app locks", await q.evaluate(() => { window.__velaStore.setState({ lastActivity: Date.now() - 16 * 60000 }); window.__velaStore.getState().maybeLock(); return !window.__velaStore.getState().unlocked; }));
-  if (!(await isOpen(q))) await tryUnlock(q, PASS);
-  await setPolicy(q, "lock");
 
-  // Lock button in the header
+  // Lock in the header: without a fingerprint / screen lock, the passphrase is the only lock left
   await q.locator('.ag-header [data-testid="header-lock"]').click();
   ok("B header Lock button locks", await lockShown(q));
-  ok("B Lock wipes the parked key", (await graceCount(q)) === 0);
+  ok("B … with no fingerprint set up, Lock wipes the key (the passphrase is the only lock)", (await graceCount(q)) === 0);
   await q.close();
   q = await page(ctx);
-  ok("B after Lock, opening again asks", !(await isOpen(q)) && (await q.isVisible("#unlock-pass")));
+  ok("B after Lock, opening again asks for the passphrase", !(await isOpen(q)) && (await q.isVisible("#unlock-pass")));
   await tryUnlock(q, PASS);
+  ok("B the passphrase parks the key again", (await graceCount(q)) === 1);
   // settings Lock now
   await openPrivacy(q);
   await q.click('[data-testid="lock-now"]');
@@ -379,7 +336,8 @@ if (RUN("B")) {
   await ctx.close();
 }
 
-/* sign-out wipes (Supabase mocked, nothing reaches the network) */
+/* sign-out with no fingerprint set up locks and wipes the key (Supabase mocked, nothing reaches the network).
+   With a fingerprint, sign-out keeps the key and the enrolment: tests/journey-lock.mjs (O). */
 if (RUN("B")) {
   const UID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
   const user = { id: UID, aud: "authenticated", role: "authenticated", email: "fake.unlock@example.com", app_metadata: { provider: "email" }, user_metadata: {}, created_at: "2026-01-01T00:00:00Z" };
@@ -406,10 +364,11 @@ if (RUN("B")) {
   const data = p.locator('button:has-text("Data & Backup")').first();
   await data.waitFor({ timeout: 10000 });
   if ((await data.getAttribute("aria-expanded")) !== "true") await data.click();
-  await p.locator('button:has-text("Sign out")').first().click();
+  await p.locator('[data-testid="sign-out"]').first().click();
+  await p.locator('[role=alertdialog] button:has-text("Sign out")').click();
   ok("B sign out locks the journal", await lockShown(p));
   await p.waitForTimeout(500);
-  ok("B sign out wipes the parked key", (await graceCount(p)) === 0);
+  ok("B sign out (no fingerprint here) wipes the parked key", (await graceCount(p)) === 0);
   await ctx.close();
 }
 
@@ -422,13 +381,13 @@ if (RUN("M")) {
   await create(p);
   await closeOffer(p);
   ok("M previous build: journal open", await isOpen(p));
-  ok("M previous build had no policy stored", (await p.evaluate(() => localStorage.getItem("vela_ask_pass"))) === null);
+  ok("M previous build had no ask setting stored", (await p.evaluate(() => localStorage.getItem("vela_ask_pass"))) === null);
   // update arrives
   rmSync(SERVE_DIR, { recursive: true, force: true });
   cpSync(NEW_BUILD, SERVE_DIR, { recursive: true });
   await p.reload();
   ok("M after update: same-session reload keeps it open (old parked key adopted)", await opensSoon(p));
-  ok("M after update: policy migrated to 'Only when I lock it'", (await p.evaluate(() => localStorage.getItem("vela_ask_pass"))) === "lock");
+  ok("M after update: no 'ask for passphrase' setting any more", (await p.evaluate(() => localStorage.getItem("vela_ask_pass"))) === null);
   await p.close();
   const q = await page(ctx);
   ok("M after update: opening the app again no longer asks", await isOpen(q));
@@ -502,17 +461,15 @@ if (RUN("F")) for (const PRF of [true, false]) {
       sessionStorage.clear();
       localStorage.setItem("__skew", String(v));
     }, ms);
-    await p.reload();
+    await p.goto(BIO_URL); // a fresh launch
   };
-  await setPolicy(p, "day");
   await reopen(25 * 3600000);
   const sawPass = await p.waitForSelector("#unlock-pass", { timeout: 2500 }).then(() => true, () => false);
-  ok(`F[${tag}] 'once a day' after 25 h: fingerprint opens it, no passphrase field`, (await opensSoon(p, 15000)) && !sawPass);
+  ok(`F[${tag}] fresh launch 25 h later: fingerprint opens it, no passphrase field`, (await opensSoon(p, 15000)) && !sawPass);
   await skew(p, 0);
-  await setPolicy(p, "open");
   await reopen(0);
   const sawPass2 = await p.waitForSelector("#unlock-pass", { timeout: 2500 }).then(() => true, () => false);
-  ok(`F[${tag}] 'every time' reopen: fingerprint opens it, no passphrase field`, (await opensSoon(p, 15000)) && !sawPass2);
+  ok(`F[${tag}] fresh launch: fingerprint opens it, no passphrase field`, (await opensSoon(p, 15000)) && !sawPass2);
   ok(`F[${tag}] no passphrase was typed at any point`, (await p.evaluate(() => window.__typedPass || 0)) === 0);
   const q = p;
 
@@ -526,7 +483,9 @@ if (RUN("F")) for (const PRF of [true, false]) {
     if (await b.count()) await b.click().catch(() => undefined);
     await q.waitForTimeout(1300);
   }
-  ok(`F[${tag}] after 3 cancels the passphrase field shows`, await q.waitForSelector("#unlock-pass", { timeout: 10000 }).then(() => true, () => false));
+  ok(`F[${tag}] after 3 cancels: set up again offered, passphrase as the last option`, await q.waitForSelector('[data-testid="gate-reenrol"]', { timeout: 10000 }).then(() => true, () => false));
+  await q.click('[data-testid="use-pass"]');
+  ok(`F[${tag}] … the passphrase field shows`, await q.waitForSelector("#unlock-pass", { timeout: 10000 }).then(() => true, () => false));
   ok(`F[${tag}] … with a 'Use fingerprint' retry button`, await q.isVisible('[data-testid="use-finger"]'));
   await q.screenshot({ path: `${SHOTS}/lock-bio-fallback-${tag}.png` });
   await q.evaluate(() => localStorage.removeItem("__cancelBio"));
@@ -565,15 +524,15 @@ if (RUN("F")) for (const PRF of [true, false]) {
   await q.locator('.ag-header [data-testid="header-lock"]').click();
   ok(`F[${tag}] after that, the fingerprint alone opens it again`, await opensSoon(q, 15000));
 
-  // enrolled credential becomes invalid → passphrase at once, enrollment kept for re-seal
+  // a damaged sealed copy doesn't matter while the key is parked: the fingerprint is only the app lock
   await q.evaluate(() => {
     const r = JSON.parse(localStorage.getItem("vela-fingerprint"));
     r.data = r.data.slice(0, -4) + (r.data.endsWith("AAAA") ? "BBBB" : "AAAA");
     localStorage.setItem("vela-fingerprint", JSON.stringify(r));
   });
+  await q.waitForTimeout(2200);
   await q.locator('.ag-header [data-testid="header-lock"]').click();
-  ok(`F[${tag}] invalid credential → passphrase field`, await q.waitForSelector("#unlock-pass", { timeout: 15000 }).then(() => true, () => false));
-  ok(`F[${tag}] passphrase still opens`, (await tryUnlock(q, PASS2)) === "open");
+  ok(`F[${tag}] damaged sealed copy, key parked → fingerprint still opens it`, await opensSoon(q, 15000));
   await ctx.close();
 }
 
@@ -590,7 +549,7 @@ if (RUN("S")) for (const [mode, lang] of [["night", "en"], ["day", "en"], ["nigh
   }, [mode, lang]);
   await p.waitForTimeout(300);
   await openPrivacy(p);
-  const el = p.locator('[data-testid="ask-policy"]');
+  const el = p.locator('[data-testid="app-lock"]');
   await el.evaluate((e) => e.scrollIntoView({ block: "center" }));
   await p.waitForTimeout(600);
   await p.screenshot({ path: `${SHOTS}/setting-${mode}-${lang}.png` });

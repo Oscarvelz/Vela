@@ -25,19 +25,19 @@ type Made = {
   prf: Uint8Array | null;
 };
 
-function bioBytes(n: number) {
+export function bioBytes(n: number) {
   const bytes = new Uint8Array(n);
   crypto.getRandomValues(bytes);
   return bytes;
 }
 
-function bytesToB64(bytes: Uint8Array) {
+export function bytesToB64(bytes: Uint8Array) {
   let text = "";
   for (let i = 0; i < bytes.length; i += 1) text += String.fromCharCode(bytes[i]);
   return btoa(text).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function b64ToBytes(value: string) {
+export function b64ToBytes(value: string) {
   let padded = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
   while (padded.length % 4) padded += "=";
   const bin = atob(padded);
@@ -180,7 +180,7 @@ function decryptPin(key: CryptoKey, rec: BioRecord) {
     });
 }
 
-function webAuthnCreate(profileKey: string) {
+export function webAuthnCreate(profileKey: string) {
   const salt = bioBytes(32);
   return navigator.credentials
     .create({

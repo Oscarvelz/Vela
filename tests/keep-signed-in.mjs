@@ -289,7 +289,8 @@ async function unlockIfLocked(page) {
   ok("expiry: signed in again", await signedIn(page));
   ok("expiry: note gone after signing in", !(await page.isVisible('[data-testid="relogin"]')));
   // An explicit sign-out is a real sign-out: no "session ended" note afterwards.
-  await page.click('button:has-text("Sign out")');
+  await page.click('[data-testid="sign-out"]');
+  await page.click('[role=alertdialog] button:has-text("Sign out")');
   await page.waitForSelector("#account-email", { timeout: 10000 });
   ok("sign out: no 'session ended' note", !(await page.isVisible('[data-testid="relogin"]')));
   await page.reload();

@@ -8,6 +8,8 @@ import { cn } from "@/lib/cn";
 import { Starfield } from "./starfield";
 import { AuthScreen } from "./auth-screen";
 import { BioOffer } from "./bio";
+import { appLockOn, markSeen } from "@/lib/vela/app-lock";
+import { useBioUi } from "@/lib/vela/bio-offer";
 import { CalendarView } from "./calendar-view";
 import { CloudSync } from "./cloud-sync";
 import { HistoryView } from "./history-view";
@@ -111,29 +113,37 @@ function useTheme(unlocked: boolean) {
   }, [theme, mode, language, discreet]);
 }
 
+/* Lock like Journey: leaving Vela for longer than "lock after leaving" (10 s by default) locks it behind the
+   app lock; coming back sooner, a file picker, or the fingerprint sheet itself never does (see store.noteHidden). */
 function useAutoLock() {
-  const maybeLock = useJournal((s) => s.maybeLock);
   const touch = useJournal((s) => s.touch);
   useEffect(() => {
     const bump = () => touch();
     const onVisible = () => {
-      if (document.visibilityState === "visible") maybeLock();
+      if (document.visibilityState === "visible") useJournal.getState().noteVisible();
       else useJournal.getState().noteHidden();
     };
-    const onHide = () => useJournal.getState().noteHidden();
-    window.addEventListener("pagehide", onHide);
+    // Closing / reloading: only remember when Vela was last in use (the next launch asks anyway).
+    // While hidden, the time it was hidden stays the last use (a reload after a long time away must ask).
+    const onPageHide = () => {
+      if (useJournal.getState().unlocked && document.visibilityState === "visible") markSeen();
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) useJournal.getState().noteVisible();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
     window.addEventListener("pointerdown", bump, { passive: true });
     window.addEventListener("keydown", bump, { passive: true });
     document.addEventListener("visibilitychange", onVisible);
-    const id = window.setInterval(maybeLock, 15000);
     return () => {
       window.removeEventListener("pointerdown", bump);
       window.removeEventListener("keydown", bump);
       document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("pagehide", onHide);
-      window.clearInterval(id);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
     };
-  }, [maybeLock, touch]);
+  }, [touch]);
 }
 
 function Shell() {
@@ -151,6 +161,9 @@ function Shell() {
   const histTo = useJournal((s) => s.histTo);
   const histPhase = useJournal((s) => s.histPhase);
   const toast = useJournal((s) => s.toast);
+  const lockTick = useBioUi((s) => s.tick);
+  // With the app lock off there is nothing to lock behind (the key stays on the device), so no Lock button.
+  const lockable = lockTick >= 0 && appLockOn();
   const shift = useRef(16);
   const stack = useRef<Array<"settings" | "edit" | "range">>([]);
   const skip = useRef(false);
@@ -318,9 +331,11 @@ function Shell() {
             <IconButton className="ag-hdr-btn" label={mode === "night" ? t("switchToDay") : t("switchToNight")} onClick={toggleMode}>
               {mode === "night" ? <Sun className="size-[19px]" /> : <Moon className="size-[19px]" />}
             </IconButton>
-            <IconButton className="ag-hdr-btn" label={t("lockVela")} data-testid="header-lock" onClick={() => useJournal.getState().lock()}>
-              <Lock className="size-[19px]" />
-            </IconButton>
+            {lockable ? (
+              <IconButton className="ag-hdr-btn" label={t("lockVela")} data-testid="header-lock" onClick={() => useJournal.getState().lock()}>
+                <Lock className="size-[19px]" />
+              </IconButton>
+            ) : null}
             <IconButton
               label={t("openSettings")}
               className={cn("ag-hdr-btn", settingsOpen && "is-on")}

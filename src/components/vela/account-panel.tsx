@@ -5,7 +5,8 @@ import { cloudConfigured } from "@/lib/vela/supabase-config";
 import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
 import { adoptRemotePassphrase, signOut, syncNow, useCloud } from "@/lib/vela/sync";
-import { Button, fieldClass, PassphraseInput, PasswordInput } from "./ui";
+import { Button, ConfirmDialog, fieldClass, PassphraseInput, PasswordInput } from "./ui";
+import { useBioT } from "@/lib/vela/bio-copy";
 
 function appUrl() {
   return `${location.origin}${import.meta.env.BASE_URL}`;
@@ -31,6 +32,9 @@ export function AccountPanel() {
   const [note, setNote] = useState("");
   const [pending, setPending] = useState(false);
   const [pass, setPass] = useState("");
+  const bt = useBioT();
+  const [askOut, setAskOut] = useState(false);
+  const [forget, setForget] = useState(false);
 
   if (!cloudConfigured) {
     return (
@@ -103,10 +107,43 @@ export function AccountPanel() {
           ) : (
             <span />
           )}
-          <Button variant="ghost" onClick={() => void signOut()}>
+          <Button
+            variant="ghost"
+            data-testid="sign-out"
+            onClick={() => {
+              setForget(false);
+              setAskOut(true);
+            }}
+          >
             {t("signOut")}
           </Button>
         </div>
+        <ConfirmDialog
+          open={askOut}
+          title={bt("signOutQ")}
+          confirmLabel={bt("signOutBtn")}
+          cancelLabel={t("cancelBtn")}
+          confirmTone={forget ? "danger" : "primary"}
+          onCancel={() => setAskOut(false)}
+          onConfirm={() => {
+            setAskOut(false);
+            void signOut({ forget });
+          }}
+        >
+          <div className="mt-3 space-y-3 text-left text-sm" data-testid="sign-out-dialog">
+            <p className="leading-relaxed text-dim">{bt("signOutKeep")}</p>
+            <label className="flex items-start gap-2">
+              <input
+                id="sign-out-forget"
+                type="checkbox"
+                className="mt-1 size-4 accent-[var(--ag-accent)]"
+                checked={forget}
+                onChange={(event) => setForget(event.target.checked)}
+              />
+              <span className="leading-relaxed">{bt("signOutForget")}</span>
+            </label>
+          </div>
+        </ConfirmDialog>
       </div>
     );
   }
