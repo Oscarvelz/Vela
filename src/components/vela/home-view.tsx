@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { CalendarDays, CircleHelp, Layers, PenLine, Plus } from "lucide-react";
+import { CircleHelp, Layers, PenLine, Plus, Repeat2 } from "lucide-react";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { sessionsSorted } from "@/lib/vela/stats";
-import { useJournal } from "@/lib/vela/store";
+import { blankDraft, sessionToDraft, useJournal } from "@/lib/vela/store";
+import { PLACES } from "@/lib/vela/catalog";
+import type { Draft } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
 import { Constellation, Sparkle } from "./mark";
 import { SessionCard } from "./session-card";
@@ -17,7 +19,6 @@ export function HomeView() {
   const sessions = useJournal((s) => s.journal.sessions);
   const showForm = useJournal((s) => s.showForm);
   const setShowForm = useJournal((s) => s.setShowForm);
-  const setTab = useJournal((s) => s.setTab);
   const quickLog = useJournal((s) => s.quickLog);
   const saveNew = useJournal((s) => s.saveNew);
   const saveMany = useJournal((s) => s.saveMany);
@@ -25,6 +26,8 @@ export function HomeView() {
   const [formKey, setFormKey] = useState(0);
   const [showBatch, setShowBatch] = useState(false);
   const [help, setHelp] = useState(false);
+  const [preset, setPreset] = useState<Draft | undefined>(undefined);
+  const customPlaces = useJournal((s) => s.journal.settings.customPlaces);
   const list = sessionsSorted(sessions);
   const total = list.length;
   const today = new Intl.DateTimeFormat(lang === "es" ? "es" : "en", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
@@ -56,10 +59,17 @@ export function HomeView() {
           <div className="ag-hero-actions mt-3 grid grid-cols-3 gap-2.5" role="group" aria-label={t("logMoment")}>
             <button
               type="button"
-              aria-pressed={showForm}
+              aria-pressed={showForm && !preset}
               aria-label={t("logWithDetails")}
-              className={cn("ag-hero-tile", showForm && "is-on")}
+              className={cn("ag-hero-tile", showForm && !preset && "is-on")}
               onClick={() => {
+                if (preset) {
+                  setPreset(undefined);
+                  setFormKey((key) => key + 1);
+                  setShowForm(true);
+                  setShowBatch(false);
+                  return;
+                }
                 const next = !showForm;
                 setShowForm(next);
                 if (next) setShowBatch(false);
@@ -76,22 +86,56 @@ export function HomeView() {
               onClick={() => {
                 const next = !showBatch;
                 setShowBatch(next);
-                if (next) setShowForm(false);
+                if (next) {
+                  setShowForm(false);
+                  setPreset(undefined);
+                }
               }}
             >
               <span className="ag-hero-tile-ico"><Layers className="size-[18px]" aria-hidden /></span>
               <span className="ag-hero-tile-label">{t("heroBatch")}</span>
             </button>
-            <button type="button" className="ag-hero-tile" onClick={() => setTab("calendar")}>
-              <span className="ag-hero-tile-ico"><CalendarDays className="size-[18px]" aria-hidden /></span>
-              <span className="ag-hero-tile-label">{t("calendarBtn")}</span>
+            <button
+              type="button"
+              data-testid="hero-repeat"
+              aria-label={t("heroRepeatAria")}
+              aria-pressed={showForm && Boolean(preset)}
+              disabled={list.length === 0}
+              className={cn("ag-hero-tile", showForm && preset && "is-on", list.length === 0 && "is-idle")}
+              onClick={() => {
+                const last = list[0];
+                if (!last) return;
+                if (showForm && preset) {
+                  setShowForm(false);
+                  setPreset(undefined);
+                  return;
+                }
+                // Prefill who/where/how from the latest moment; fresh date, time, ratings and notes.
+                const base = sessionToDraft(last, [...PLACES, ...customPlaces]);
+                const fresh = blankDraft();
+                setPreset({
+                  ...fresh,
+                  partnerName: base.partnerName,
+                  place: base.place,
+                  customPlace: base.customPlace,
+                  durationMins: base.durationMins,
+                  positions: base.positions,
+                  contraception: base.contraception,
+                });
+                setFormKey((key) => key + 1);
+                setShowBatch(false);
+                setShowForm(true);
+              }}
+            >
+              <span className="ag-hero-tile-ico"><Repeat2 className="size-[18px]" aria-hidden /></span>
+              <span className="ag-hero-tile-label">{t("heroRepeat")}</span>
             </button>
           </div>
         </Card>
         <CycleCard />
         <Card className={showForm ? "" : "hidden"}>
           <div className="relative mb-4 flex items-start justify-between gap-3">
-            <h2 className="font-display text-2xl">{t("logMoment")}</h2>
+            <h2 className="font-display text-2xl">{preset ? t("heroRepeatTitle") : t("logMoment")}</h2>
             <button
               type="button"
               className="grid size-8 shrink-0 place-items-center rounded-full border border-fg/25 text-fg/80"
@@ -109,13 +153,16 @@ export function HomeView() {
           </div>
           <SessionForm
             key={formKey}
+            initial={preset}
             onSave={(draft) => {
               saveNew(draft);
+              setPreset(undefined);
               setFormKey((key) => key + 1);
               showToast(`${t("saveMoment")} ✓`);
             }}
             onSaveAll={(drafts) => {
               saveMany(drafts);
+              setPreset(undefined);
               setFormKey((key) => key + 1);
               showToast(`${t("saveThese")} ✓`);
             }}

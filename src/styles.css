@@ -1712,3 +1712,7 @@ input[type="range"].ag-range::-moz-range-thumb {
   .ag-hdr-row { gap: .5rem; padding-inline: .75rem; }
   .ag-tagline { letter-spacing: .07em; }
 }
+
+/* Hero "Repeat" tile before any moment exists (Nov 1 2026). */
+.ag-hero-tile.is-idle { opacity: .45; cursor: default; }
+.ag-hero-tile.is-idle:active { transform: none; }

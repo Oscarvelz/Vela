@@ -52,14 +52,14 @@ for (const mode of ["night", "day"]) {
 // Back to night for the rest
 await page.evaluate(() => window.__velaStore.getState().toggleMode()); await page.waitForTimeout(300);
 
-// Programmatic: hero Calendar tile calls setTab("calendar")
+// Programmatic: setTab("calendar") from outside the bar (hero Calendar tile replaced by Repeat, Nov 1 2026)
 await page.evaluate(() => window.__velaStore.getState().setTab("home")); await page.waitForTimeout(450);
-await page.locator(".ag-hero-actions .ag-hero-tile").nth(2).click(); await page.waitForTimeout(30);
+await page.evaluate(() => window.__velaStore.getState().setTab("calendar")); await page.waitForTimeout(30);
 await page.evaluate(() => document.querySelector('[data-testid="tab-indicator"]').getAnimations().forEach((x) => { x.pause(); x.currentTime = 120; }));
 await nav.screenshot({ path: `${OUT}/nav-night-hero-calendar-mid.png`, animations: "allow" });
 await page.evaluate(() => document.querySelector('[data-testid="tab-indicator"]').getAnimations().forEach((x) => x.play()));
 await settle();
-ok("hero Calendar tile → chip on calendar", aligned(await align(), "calendar"), await align());
+ok("setTab(calendar) → chip on calendar", aligned(await align(), "calendar"), await align());
 await page.evaluate(() => window.__velaStore.getState().setTab("insights")); await page.waitForTimeout(450);
 ok("store setTab(insights) → chip on insights", aligned(await align(), "insights"), await align());
 
