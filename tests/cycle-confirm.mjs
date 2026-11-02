@@ -16,6 +16,7 @@ const day = (o) => page.evaluate((o) => { const pad = (n) => String(n).padStart(
 const d0 = await day(0), s1 = await day(-56), s2 = await day(-28);
 await page.evaluate(([a, b, lang]) => { const s = window.__velaStore.getState(); if (lang === "es") s.setLanguage("es"); s.setCycle({ enabled: true, perspective: "partner", starts: [a, b], ends: {}, days: {} }); }, [s1, s2, LANG]);
 await page.waitForTimeout(500);
+if ((await page.locator('[data-testid="cycle-card"]').getAttribute("data-folded")) === "true") { await page.click('[data-testid="cycle-fold"]'); await page.waitForTimeout(700); }
 const starts = () => page.evaluate(() => { const st = window.__velaStore.getState().journal.settings; return (st.cycleTrackers?.[0] ?? st.cycle).starts.slice(); });
 const before = await starts();
 const startBtn = page.locator('[data-testid="cycle-card"] [data-act="start"]').first();

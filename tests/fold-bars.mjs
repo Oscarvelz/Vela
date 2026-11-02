@@ -125,6 +125,9 @@ const toCard = async () => {
   await page.waitForTimeout(500);
 };
 await toCard();
+ok("card rests folded on arrival", (await card.getAttribute("data-folded")) === "true");
+await page.click('[data-testid="cycle-fold"]');
+await page.waitForTimeout(800);
 const h0 = (await card.boundingBox()).height;
 await card.screenshot({ path: `${OUT}/unfolded-before-night.png` });
 const foldBtn = page.locator('[data-testid="cycle-fold"]');
@@ -146,14 +149,17 @@ const mini = await page.evaluate(() => ({
 ok("summary shows day, phase, forecast", /3/.test(mini.day) && mini.phase === "Period" && mini.line.length > 4, mini);
 ok("summary text not clipped, no h-overflow", mini.clipped === 0 && !mini.overflowX, mini);
 ok("hidden body is inert", mini.bodyInert === true);
-ok("fold saved in localStorage per tracker", await store(() => { const id = window.__velaStore.getState().journal.settings.cycleSelected; const f = JSON.parse(localStorage.getItem("vela-cy-folded") || "{}"); return f[id] === true || Object.values(f).includes(true); }));
+ok("fold is not persisted", await store(() => localStorage.getItem("vela-cy-folded") === null));
 await card.screenshot({ path: `${OUT}/folded-night.png` });
-// Survives a remount (tab away and back).
+// Unfold, tab away and back: it folds itself again.
+await foldBtn.click();
+await page.waitForTimeout(700);
+ok("unfolded before leaving", (await card.getAttribute("data-folded")) === "false");
 await page.click('.ag-tabbar button[data-tab="calendar"]', { force: true }).catch(() => store(() => window.__velaStore.getState().setTab?.("calendar")));
 await page.waitForTimeout(400);
 await page.click('.ag-tabbar button[data-tab="home"]', { force: true }).catch(() => store(() => window.__velaStore.getState().setTab?.("home")));
 await page.waitForTimeout(600);
-ok("still folded after remount", (await page.locator('[data-testid="cycle-card"]').getAttribute("data-folded")) === "true");
+ok("folds again after leaving the tab", (await page.locator('[data-testid="cycle-card"]').getAttribute("data-folded")) === "true");
 await toCard();
 
 // Day mode + Spanish folded shots.
@@ -226,13 +232,13 @@ await store(() => window.__velaStore.getState().setLanguage("es"));
 await page.waitForTimeout(400);
 await card.screenshot({ path: `${OUT}/partner-folded-night-es.png` });
 await store(() => window.__velaStore.getState().setLanguage("en"));
-// Switch back to me: my own fold state was kept (unfolded).
+// Switch back to me: one fold for the card (it is no longer per tracker or saved).
 await page.click('[data-testid="cycle-switch"] button:first-child');
 await page.waitForTimeout(500);
-ok("per-tracker: my card keeps its own state", (await page.locator('[data-testid="cycle-card"]').getAttribute("data-folded")) === "false");
+ok("switching people keeps the card as it was", (await page.locator('[data-testid="cycle-card"]').getAttribute("data-folded")) === "true");
 await page.click('[data-testid="cycle-switch"] button:last-child');
 await page.waitForTimeout(500);
-ok("per-tracker: partner card still folded", (await page.locator('[data-testid="cycle-card"]').getAttribute("data-folded")) === "true");
+ok("switching back keeps it folded", (await page.locator('[data-testid="cycle-card"]').getAttribute("data-folded")) === "true");
 await store(() => window.__velaStore.getState().toggleMode());
 await page.waitForTimeout(400);
 await card.screenshot({ path: `${OUT}/partner-folded-day.png` });

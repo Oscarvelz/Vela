@@ -70,6 +70,7 @@ async function seed(startOffsets) {
 // Six measured cycles (7 starts): lower-chance arcs are allowed.
 await seed([-181, -150, -124, -95, -68, -39, -11]);
 const card = page.locator("#cycle-card");
+if ((await card.getAttribute("data-folded")) === "true") { await page.click('[data-testid="cycle-fold"]'); await page.waitForTimeout(700); }
 await page.addStyleTag({ content: ".ag-tabbar,.ag-header{visibility:hidden!important}" });
 await card.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 16));
 await page.waitForTimeout(900);

@@ -1,5 +1,7 @@
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode, type TransitionEvent } from "react";
-import { Check, ChevronDown, Droplet, NotebookPen, RotateCcw, Settings2, X } from "lucide-react";
+import { Check, ChevronDown, Droplet, NotebookPen, RotateCcw, Settings2, UserPlus, X } from "lucide-react";
+import { AddTracker } from "./cycle-add";
+import { MAX_TRACKERS } from "@/lib/vela/cycle-trackers";
 import {
   cycleMarks,
   cycleSnapshot,
@@ -133,6 +135,8 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
     return () => clearTimeout(id);
   }, [undoStart]);
   const fold = useFold(cycle.id, !inSheet);
+  const [adding, setAdding] = useState(false);
+  const trackerCount = useJournal((s) => s.journal.settings.cycles.length);
   const foldId = useId();
   const today = todayStr();
 
@@ -262,6 +266,18 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
           <p className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.16em] text-dim uppercase">{w("cyTitle")}</p>
         )}
         <RegularityBadge regularity={stats.regularity} open={regInfo} onToggle={() => setRegInfo((open) => !open)} />
+        {!inSheet && trackerCount < MAX_TRACKERS ? (
+          <button
+            type="button"
+            className={cn("grid size-8 shrink-0 place-items-center rounded-full text-dim", adding && "text-accent")}
+            aria-label={t("cyAddPerson")}
+            aria-expanded={adding}
+            onClick={() => setAdding((open) => !open)}
+            data-testid="cycle-add-person"
+          >
+            <UserPlus className="size-4" />
+          </button>
+        ) : null}
         <button
           type="button"
           className={cn("grid size-8 shrink-0 place-items-center rounded-full text-dim", tune && "text-accent")}
@@ -290,6 +306,11 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
           </button>
         ) : null}
       </div>
+      {adding ? (
+        <div className="cy-rise mt-3">
+          <AddTracker startOpen bare onAdded={() => setAdding(false)} onClose={() => setAdding(false)} />
+        </div>
+      ) : null}
       {regInfo ? <RegularityInfo stats={stats} measured={lowChanceReady(cycle).measured} /> : null}
       {fold.enabled ? (
         <>
@@ -310,33 +331,16 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
   );
 }
 
-/* ── Fold: a UI preference per tracker (never diary data) ───────────────── */
-
-const FOLD_KEY = "vela-cy-folded";
-
-function readFolds(): Record<string, boolean> {
-  try {
-    const raw = JSON.parse(localStorage.getItem(FOLD_KEY) || "{}");
-    return raw && typeof raw === "object" ? raw : {};
-  } catch {
-    return {};
-  }
-}
+/* ── Fold: the card rests folded; an unfold lasts until you leave the tab (Oscar, Nov 2) ── */
 
 function useFold(id: string, enabled: boolean) {
-  const [folds, setFolds] = useState(readFolds);
+  // Local state only: Home unmounts on every tab change, so the card is folded again when you come back.
+  const [open, setOpen] = useState(false);
   // "Settled" lets the open body overflow its box (glows, knob halo) once the height animation is done.
   const [settled, setSettled] = useState(true);
-  const folded = enabled && Boolean(folds[id]);
+  const folded = enabled && !open;
   const toggle = () => {
-    const next = { ...readFolds(), [id]: !folded };
-    if (!next[id]) delete next[id];
-    try {
-      localStorage.setItem(FOLD_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
-    setFolds(next);
+    setOpen((value) => !value);
     setSettled(prefersStill());
   };
   const onEnd = (event: TransitionEvent) => {
@@ -344,6 +348,13 @@ function useFold(id: string, enabled: boolean) {
   };
   // Switching trackers is not a fold animation: settle at once.
   useEffect(() => setSettled(true), [id]);
+  useEffect(() => {
+    try {
+      localStorage.removeItem("vela-cy-folded");
+    } catch {
+      /* ignore */
+    }
+  }, []);
   return { enabled, folded, toggle, settled, onEnd };
 }
 
