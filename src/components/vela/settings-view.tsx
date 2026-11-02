@@ -33,7 +33,7 @@ import { cn } from "@/lib/cn";
 import { Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
 import { useCloud } from "@/lib/vela/sync";
-import { CycleTune } from "./cycle-card";
+import { CycleTune, useCycleUndo } from "./cycle-card";
 import { AddTracker } from "./cycle-add";
 import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PassphraseInput } from "./ui";
 
@@ -553,6 +553,10 @@ function TrackerEditor({ tracker, multi, onRemoved }: { tracker: CycleTracker; m
   const removeTracker = useJournal((s) => s.removeTracker);
   const [name, setName] = useState(tracker.partnerName);
   const [confirm, setConfirm] = useState(false);
+  // "Remove this start" asks in its own row, then offers Undo for 8 s (it also drops that period's end).
+  const [askStart, setAskStart] = useState<string | null>(null);
+  const [removedStart, setRemovedStart] = useState("");
+  const undoer = useCycleUndo();
   const setCycle = (partial: Parameters<typeof store>[0]) => store(partial, tracker.id);
   const label = trackerLabel(tracker, t);
   const linkOptions = [
@@ -619,15 +623,42 @@ function TrackerEditor({ tracker, multi, onRemoved }: { tracker: CycleTracker; m
           <p className="text-sm font-semibold">{t("cycleStarts")}</p>
           {tracker.starts.length === 0 ? <p className="text-sm text-dim">{t("cycleNoStarts")}</p> : null}
           <div className="space-y-2">
+            {undoer.pending ? (
+              <div className="cy-rise flex items-center gap-2" data-testid="start-removed">
+                <span className="min-w-0 flex-1 truncate text-sm text-dim">{fill(t("cyStartRemoved"), { d: removedStart })}</span>
+                <Button variant="ghost" className="min-h-10 shrink-0 px-3" onClick={undoer.undo} data-testid="start-undo">
+                  {t("cyUndo")}
+                </Button>
+              </div>
+            ) : null}
             {[...tracker.starts].sort().reverse().map((date) => (
-              <div key={date} className="flex items-center gap-2">
-                <span className="flex-1 text-sm">
+              <div key={date} className="flex items-center gap-2" data-testid="start-row">
+                <span className="min-w-0 flex-1 truncate text-sm">
                   {fmtShort(date, lang)}
                   {tracker.ends[date] ? <span className="text-dim"> – {fmtShort(tracker.ends[date], lang)}</span> : null}
                 </span>
-                <Button variant="ghost" className="min-h-10 px-3" onClick={() => removePeriodStart(date, tracker.id)}>
-                  {t("cycleUnmarkDay")}
-                </Button>
+                {askStart === date ? (
+                  <>
+                    <Button variant="ghost" className="min-h-10 shrink-0 px-3" onClick={() => setAskStart(null)} data-testid="start-remove-no">
+                      {t("cyConfirmNo")}
+                    </Button>
+                    <Button
+                      className="min-h-10 shrink-0 px-3"
+                      onClick={() => {
+                        setAskStart(null);
+                        setRemovedStart(fmtShort(date, lang));
+                        undoer.change(() => removePeriodStart(date, tracker.id), tracker.id);
+                      }}
+                      data-testid="start-remove-yes"
+                    >
+                      {t("cyRemoveYes")}
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="ghost" className="min-h-10 shrink-0 px-3" onClick={() => setAskStart(date)} data-testid="start-remove">
+                    {t("cycleUnmarkDay")}
+                  </Button>
+                )}
               </div>
             ))}
           </div>

@@ -561,9 +561,14 @@ export function libidoByPhase(cycle: CycleSettings, today: string) {
 /** Two starts closer than this can't both be real cycles, so a new start this close moves the old one (Nov 1 2026). */
 export const START_MERGE_DAYS = 14;
 
+/** The existing starts that a new start on `date` would replace (the 14-day merge). Lets the UI warn first. */
+export function startsReplacedBy(cycle: Pick<CycleSettings, "starts">, date: string): string[] {
+  return cycle.starts.filter((item) => item !== date && Math.abs(daysBetween(item, date)) < START_MERGE_DAYS).sort();
+}
+
 export function withStart(cycle: CycleSettings, date: string): CycleSettings {
   const ends = { ...cycle.ends };
-  const near = cycle.starts.filter((item) => item !== date && Math.abs(daysBetween(item, date)) < START_MERGE_DAYS);
+  const near = startsReplacedBy(cycle, date);
   let carried: string | undefined;
   for (const old of near) {
     if (ends[old] && ends[old] >= date) carried = ends[old];

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { PLACES, POSITIONS, PROBLEMS, namedPlace, type Mode, type RatingStyle, type ThemeId, type WeekStart } from "./catalog";
-import { coverDates, coveringEncounter } from "./encounters";
+import { coverDates, coveringEncounter, samePartner } from "./encounters";
 import { MIN_PASSPHRASE, asEnvelope, newVaultKey, open, openWithCandidates, randomBytes, seal, toB64, type Envelope, type VaultKey } from "./vault-crypto";
 import { deleteSync, deleteVault, readUi, readVault, writeUi, writeVault } from "./vault-db";
 import { addDays, nowTime, pad, todayStr } from "./dates";
@@ -458,11 +458,10 @@ function attachOrphans(sessions: Session[], encounters: Encounter[]) {
       (encounter) =>
         encounter.startDate <= session.date &&
         session.date <= encounter.endDate &&
-        (!encounter.partnerName || !session.partnerName || encounter.partnerName === session.partnerName),
+        samePartner(encounter.partnerName, session.partnerName),
     );
     if (cover) {
       session.encounterId = cover.id;
-      if (!cover.partnerName && session.partnerName) cover.partnerName = session.partnerName;
       continue;
     }
     const id = `e${(session.createdAt || Date.now()).toString(36)}${Math.random().toString(36).slice(2, 5)}`;
@@ -483,7 +482,7 @@ function attachOrphans(sessions: Session[], encounters: Encounter[]) {
 }
 
 function ensureCovering(journal: Journal, date: string, partner: string) {
-  const existing = coveringEncounter(journal.encounters, date);
+  const existing = coveringEncounter(journal.encounters, date, partner);
   if (existing) return { encounters: journal.encounters, encounterId: existing.id };
   const id = `e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   return {
@@ -519,20 +518,34 @@ function bindEncounter(journal: Journal, draft: Draft, partner: string) {
   const index = encounters.findIndex((item) => item.id === draft.encounterId);
   if (index < 0) return { encounters, encounterId: "" };
   const current = encounters[index];
-  const span = coverDates([
-    ...chosen,
-    ...journal.sessions.filter((session) => session.encounterId === current.id).map((session) => session.date),
-  ]);
+  const members = journal.sessions.filter((session) => session.encounterId === current.id);
+  // An encounter belongs to one partner (or solo). A session with someone else never joins it;
+  // linkedOrCover then finds or makes the right one. An encounter with no other sessions follows its session.
+  if (!samePartner(current.partnerName, partner) && members.length > 0) return { encounters, encounterId: "" };
+  const span = coverDates([...chosen, ...members.map((session) => session.date)]);
   encounters[index] = {
     ...current,
     title: draft.encounterTitle.trim() || current.title,
-    partnerName: current.partnerName || partner,
+    partnerName: members.length > 0 ? current.partnerName || partner : partner,
     startDate: span.startDate,
     endDate: span.endDate,
     problems: draft.encounterProblems.slice(),
     updatedAt: Date.now(),
   };
   return { encounters, encounterId: current.id };
+}
+
+/** Drop encounters (from `ids`) that no longer hold any session; they get a tombstone so sync agrees. */
+function pruneEmpty(journal: Journal, ids: string[]): Journal {
+  const empty = new Set(
+    ids.filter((id) => id && journal.encounters.some((e) => e.id === id) && !journal.sessions.some((s) => s.encounterId === id)),
+  );
+  if (empty.size === 0) return journal;
+  return {
+    ...journal,
+    encounters: journal.encounters.filter((e) => !empty.has(e.id)),
+    deleted: tombstone(journal, [...empty]),
+  };
 }
 
 function linkedOrCover(journal: Journal, draft: Draft, partner: string, date: string) {
@@ -665,6 +678,7 @@ type Store = {
   removeTracker: (id: string) => void;
   logPeriodStart: (date: string) => void;
   removePeriodStart: (date: string, id?: string) => void;
+  restoreCycleDates: (snap: { id: string; starts: string[]; ends: Record<string, string> }) => void;
   setPeriodEnd: (start: string, end: string | null) => void;
   logCycleDay: (date: string, log: Partial<DayLog> | null) => void;
   /** Date whose cycle day log sheet is open. */
@@ -1234,18 +1248,35 @@ export const useJournal = create<Store>((set, get) => {
     saveEdit: (id, draft) => {
       const journal = get().journal;
       const data = payloadFromDraft(draft, journal.settings.language);
-      const linked = linkedOrCover(
-        { ...journal, sessions: journal.sessions.filter((session) => session.id !== id) },
-        draft,
-        data.partnerName,
-        data.date,
-      );
+      const before = journal.sessions.find((session) => session.id === id);
+      const others = journal.sessions.filter((session) => session.id !== id);
+      let target = draft;
+      const current = draft.encounterId && draft.encounterId !== "new" ? journal.encounters.find((e) => e.id === draft.encounterId) : undefined;
+      if (current) {
+        const spanUntouched =
+          (draft.encounterStart || current.startDate) === current.startDate && (draft.encounterEnd || current.endDate) === current.endDate;
+        const outside = data.date < current.startDate || data.date > current.endDate;
+        const alone = !others.some((session) => session.encounterId === current.id);
+        const partnerMoved = !samePartner(current.partnerName, data.partnerName);
+        if (spanUntouched && alone && partnerMoved && coveringEncounter(journal.encounters, data.date, data.partnerName)) {
+          // Its own encounter would be left empty and the new partner already has one that day: join that one.
+          target = { ...draft, encounterId: "", encounterTitle: "", encounterStart: "", encounterEnd: "", encounterProblems: [] };
+        } else if (spanUntouched && outside) {
+          // The date moved out of its encounter: re-home it if others stay behind, else the encounter follows it.
+          target = others.some((session) => session.encounterId === current.id)
+            ? { ...draft, encounterId: "", encounterTitle: "", encounterStart: "", encounterEnd: "", encounterProblems: [] }
+            : { ...draft, encounterStart: data.date, encounterEnd: data.date };
+        }
+      }
+      const linked = linkedOrCover({ ...journal, sessions: others }, target, data.partnerName, data.date);
       const sessions = journal.sessions.map((session) =>
         session.id === id ? { ...session, ...data, encounterId: linked.encounterId, updatedAt: Date.now() } : session,
       );
       const partners = journal.partners.slice();
       if (data.partnerName && !partners.includes(data.partnerName)) partners.push(data.partnerName);
-      commit({ ...journal, partners, encounters: linked.encounters, sessions: renumber(sessions) });
+      commit(
+        pruneEmpty({ ...journal, partners, encounters: linked.encounters, sessions: renumber(sessions) }, [before?.encounterId ?? ""]),
+      );
     },
     quickLog: () => {
       const journal = get().journal;
@@ -1301,8 +1332,12 @@ export const useJournal = create<Store>((set, get) => {
     },
     deleteSession: (id) => {
       const journal = get().journal;
+      const gone = journal.sessions.find((s) => s.id === id);
       commit(
-        { ...journal, sessions: renumber(journal.sessions.filter((s) => s.id !== id)), deleted: tombstone(journal, [id]) },
+        pruneEmpty(
+          { ...journal, sessions: renumber(journal.sessions.filter((s) => s.id !== id)), deleted: tombstone(journal, [id]) },
+          [gone?.encounterId ?? ""],
+        ),
         { confirmDeleteId: null },
       );
     },
@@ -1337,6 +1372,11 @@ export const useJournal = create<Store>((set, get) => {
     },
     removePeriodStart: (date, id) => {
       patchTracker((cycle) => withoutStart(cycle, date), id);
+    },
+    restoreCycleDates: (snap) => {
+      // Undo: put back exactly the starts and ends the tracker had before the change.
+      if (!get().journal.settings.cycles.some((tracker) => tracker.id === snap.id)) return;
+      patchTracker((cycle) => cleanCycle({ ...cycle, starts: snap.starts.slice(), ends: { ...snap.ends } }), snap.id);
     },
     setPeriodEnd: (start, end) => {
       patchTracker((cycle) => withEnd(cycle, start, end));

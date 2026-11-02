@@ -766,7 +766,8 @@ function EncounterField({
   const start = draft.encounterStart || draft.date;
   const end = draft.encounterEnd || draft.date;
   const [spanMode, setSpanMode] = useState<"night" | "more">(start !== end ? "more" : "night");
-  const cover = coveringEncounter(encounters, draft.date);
+  // Only an encounter with this same partner (or solo with solo) can take this session.
+  const cover = coveringEncounter(encounters, draft.date, draft.newPartner.trim() || draft.partnerName || "");
 
   useEffect(() => {
     if (!composeId || editing) return;
