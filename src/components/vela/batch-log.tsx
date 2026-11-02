@@ -4,7 +4,7 @@ import { parseBatch, type BatchEntry } from "@/lib/vela/batch";
 import { useBatchT } from "@/lib/vela/batch-copy";
 import { NAMED_PLACES, PLACES, POSITIONS, PROBLEMS, knownProblem, placeLabel, positionLabel } from "@/lib/vela/catalog";
 import type { CopyKey } from "@/lib/vela/copy";
-import { fmtDate, fmtDuration, fmtTime } from "@/lib/vela/dates";
+import { fmtDate, fmtDateShort, fmtDuration, fmtTime } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { ratingLabel } from "@/lib/vela/notes";
 import { useJournal } from "@/lib/vela/store";
@@ -43,6 +43,7 @@ const KNOWS = [
 export function BatchLog({ onSaved }: { onSaved: () => void }) {
   const t = useT();
   const b = useBatchT();
+  const lang = useLang();
   const saveBatch = useJournal((s) => s.saveBatch);
   const partners = useJournal((s) => s.journal.partners);
   const settings = useJournal((s) => s.journal.settings);
@@ -250,6 +251,59 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
           </ul>
           {cards.some((card) => card.edited) ? <p className="vb-hint">{b("resetEdits")}</p> : null}
         </>
+      ) : null}
+
+      {kept.length > 0 ? (
+        <section className="vb-recap" data-testid="batch-recap" aria-labelledby="vb-recap-title">
+          <div className="vb-recap-head">
+            <p id="vb-recap-title" className="vb-label">{b("recapTitle")}</p>
+            <p className="vb-recap-total" data-testid="batch-recap-total">
+              {kept.length} {kept.length === 1 ? b("moment") : b("moments")} · {sessionTotal}{" "}
+              {sessionTotal === 1 ? b("sessionWord") : b("sessionsWord")}
+              {cards.length > kept.length ? ` · ${b("recapLeftOut").replace("{n}", String(cards.length - kept.length))}` : ""}
+            </p>
+          </div>
+          <ol className="vb-recap-list">
+            {cards.map((card, index) =>
+              card.skip ? null : (
+                <li key={card.key}>
+                  <button
+                    type="button"
+                    className="vb-recap-row"
+                    data-testid="batch-recap-row"
+                    onClick={() => document.querySelectorAll<HTMLElement>("[data-testid=batch-card]")[index]?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                  >
+                    <span className="vb-recap-num font-display" aria-hidden>
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span className="vb-recap-when">
+                      {fmtDateShort(card.entry.date, lang)}
+                      {card.entry.dateStated ? "" : <em className="vb-recap-q"> {b("recapToday")}</em>}
+                      {card.entry.timeStated ? ` · ${fmtTime(card.entry.time, lang)}` : ""}
+                    </span>
+                    <span className="vb-recap-what">
+                      {[
+                        card.entry.place ? placeLabel(lang, card.entry.place) : "",
+                        card.entry.count > 1 ? `×${card.entry.count}` : "",
+                        card.entry.overall > 0 ? `★${card.entry.overall}` : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </button>
+                </li>
+              ),
+            )}
+          </ol>
+          {batchPartner || kept.every((card) => card.entry.partnerName) ? (
+            <p className="vb-recap-who">
+              {(() => {
+                const names = [...new Set(kept.map((card) => card.entry.partnerName || batchPartner).filter(Boolean))];
+                return b("recapWith").replace("{name}", names.join(", "));
+              })()}
+            </p>
+          ) : null}
+        </section>
       ) : null}
 
       <div className="vb-save-wrap">

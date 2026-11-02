@@ -846,6 +846,51 @@ function cutAtDates(sentence: string, now: Date, state: YearState) {
   return parts.filter(Boolean);
 }
 
+/** "1." "2)" "(3)" "#4" "5 -" at the start of a line: a numbered list item. */
+const LIST_RE = /^\s*(?:\(\s*(\d{1,2})\s*\)|#\s*(\d{1,2})\b[.):\-–—]?|(\d{1,2})\s*[.)\-–—:](?!\d))\s*/;
+
+/**
+ * Splits numbered lists into one line per item. A line that opens with "1." (or "1)" "(1)" "#1") is cut
+ * before "2." "3." … in order; a line that does not open with a marker is only cut when it holds a
+ * whole run "1) … 2) …" (so "rated it 4. 2 rounds" is never read as a list).
+ */
+function splitLists(line: string): { text: string; item: boolean }[] {
+  const lead = line.match(LIST_RE);
+  const markerAt = (n: number, from: number) => {
+    const re = new RegExp(`(?:^|[\\s:;,])(\\(\\s*${n}\\s*\\)|#\\s*${n}\\b[.):\\-–—]?|${n}\\s*[.)](?!\\d))\\s`, "g");
+    re.lastIndex = from;
+    const m = re.exec(line);
+    return m ? m.index + m[0].length - m[1].length - 1 : -1;
+  };
+  let first = -1;
+  let n = 1;
+  if (lead) {
+    first = 0;
+    n = Number(lead[1] ?? lead[2] ?? lead[3]);
+  } else {
+    const one = markerAt(1, 0);
+    if (one < 0 || markerAt(2, one + 2) < 0) return [{ text: line, item: false }];
+    first = one;
+    n = 1;
+  }
+  const cuts = [first];
+  for (let next = n + 1; ; next += 1) {
+    const at = markerAt(next, cuts[cuts.length - 1] + 2);
+    if (at < 0) break;
+    cuts.push(at);
+  }
+  const out: { text: string; item: boolean }[] = [];
+  // Words before the list ("Last week:") lead into the first item rather than standing alone.
+  let preamble = first > 0 ? line.slice(0, first).trim() : "";
+  cuts.forEach((at, i) => {
+    const piece = line.slice(at, cuts[i + 1] ?? line.length).trim().replace(LIST_RE, "").trim();
+    if (!piece) return;
+    out.push({ text: preamble ? `${preamble} ${piece}` : piece, item: true });
+    preamble = "";
+  });
+  return out;
+}
+
 export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {}): BatchEntry[] {
   const rules = buildRules(ctx);
   const state: YearState = { carried: null };
@@ -854,12 +899,20 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
   const lines = source
     .split(/\n+|(?=\b\d+(?:st|nd|rd|th)\s+time\b)|(?=\b\d+\.?\s*(?:ª|º)\s*vez\b)|(?=\b(?:primera|segunda|tercera|cuarta|quinta)\s+vez\b\.)/i)
     .map((line) => line.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .flatMap(splitLists)
+    // A heading line ("Esta semana:") right before a numbered list leads into its first item.
+    .reduce<{ text: string; item: boolean }[]>((out, line) => {
+      const prev = out[out.length - 1];
+      if (prev && !prev.item && line.item && /:\s*$/.test(prev.text)) out[out.length - 1] = { text: `${prev.text} ${line.text}`, item: true };
+      else out.push(line);
+      return out;
+    }, []);
 
   type Draft = { title: string; parts: string[]; date: string | null };
   const drafts: Draft[] = [];
 
-  for (const rawLine of lines) {
+  for (const { text: rawLine, item } of lines) {
     let line = rawLine;
     const titleMatch = line.match(TITLE_RE);
     const title = titleMatch ? titleMatch[0].replace(/[.\s]+$/g, "") : "";
@@ -878,7 +931,7 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
       };
       if (!lineStarted) {
         // A new line opens a new encounter when it carries a date or a title; otherwise it continues the last one.
-        if (anchor || title || !current) startNew();
+        if (anchor || title || item || !current) startNew();
         else {
           current.parts.push(piece);
           lineStarted = true;

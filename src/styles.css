@@ -1508,6 +1508,21 @@ input[type="range"].ag-range::-moz-range-thumb {
 @keyframes vb-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* Save: amber when ready; a quiet, intentional outline while waiting */
+/* Recap before saving: hairline rows, no box (Oscar dislikes stacked frames); every row one line. */
+.vb-recap { margin-top: .4rem; padding-top: .85rem; border-top: 1px solid color-mix(in srgb, var(--ag-accent) 22%, transparent); }
+.vb-recap-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: .75rem; row-gap: .15rem; }
+.vb-recap-head .vb-label { margin: 0; white-space: nowrap; }
+.vb-recap-total { font-size: .78rem; color: var(--ag-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vb-recap-list { list-style: none; margin: .45rem 0 0; padding: 0; }
+.vb-recap-list li + li { border-top: 1px solid color-mix(in srgb, var(--ag-text) 7%, transparent); }
+.vb-recap-row { display: flex; align-items: baseline; gap: .6rem; width: 100%; min-height: 2.5rem; padding: .45rem .1rem;
+  background: none; border: 0; color: var(--ag-text); text-align: left; font-size: .86rem; cursor: pointer; border-radius: .5rem; }
+.vb-recap-row:active { background: color-mix(in srgb, var(--ag-accent) 8%, transparent); }
+.vb-recap-num { flex: none; width: 1.4rem; color: var(--ag-accent); font-size: .82rem; font-variant-numeric: tabular-nums; }
+.vb-recap-when { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vb-recap-q { font-style: italic; color: var(--ag-dim); }
+.vb-recap-what { flex: 1; min-width: 0; text-align: right; color: var(--ag-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vb-recap-who { margin-top: .35rem; font-size: .78rem; color: var(--ag-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vb-save-wrap { display: flex; flex-direction: column; align-items: center; gap: .5rem; margin-top: .15rem; }
 .vb-save { min-height: 3.35rem; border-radius: 1rem; }
 .vb-save.ag-save:disabled { background: transparent; color: color-mix(in srgb, var(--ag-dim) 80%, transparent);

@@ -1,8 +1,8 @@
 /* Vela service worker — the app opens with no internet.
    VERSION and PRECACHE are filled in by scripts/postbuild.mjs on every build. */
-const VERSION = "9112f1142033";
+const VERSION = "25ecf3a6117b";
 const CACHE = `vela-${VERSION}`;
-const PRECACHE = ["/Vela/","/Vela/assets/dist-CTOaXH3b.js","/Vela/assets/index-C7_SURSL.js","/Vela/assets/index-DLLIDIGt.css","/Vela/assets/leaflet-src-v0J-Z-ac.js","/Vela/assets/leaflet-vh-t_kPv.css","/Vela/favicon.svg","/Vela/fonts/fraunces-italic-latin-ext.woff2","/Vela/fonts/fraunces-italic-latin.woff2","/Vela/fonts/fraunces-latin-ext.woff2","/Vela/fonts/fraunces-latin.woff2","/Vela/fonts/outfit-latin-ext.woff2","/Vela/fonts/outfit-latin.woff2","/Vela/icon-180.png","/Vela/icon-192.png","/Vela/icon-512.png","/Vela/index.html","/Vela/manifest.webmanifest"];
+const PRECACHE = ["/Vela/","/Vela/assets/dist-CTOaXH3b.js","/Vela/assets/index-k-liVUbz.js","/Vela/assets/index-tl2TwSoI.css","/Vela/assets/leaflet-src-1FHIb48W.js","/Vela/assets/leaflet-vh-t_kPv.css","/Vela/favicon.svg","/Vela/fonts/fraunces-italic-latin-ext.woff2","/Vela/fonts/fraunces-italic-latin.woff2","/Vela/fonts/fraunces-latin-ext.woff2","/Vela/fonts/fraunces-latin.woff2","/Vela/fonts/outfit-latin-ext.woff2","/Vela/fonts/outfit-latin.woff2","/Vela/icon-180.png","/Vela/icon-192.png","/Vela/icon-512.png","/Vela/index.html","/Vela/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

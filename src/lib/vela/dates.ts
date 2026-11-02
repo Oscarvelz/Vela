@@ -32,6 +32,21 @@ export function localeOf(lang: Lang) {
   return lang === "es" ? "es-ES" : "en-US";
 }
 
+/** "Mon, Oct 26" — the year only when it is not this year. */
+export function fmtDateShort(ds: string, lang: Lang) {
+  try {
+    const d = parseDate(ds);
+    return d.toLocaleDateString(localeOf(lang), {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" as const }),
+    });
+  } catch {
+    return ds;
+  }
+}
+
 export function fmtDate(ds: string, lang: Lang) {
   try {
     return parseDate(ds).toLocaleDateString(localeOf(lang), {
