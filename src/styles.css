@@ -1493,6 +1493,7 @@ input[type="range"].ag-range::-moz-range-thumb {
 .vb-card-kicker { font-size: .66rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--ag-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vb-card-date { margin-top: .15rem; font-size: 1.15rem; line-height: 1.2; }
 .vb-card-meta { margin-top: .15rem; font-size: .82rem; color: var(--ag-dim); }
+.vb-time-none { color: color-mix(in srgb, var(--ag-dim) 78%, transparent); font-style: italic; letter-spacing: .01em; padding-right: .14em; }
 .vb-card-warn { margin-top: .55rem; font-size: .76rem; font-weight: 600; color: var(--vb-star); }
 .vb-card-who { margin-top: .55rem; font-size: .88rem; color: color-mix(in srgb, var(--ag-text) 80%, transparent); }
 .vb-card-src { font-size: .75rem; color: var(--ag-dim); }
@@ -1520,8 +1521,9 @@ input[type="range"].ag-range::-moz-range-thumb {
 .vb-recap-row:active { background: color-mix(in srgb, var(--ag-accent) 8%, transparent); }
 .vb-recap-num { flex: none; width: 1.4rem; color: var(--ag-accent); font-size: .82rem; font-variant-numeric: tabular-nums; }
 .vb-recap-when { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.vb-recap-q { font-style: italic; color: var(--ag-dim); }
+.vb-recap-q { font-style: italic; color: var(--ag-dim); padding-right: .14em; }
 .vb-recap-what { flex: 1; min-width: 0; text-align: right; color: var(--ag-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vb-recap-what.is-tight .vb-recap-place { display: none; }
 .vb-recap-who { margin-top: .35rem; font-size: .78rem; color: var(--ag-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vb-save-wrap { display: flex; flex-direction: column; align-items: center; gap: .5rem; margin-top: .15rem; }
 .vb-save { min-height: 3.35rem; border-radius: 1rem; }

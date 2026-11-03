@@ -57,6 +57,22 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   const nameField = useRef<HTMLInputElement>(null);
+  const recapList = useRef<HTMLOListElement>(null);
+  // Recap rows stay on one line: when a row's right side would be cut, drop its place (the card above still shows it).
+  useLayoutEffect(() => {
+    const list = recapList.current;
+    if (!list) return;
+    const fit = () => {
+      for (const what of list.querySelectorAll<HTMLElement>(".vb-recap-what")) {
+        what.classList.remove("is-tight");
+        if (what.scrollWidth > what.clientWidth + 1 && what.querySelector(".vb-recap-place")) what.classList.add("is-tight");
+      }
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(list);
+    return () => observer.disconnect();
+  });
 
   const parsed = useMemo(
     () =>
@@ -264,7 +280,7 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
               {cards.length > kept.length ? ` · ${b("recapLeftOut").replace("{n}", String(cards.length - kept.length))}` : ""}
             </p>
           </div>
-          <ol className="vb-recap-list">
+          <ol className="vb-recap-list" ref={recapList}>
             {cards.map((card, index) =>
               card.skip ? null : (
                 <li key={card.key}>
@@ -280,17 +296,29 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
                     <span className="vb-recap-when">
                       {card.entry.endDate && card.entry.endDate > card.entry.date ? fmtRange(card.entry.date, card.entry.endDate, lang) : fmtDateShort(card.entry.date, lang)}
                       {card.entry.dateStated ? "" : <em className="vb-recap-q"> {b("recapToday")}</em>}
-                      {card.entry.timeStated ? ` · ${fmtTime(card.entry.time, lang)}` : ""}
+                      {card.entry.timeStated ? (
+                        ` · ${fmtTime(card.entry.time, lang)}`
+                      ) : (
+                        <>
+                          {" · "}
+                          <span className="vb-time-none" data-testid="batch-no-time">{b("noTime")}</span>
+                        </>
+                      )}
                     </span>
                     <span className="vb-recap-what">
-                      {[
-                        card.entry.solo ? t("solo") : card.entry.partnerName || batchPartner,
-                        card.entry.place ? placeLabel(lang, card.entry.place) : "",
-                        card.entry.count > 1 ? `×${card.entry.count}` : "",
-                        card.entry.overall > 0 ? `★${card.entry.overall}` : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
+                      {(() => {
+                        const who = card.entry.solo ? t("solo") : card.entry.partnerName || batchPartner;
+                        const rest = [card.entry.count > 1 ? `×${card.entry.count}` : "", card.entry.overall > 0 ? `★${card.entry.overall}` : ""].filter(Boolean).join(" · ");
+                        const place = card.entry.place ? placeLabel(lang, card.entry.place) : "";
+                        // The place sits in its own span so a tight row (narrow phone, "Sin hora") can drop it instead of cutting words.
+                        return (
+                          <>
+                            {who}
+                            {place ? <span className="vb-recap-place">{who ? " · " : ""}{place}</span> : null}
+                            {rest ? `${who || place ? " · " : ""}${rest}` : ""}
+                          </>
+                        );
+                      })()}
                     </span>
                   </button>
                 </li>
@@ -399,8 +427,7 @@ function EntryCard({
             {entry.endDate && entry.endDate > entry.date ? fmtRange(entry.date, entry.endDate, lang) : fmtDate(entry.date, lang)}
           </p>
           <p className="vb-card-meta">
-            {fmtTime(entry.time, lang)}
-            {entry.timeStated ? "" : ` (${b("assumedTime")})`}
+            {entry.timeStated ? fmtTime(entry.time, lang) : <span className="vb-time-none" data-testid="batch-no-time">{b("noTime")}</span>}
             {" · "}
             {entry.count} {entry.count === 1 ? b("round") : b("rounds")}
             {entry.nextDay ? ` · ${t("throughTomorrow")}` : ""}
