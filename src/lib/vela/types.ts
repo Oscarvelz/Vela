@@ -78,6 +78,8 @@ export type Journal = {
   partnersClearedAt?: number;
   /** Deletion markers (item id → time) so a deleted item is not revived by a merge. */
   deleted?: Record<string, number>;
+  /** One-time data migrations already applied to this journal (e.g. "enc-split-1"). */
+  migrations?: string[];
 };
 
 export type JournalWipe = {

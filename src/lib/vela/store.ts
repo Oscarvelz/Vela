@@ -7,6 +7,7 @@ import { addDays, nowTime, pad, todayStr } from "./dates";
 import type { BatchEntry } from "./batch";
 import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
+import { runMigrations } from "./migrations";
 import type { Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings, TabId } from "./types";
 import type { Lang } from "./copy";
 import { claimGrace, dropGrace, parkKey } from "./grace";
@@ -205,7 +206,11 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
         if (session.encounterId === encounter.id && !namedPlace(session.place)) session.place = spotted;
       }
     }
-    const housed = attachOrphans(sessions, encounters);
+    const encounterCut = Math.max(
+      typeof data.encountersClearedAt === "number" ? data.encountersClearedAt : 0,
+      typeof data.clearedAt === "number" ? data.clearedAt : 0,
+    );
+    const housed = attachOrphans(sessions, encounters, encounterCut);
     return {
       profile,
       settings,
@@ -218,6 +223,7 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       encountersClearedAt: typeof data.encountersClearedAt === "number" ? data.encountersClearedAt : 0,
       partnersClearedAt: typeof data.partnersClearedAt === "number" ? data.partnersClearedAt : 0,
       deleted: cleanDeleted(data.deleted),
+      migrations: Array.isArray(data.migrations) ? data.migrations.filter((m): m is string => typeof m === "string") : [],
     };
   } catch {
     return empty;
@@ -297,6 +303,7 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     encountersClearedAt: Math.max(local.encountersClearedAt ?? 0, remote.encountersClearedAt ?? 0),
     partnersClearedAt: Math.max(local.partnersClearedAt ?? 0, remote.partnersClearedAt ?? 0),
     deleted,
+    migrations: [...new Set([...(local.migrations ?? []), ...(remote.migrations ?? [])])],
     updatedAt: Math.max(local.updatedAt, remote.updatedAt),
   };
 }
@@ -449,7 +456,12 @@ export function blankDraft(): Draft {
   };
 }
 
-function attachOrphans(sessions: Session[], encounters: Encounter[]) {
+/**
+ * Gives every session without a (known) encounter one: the same partner's encounter covering its day, else a
+ * new one. The new id comes from the session id, so two devices housing the same orphan agree; it is created
+ * after any encounters wipe (`cut`), so a sync merge doesn't drop it and bring it back on every unlock.
+ */
+function attachOrphans(sessions: Session[], encounters: Encounter[], cut = 0) {
   const next = encounters.slice();
   const known = new Set(next.map((encounter) => encounter.id));
   for (const session of sessions) {
@@ -464,10 +476,11 @@ function attachOrphans(sessions: Session[], encounters: Encounter[]) {
       session.encounterId = cover.id;
       continue;
     }
-    const id = `e${(session.createdAt || Date.now()).toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    const id = `eo-${session.id}`;
     next.push({
       id,
-      createdAt: session.createdAt || Date.now(),
+      createdAt: Math.max(session.createdAt || 0, cut + 1),
+      updatedAt: Date.now(),
       title: "",
       startDate: session.date,
       endDate: session.date,
@@ -782,6 +795,15 @@ export const useJournal = create<Store>((set, get) => {
     patchSettings({ cycles, cycle: asLegacyCycle(cycles[0]), cycleSelected: selectedId(cycles, settings.cycleSelected) });
   };
 
+  /** After unlock: one-time migrations (split mixed-partner encounters) + empty-encounter tidy, saved if changed. */
+  const migrated = (journal: Journal): Journal => {
+    const result = runMigrations(journal);
+    if (!result.changed) return journal;
+    const next = { ...result.journal, updatedAt: Date.now() };
+    void persist(next);
+    return next;
+  };
+
   /** Opens the journal on disk with `vk` (the parked key). False when that key doesn't open it. */
   const openWith = async (vk: VaultKey, env: Envelope): Promise<boolean> => {
     try {
@@ -791,9 +813,10 @@ export const useJournal = create<Store>((set, get) => {
       unlockedAt = Date.now();
       hiddenAt = 0;
       const language = get().journal.settings.language;
-      const journal = journalFromUnknown(data, language);
-      journal.settings.language = language;
-      if (!journal.profile) journal.profile = { displayName: "", createdAt: Date.now() };
+      const loaded = journalFromUnknown(data, language);
+      loaded.settings.language = language;
+      if (!loaded.profile) loaded.profile = { displayName: "", createdAt: Date.now() };
+      const journal = migrated(loaded);
       rememberUi(journal);
       set({ journal, legacy: readLegacyJournal(), vault: "locked", vaultId: vaultIdMem, unlocked: true, keyParked: true, lastActivity: Date.now(), lockNote: "" });
       markSeen();
@@ -1038,9 +1061,10 @@ export const useJournal = create<Store>((set, get) => {
         unlockedAt = Date.now();
         vaultIdMem = stored.vaultId;
         const language = get().journal.settings.language;
-        const journal = journalFromUnknown(data, language);
-        journal.settings.language = language;
-        if (!journal.profile) journal.profile = { displayName: "", createdAt: Date.now() };
+        const loaded = journalFromUnknown(data, language);
+        loaded.settings.language = language;
+        if (!loaded.profile) loaded.profile = { displayName: "", createdAt: Date.now() };
+        const journal = migrated(loaded);
         rememberUi(journal);
         rememberPass(used);
         set({ journal, unlocked: true, vaultId: vaultIdMem, keyParked: true, passTyped: true, lastActivity: Date.now(), lockNote: "" });

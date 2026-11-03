@@ -1,0 +1,25 @@
+// AUDIT (fake data only): screenshots of the Encounters view for the merge / empty-encounter findings.
+import { launch, newJournal, ok, note, J, tab, iso, SHOTS, fails } from "./audit-lib.mjs";
+const browser = await launch();
+const { page, errors } = await newJournal(browser);
+const E = (o) => ({ title: "", date: iso(0), dateStated: true, time: "20:00", timeStated: true, times: [], place: "Bedroom", count: 1, nextDay: false, notes: "", contraception: [], problems: [], partnerName: "", durationMins: 30, positions: [], intensity: 0, connection: 0, satisfaction: 0, energy: 0, overall: 4, source: "", ...o });
+await page.evaluate((es) => window.__velaStore.getState().saveBatch(es, ""), [E({ partnerName: "Fakeana", count: 2 }), E({ partnerName: "Fakemar", date: iso(-6) })]);
+await page.waitForTimeout(300);
+await page.locator("button:visible").filter({ hasText: /^Fakelu$/ }).first().click(); await page.waitForTimeout(200);
+await page.locator('[data-testid="save-moment"]').click(); await page.waitForTimeout(600);
+await page.locator(".ag-hero-cta").click(); await page.waitForTimeout(400);
+let j = await J(page);
+const mar = j.sessions.find((s) => s.partnerName === "Fakemar");
+await page.evaluate((id) => window.__velaStore.getState().deleteSession(id), mar.id);
+await tab(page, "history");
+await page.locator("button", { hasText: /^Encounters$/ }).click(); await page.waitForTimeout(500);
+await page.addStyleTag({ content: ".ag-header{visibility:hidden!important}" });
+const cards = page.locator("h2", { hasText: /With|Encounter/ });
+note("encounter titles", await cards.allInnerTexts());
+const body = await page.locator("body").innerText();
+note("encounter lines", (body.match(/.*sessions? · \d+ days?.*/g) || []));
+await page.evaluate(() => window.scrollTo(0, 900));
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${SHOTS}/encounters-merged-and-empty.png` });
+ok("no page errors", errors.length === 0, errors);
+await browser.close();

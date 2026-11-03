@@ -1,6 +1,6 @@
 // REGRESSION (fake data only) for audit C1 + M2: an encounter only holds sessions with one partner
 // (solo is its own key). Editing a session's partner/date re-homes it; an emptied encounter is dropped.
-// Existing mixed encounters are left exactly as stored on load (no silent migration).
+// Existing mixed encounters are split once after unlock (migration enc-split-1, see regress-enc-split.mjs).
 // Run: VELA_PORT=8132 /workspace/work/run-vela-test.sh 8132 <build parent> node tests/regress-encounters.mjs
 import { launch, newJournal, ok, J, tab, iso, fails } from "./audit-lib.mjs";
 const browser = await launch();
@@ -93,7 +93,7 @@ ok("no 0-session encounters anywhere", j.encounters.every((e) => members(j, e.id
 await tab(page, "history");
 ok("History shows no '· 0 sessions'", !/· 0 sessions/.test(await page.locator("body").innerText()));
 
-// 9) Existing mixed encounter (made by the old bug) is left exactly as stored after a reload
+// 9) Existing mixed encounter (made by the old bug) is split per partner after the next unlock (enc-split-1)
 await page.evaluate(([d]) => {
   const st = window.__velaStore;
   const jn = st.getState().journal;
@@ -108,7 +108,7 @@ await page.reload(); await page.waitForTimeout(2500);
 if (!(await page.locator(".ag-tabbar").count())) { await page.locator("input[type=password]").first().fill("fake-orbit-lantern-42"); await page.keyboard.press("Enter"); await page.waitForSelector(".ag-tabbar", { timeout: 30000 }); await page.waitForTimeout(800); }
 j = await J(page);
 const mix = j.sessions.filter((s) => s.id.startsWith("slegacy"));
-ok("legacy mixed encounter survives reload untouched", mix.length === 3 && mix.every((s) => s.encounterId === "elegacymix1") && j.encounters.some((e) => e.id === "elegacymix1" && e.partnerName === "Fakeana"), mix.map((s) => s.encounterId));
+ok("legacy mixed encounter is split per partner after unlock", mix.length === 3 && mix.find((s) => s.id === "slegacyA")?.encounterId === "elegacymix1" && new Set(mix.map((s) => s.encounterId)).size === 3 && j.encounters.some((e) => e.id === "elegacymix1" && e.partnerName === "Fakeana"), mix.map((s) => s.encounterId));
 
 ok("no page errors", errors.length === 0, errors);
 await browser.close();
