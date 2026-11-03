@@ -12,11 +12,25 @@
 // O  sign-out keeps the fingerprint (per account) · forget-device asks the passphrase, keeps the fingerprint
 // P  screenshots (lock screen + settings, night/day, en/es)
 import { chromium } from "/workspace/work/browser-test/node_modules/playwright-core/index.mjs";
-import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const URL = process.env.AG_URL || "http://localhost:8132/Vela/";
 const SERVE_DIR = process.env.SERVE_DIR || "/workspace/work/ve/Vela";
-const NEW_BUILD = process.env.NEW_BUILD || "/workspace/work/vela/docs";
+// The build under test. Default: the E2E build already in SERVE_DIR (snapshotted here), never docs/, which is
+// the real build without the test hook. SERVE_DIR is put back exactly as found when the test ends.
+const SNAP = mkdtempSync(join(tmpdir(), "vela-jl-"));
+if (existsSync(SERVE_DIR)) cpSync(SERVE_DIR, join(SNAP, "Vela"), { recursive: true });
+const NEW_BUILD = process.env.NEW_BUILD || join(SNAP, "Vela");
+function restoreServeDir() {
+  if (!existsSync(join(SNAP, "Vela"))) return;
+  rmSync(SERVE_DIR, { recursive: true, force: true });
+  cpSync(join(SNAP, "Vela"), SERVE_DIR, { recursive: true });
+  rmSync(SNAP, { recursive: true, force: true });
+}
+process.on("exit", restoreServeDir);
+for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => process.exit(130));
 const OLD_BUILD = process.env.OLD_BUILD || "/workspace/work/ve-dd94/Vela";
 const SHOTS = process.env.SHOTS || "/workspace/work/vela-journey-shots";
 const ONLY = process.env.ONLY || "";
@@ -159,8 +173,10 @@ async function watchPass(p) {
 const fingerOpens = async (p, before = 0) => (await opensSoon(p)) && (await gets(p)) - before >= 1;
 const sawPass = (p) => p.evaluate(() => Boolean(window.__sawPass || document.querySelector("#unlock-pass")));
 async function openSection(p, en) {
-  if (!(await p.isVisible(`button:has-text("${en}")`))) await p.locator('button[aria-label="Open settings"], button[aria-label="Abrir ajustes"]').first().dispatchEvent("click");
-  const btn = p.locator(`button:has-text("${en}")`).first();
+  // The group header starts with its name. A plain has-text also matches chips elsewhere ("Poca privacidad").
+  const header = () => p.locator("button[aria-expanded]").filter({ hasText: new RegExp(`^\\s*${en.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`) }).first();
+  if (!(await header().isVisible())) await p.locator('button[aria-label="Open settings"], button[aria-label="Abrir ajustes"]').first().dispatchEvent("click");
+  const btn = header();
   await btn.waitFor({ timeout: 10000 });
   if ((await btn.getAttribute("aria-expanded")) !== "true") await btn.click();
   await p.waitForTimeout(350);
@@ -171,6 +187,22 @@ function serve(dir) {
 }
 
 serve(NEW_BUILD);
+if (!readFileSync(`${NEW_BUILD}/assets/${readFileSync(`${NEW_BUILD}/index.html`, "utf8").match(/assets\/(index-[^"]+\.js)/)[1]}`, "utf8").includes("__velaStore")) {
+  console.log(`FAIL  setup — ${NEW_BUILD} is not a VITE_E2E build (no test hook)`);
+  process.exit(1);
+}
+/* The page must come from SERVE_DIR. A leftover server on the same port (from an earlier run) answers
+   instead, and then edits made here (the R service-worker update) never reach the browser. */
+{
+  const marker = `probe-${Date.now()}.txt`;
+  writeFileSync(`${SERVE_DIR}/${marker}`, marker);
+  const got = await fetch(new globalThis.URL(marker, URL)).then((r) => (r.ok ? r.text() : ""), () => "");
+  rmSync(`${SERVE_DIR}/${marker}`, { force: true });
+  if (got !== marker) {
+    console.log(`FAIL  setup — ${URL} is not serving ${SERVE_DIR} (another server already on this port?)`);
+    process.exit(1);
+  }
+}
 
 /* ───────────── L + R + F + S: one device with a fingerprint ───────────── */
 if (RUN("L")) {
@@ -372,7 +404,9 @@ if (RUN("R")) {
   await acceptOffer(p);
   await p.waitForTimeout(500);
   const sw = readFileSync(`${SERVE_DIR}/sw.js`, "utf8");
+  try {
   writeFileSync(`${SERVE_DIR}/sw.js`, sw.replace(/const VERSION = "([^"]+)"/, 'const VERSION = "$1-next"'));
+  ok("R … the edited sw.js is what the browser gets", (await fetch(new globalThis.URL("sw.js", URL)).then((r) => r.text(), () => "")).includes('-next"'));
   await p.evaluate(async () => {
     window.__marker = "still-here";
     const reg = await navigator.serviceWorker.getRegistration();
@@ -395,7 +429,9 @@ if (RUN("R")) {
   ok("R … the update is applied once it locks (reloaded on the lock screen)", (await p.evaluate(() => window.__marker)) !== "still-here");
   ok("R … and the lock screen still asks only for the fingerprint", await opensSoon(p));
   void g;
-  writeFileSync(`${SERVE_DIR}/sw.js`, sw);
+  } finally {
+    writeFileSync(`${SERVE_DIR}/sw.js`, sw);
+  }
   await ctx.close();
 }
 
