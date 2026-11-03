@@ -15,6 +15,7 @@ import { Sparkle } from "./mark";
 import { phaseKey } from "./cycle-card";
 import { SessionCard } from "./session-card";
 import { Card, ConfirmDialog, MenuSelect, RatingIcon, fieldClass } from "./ui";
+import { useBackLayer } from "@/lib/vela/back-stack";
 
 export function HistoryView() {
   const t = useT();
@@ -35,6 +36,13 @@ export function HistoryView() {
   const cycles = useJournal((s) => s.journal.settings.cycles);
   const clearRange = useJournal((s) => s.clearHistRange);
   const [mode, setMode] = useState<"sessions" | "encounters">("sessions");
+  // Back / gesture inside History: a search or partner filter clears first, then Encounters returns to
+  // Sessions (the tab's root); from there back goes Home.
+  useBackLayer(mode === "encounters", () => setMode("sessions"), { tier: 1, name: "history-encounters" });
+  useBackLayer(Boolean(query) || Boolean(partner), () => {
+    setQuery("");
+    setPartner("");
+  }, { tier: 2, name: "history-filter" });
   const list = sessionsSorted(sessions);
   const q = query.trim().toLowerCase();
   const filtered = list.filter(
@@ -295,6 +303,7 @@ function EncounterReport({
   const [showSessions, setShowSessions] = useState(false);
   const [openSwipe, setOpenSwipe] = useState(false);
   const [drag, setDrag] = useState(0);
+  useBackLayer(openSwipe, () => { setOpenSwipe(false); setDrag(0); }, { name: "card-actions" });
   const start = useRef<{ x: number; y: number } | null>(null);
   const dragRef = useRef(0);
   const rows = sessions.filter((session) => session.encounterId === encounter.id);

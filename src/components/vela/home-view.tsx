@@ -12,6 +12,7 @@ import { SessionForm } from "./session-form";
 import { BatchLog } from "./batch-log";
 import { CycleCard } from "./cycle-card";
 import { Button, Card } from "./ui";
+import { useBackLayer } from "@/lib/vela/back-stack";
 
 export function HomeView() {
   const t = useT();
@@ -29,6 +30,15 @@ export function HomeView() {
   const [preset, setPreset] = useState<Draft | undefined>(undefined);
   const customPlaces = useJournal((s) => s.journal.settings.customPlaces);
   const list = sessionsSorted(sessions);
+  // Back / gesture: the open tooltip first, then a Repeat form or Batch closes (what was typed stays, just
+  // hidden). The plain Details form is Home's resting state (open by default), so it is not a back step.
+  useBackLayer(showForm && Boolean(preset), () => {
+    setShowForm(false);
+    setHelp(false);
+    setPreset(undefined);
+  }, { tier: 2, name: "form" });
+  useBackLayer(showBatch, () => setShowBatch(false), { tier: 2, name: "batch" });
+  useBackLayer(help && showForm, () => setHelp(false), { name: "help" });
   const total = list.length;
   const today = new Intl.DateTimeFormat(lang === "es" ? "es" : "en", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
 
@@ -153,6 +163,7 @@ export function HomeView() {
           </div>
           <SessionForm
             key={formKey}
+            live={showForm}
             initial={preset}
             onSave={(draft) => {
               saveNew(draft);
@@ -170,6 +181,7 @@ export function HomeView() {
         </Card>
         <Card className={cn("vb-card-shell relative isolate overflow-hidden px-5 pb-5 pt-6", showBatch ? "" : "hidden")} aria-label={t("batchTitle")}>
           <BatchLog
+            live={showBatch}
             onSaved={() => {
               setShowBatch(false);
               showToast(`${t("batchSave")} ✓`);

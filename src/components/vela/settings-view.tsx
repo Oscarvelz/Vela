@@ -37,11 +37,19 @@ import { useCloud } from "@/lib/vela/sync";
 import { CycleTune, useCycleUndo } from "./cycle-card";
 import { AddTracker } from "./cycle-add";
 import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PassphraseInput } from "./ui";
+import { useBackLayer } from "@/lib/vela/back-stack";
 
 export function SettingsView() {
   const t = useT();
   const open = useJournal((s) => s.sections);
   const toggle = useJournal((s) => s.toggleSection);
+  // Back / gesture: an open section folds first, then Settings closes.
+  const openSection = Object.keys(open).find((id) => open[id]) ?? "";
+  useBackLayer(Boolean(openSection), () => {
+    const now = useJournal.getState().sections;
+    const id = Object.keys(now).find((key) => now[key]);
+    if (id) useJournal.getState().toggleSection(id);
+  }, { tier: 4, name: "settings-section" });
   const displayName = useJournal((s) => s.journal.profile?.displayName ?? "");
   const lockBadge = useLockBadge();
   const partnerCount = useJournal((s) => s.journal.partners.length);
@@ -552,6 +560,8 @@ function TrackerEditor({ tracker, multi, onRemoved }: { tracker: CycleTracker; m
   const [confirm, setConfirm] = useState(false);
   // "Remove this start" asks in its own row, then offers Undo for 8 s (it also drops that period's end).
   const [askStart, setAskStart] = useState<string | null>(null);
+  // Back / gesture: the inline "remove this start?" question closes first.
+  useBackLayer(askStart !== null, () => setAskStart(null), { name: "start-remove-ask" });
   const [removedStart, setRemovedStart] = useState("");
   const undoer = useCycleUndo();
   const setCycle = (partial: Parameters<typeof store>[0]) => store(partial, tracker.id);

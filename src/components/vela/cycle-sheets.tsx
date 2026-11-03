@@ -8,45 +8,11 @@ import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
 import { CycleCard, FLOW_KEY, MOOD_KEY, PeriodDateActions, SYMPTOM_KEY, ToggleChip, stageDot } from "./cycle-card";
 import { Button, fieldClass } from "./ui";
-
-/** Sheets opened on top of each other; only the top one answers Escape. */
-let depth = 0;
-
-/** Back button / Escape close the sheet; closing it by hand removes its history entry. */
-function useSheetBack(onClose: () => void) {
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-  useEffect(() => {
-    depth += 1;
-    const mine = depth;
-    let popped = false;
-    history.pushState({ ...(history.state ?? {}), agSheet: mine }, "");
-    const onPop = () => {
-      const level = Number(history.state?.agSheet ?? 0);
-      if (level < mine && !popped) {
-        popped = true;
-        closeRef.current();
-      }
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || depth !== mine) return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeRef.current();
-    };
-    window.addEventListener("popstate", onPop);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      depth -= 1;
-      window.removeEventListener("popstate", onPop);
-      document.removeEventListener("keydown", onKey);
-      if (!popped && Number(history.state?.agSheet ?? 0) === mine) history.back();
-    };
-  }, []);
-}
+import { useBackLayer } from "@/lib/vela/back-stack";
 
 function Sheet({ label, onClose, children, z = "z-50", testId }: { label: string; onClose: () => void; children: ReactNode; z?: string; testId?: string }) {
-  useSheetBack(onClose);
+  // Back / gesture / Escape close the sheet; its close button removes its history entry (back-stack).
+  useBackLayer(true, onClose, { name: testId ?? "sheet" });
   return (
     <div className={cn("cy-scrim fixed inset-0 flex items-end justify-center bg-black/55 sm:items-center", z)} onClick={onClose}>
       <div

@@ -11,6 +11,7 @@ import { useJournal } from "@/lib/vela/store";
 import { RATING_KEYS } from "@/lib/vela/types";
 import { Button, RatingIcon, Switch, fieldClass, saveBurst } from "./ui";
 import { cn } from "@/lib/cn";
+import { useBackLayer } from "@/lib/vela/back-stack";
 
 const METHODS = [
   ["pullout", "methodPullout"],
@@ -40,7 +41,7 @@ const KNOWS = [
   ["kBubbles", Tag],
 ] as const;
 
-export function BatchLog({ onSaved }: { onSaved: () => void }) {
+export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?: boolean }) {
   const t = useT();
   const b = useBatchT();
   const lang = useLang();
@@ -55,6 +56,10 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
   const [knows, setKnows] = useState(false);
   const [edits, setEdits] = useState<Record<string, Edit>>({});
   const [open, setOpen] = useState<string | null>(null);
+  // Back / gesture: an open Adjust panel, then the "what Vela understands" note, before Batch itself closes
+  // (closing only hides it: the typed text stays).
+  useBackLayer(live && knows, () => setKnows(false), { name: "batch-knows" });
+  useBackLayer(live && open !== null, () => setOpen(null), { name: "batch-adjust" });
   const area = useRef<HTMLTextAreaElement>(null);
   const nameField = useRef<HTMLInputElement>(null);
   const recapList = useRef<HTMLOListElement>(null);

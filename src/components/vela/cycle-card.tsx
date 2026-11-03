@@ -25,6 +25,7 @@ import { useLang, useT } from "@/lib/vela/i18n";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
 import { Button, Card, fieldClass } from "./ui";
+import { useBackLayer } from "@/lib/vela/back-stack";
 import { CycleSky } from "./cycle-sky";
 
 const PHASE_KEY: Record<CyclePhase, CopyKey> = {
@@ -180,6 +181,13 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
   }, [confirm]);
   const fold = useFold(cycle.id, !inSheet);
   const [adding, setAdding] = useState(false);
+  // Back / gesture / Escape: an open prompt or panel on the card closes first ("Follow another cycle",
+  // Adjust, the regularity note, the start/end question, a picked day's actions).
+  useBackLayer(adding, () => setAdding(false), { name: "cycle-add" });
+  useBackLayer(tune, () => setTune(false), { name: "cycle-adjust" });
+  useBackLayer(regInfo, () => setRegInfo(false), { name: "cycle-regularity" });
+  useBackLayer(confirm !== null, () => setConfirm(null), { name: "cycle-confirm" });
+  useBackLayer(picked !== null, () => setPicked(null), { name: "cycle-day-picked" });
   const trackerCount = useJournal((s) => s.journal.settings.cycles.length);
   const switching = useJournal((s) => visibleTrackers(s.journal.settings.cycles).length >= 2);
   // The row also holds the regularity chip and three buttons: with the switcher above naming the person the
@@ -274,7 +282,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
   const folded = fold.folded;
   const body = (
     <>
-      <CycleDial snap={snap} keyLine={keyLine} idle={idle} ask={confirm ? (confirm === "start" && replaceLine(startsReplacedBy(cycle, today), lang, t)) || w(confirm === "start" ? "cyConfirmStartQ" : "cyConfirmEndQ") : undefined} />
+      <CycleDial live={!folded} snap={snap} keyLine={keyLine} idle={idle} ask={confirm ? (confirm === "start" && replaceLine(startsReplacedBy(cycle, today), lang, t)) || w(confirm === "start" ? "cyConfirmStartQ" : "cyConfirmEndQ") : undefined} />
       <WeekStrip
         picked={picked}
         onPick={(ds) => {
@@ -690,7 +698,7 @@ function useKnobSpring(target: number, dragging: boolean, finger: number | null)
   return { angle: state.current.angle, reset: (angle: number) => (state.current = { angle, vel: 0 }) };
 }
 
-export function CycleDial({ snap, keyLine, idle, ask }: { snap: Snap; keyLine: string; idle?: ReactNode; ask?: string }) {
+export function CycleDial({ snap, keyLine, idle, ask, live = true }: { snap: Snap; keyLine: string; idle?: ReactNode; ask?: string; live?: boolean }) {
   const { t, partner } = useCycleWords();
   const lang = useLang();
   const cycle = useJournal(selectActiveCycle);
@@ -759,6 +767,9 @@ export function CycleDial({ snap, keyLine, idle, ask }: { snap: Snap; keyLine: s
   const svgRef = useRef<SVGSVGElement | null>(null);
   const shown = sel ?? todayIndex;
   const scrubbing = sel !== null && sel !== todayIndex;
+  // Back / gesture: the scrub's question first, then "Back to today".
+  useBackLayer(live && scrubbing, () => setSel(null), { name: "cycle-scrub" });
+  useBackLayer(live && scrubbing && scrubAsk !== null, () => setScrubAsk(null), { name: "cycle-scrub-ask" });
   const shownDate = addDays(start, shown);
   // The scrub layer keeps showing its last day while it fades out.
   const lastScrub = useRef(shown);
@@ -1209,6 +1220,7 @@ export function PeriodDateActions({ date, compact = false }: { date: string; com
   const undoer = useCycleUndo();
   // Start/end taps change the forecast (and a start can replace a nearby one), so they ask first.
   const [ask, setAsk] = useState<{ q: string; yes: string; run: () => void } | null>(null);
+  useBackLayer(ask !== null, () => setAsk(null), { name: "period-confirm" });
   useEffect(() => {
     setAsk(null);
   }, [date, cycle.id]);
@@ -1475,6 +1487,7 @@ export function CycleStats() {
   const cycles = useJournal((s) => s.journal.settings.cycles);
   const openPhase = useJournal((s) => s.openHistPhase);
   const [regInfo, setRegInfo] = useState(false);
+  useBackLayer(regInfo, () => setRegInfo(false), { name: "cycle-regularity" });
   if (!cycle.enabled || cycle.starts.length === 0) return null;
   const today = todayStr();
   const snap = cycleSnapshot(cycle, today);

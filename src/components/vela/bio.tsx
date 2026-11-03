@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useBackLayer } from "@/lib/vela/back-stack";
+import { useEffect, useRef, useState } from "react";
 import { Fingerprint, KeyRound, Lock, ShieldCheck } from "lucide-react";
 import "./bio.css";
 import { useJournal } from "@/lib/vela/store";
@@ -71,6 +72,9 @@ export function BioOffer() {
     return () => window.clearTimeout(id);
   }, [vaultId, passTyped]);
 
+  const closeRef = useRef<() => void>(() => undefined);
+  // Back / gesture = "Not now".
+  useBackLayer(offer, () => closeRef.current(), { name: "bio-offer" });
   if (!offer) return null;
   const close = () => {
     markOfferDone();
@@ -79,6 +83,7 @@ export function BioOffer() {
     // Asked once per typed passphrase: "Not now" isn't asked again until the passphrase is typed again.
     useJournal.setState({ passTyped: false });
   };
+  closeRef.current = close;
   return (
     <>
       <div className="vela-bio-sheet-backdrop" onClick={close} aria-hidden />

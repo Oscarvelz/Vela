@@ -6,6 +6,7 @@ import { useJournal } from "@/lib/vela/store";
 import { MAX_TRACKERS, followsPartner } from "@/lib/vela/cycle-trackers";
 import { cn } from "@/lib/cn";
 import { Button, fieldClass } from "./ui";
+import { useBackLayer } from "@/lib/vela/back-stack";
 
 export function AddTracker({ onAdded, startOpen = false, onClose, bare = false }: { onAdded: (id: string) => void; startOpen?: boolean; onClose?: () => void; bare?: boolean }) {
   const t = useT();
@@ -18,6 +19,8 @@ export function AddTracker({ onAdded, startOpen = false, onClose, bare = false }
     setOpenRaw(value);
     if (!value) onClose?.();
   };
+  // In Settings the panel is its own back step; on the cycle card the card's "adding" layer owns it.
+  useBackLayer(open && !onClose, () => setOpen(false), { name: "cycle-add" });
   const [kind, setKind] = useState<"self" | "partner">("partner");
   const [name, setName] = useState("");
   if (cycles.length >= MAX_TRACKERS) return null;

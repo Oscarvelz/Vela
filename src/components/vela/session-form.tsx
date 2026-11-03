@@ -19,6 +19,7 @@ import { cycleMarks } from "@/lib/vela/cycle";
 import { MapAddress } from "./map-address";
 import { RemovePartnerDialog } from "./remove-partner-dialog";
 import { Button, ConfirmDialog, Field, RatingIcon, fieldClass, saveBurst } from "./ui";
+import { useBackLayer } from "@/lib/vela/back-stack";
 
 const METHODS = [
   ["pullout", "methodPullout"],
@@ -48,9 +49,12 @@ export function SessionForm({
   onSave,
   onSaveAll,
   onClose,
+  live = true,
 }: {
   initial?: Draft;
   editing?: boolean;
+  /** False while the form sits hidden on Home: its open pickers then hold no back step. */
+  live?: boolean;
   onSave: (draft: Draft) => void;
   onSaveAll?: (drafts: Draft[]) => void;
   onClose?: () => void;
@@ -87,6 +91,11 @@ export function SessionForm({
   const [ratePulse, setRatePulse] = useState(0);
   const [pinOpen, setPinOpen] = useState(false);
   const [dropPartner, setDropPartner] = useState<string | null>(null);
+  // Back / gesture / Escape close an open picker before the form itself.
+  useBackLayer(live && openDate, () => setOpenDate(false), { name: "date-picker" });
+  useBackLayer(live && openTime, () => setOpenTime(false), { name: "time-picker" });
+  useBackLayer(live && openRate !== null, () => setOpenRate(null), { name: "rating-picker" });
+  useBackLayer(live && pinOpen, () => setPinOpen(false), { name: "partner-pin" });
   const date = useMemo(() => {
     const parsed = draft.date.split("-").map(Number);
     return { y: parsed[0], m: (parsed[1] || 1) - 1 };

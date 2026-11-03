@@ -9,6 +9,7 @@ import type { Session } from "@/lib/vela/types";
 import { RATING_KEYS } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
 import { Button, ConfirmDialog, RatingIcon } from "./ui";
+import { useBackLayer } from "@/lib/vela/back-stack";
 import { PhaseDot } from "./cycle-card";
 
 const METHOD_KEY = {
@@ -39,6 +40,8 @@ export function SessionCard({ session, density = "list" }: { session: Session; d
   const [askRound, setAskRound] = useState(false);
   const [showKin, setShowKin] = useState(false);
   const [drag, setDrag] = useState(0);
+  // Back / gesture: a swiped-open action tray slides shut.
+  useBackLayer(open, () => { setOpen(false); setDrag(0); }, { name: "card-actions" });
   const start = useRef<{ x: number; y: number } | null>(null);
   const dragRef = useRef(0);
   const lastTap = useRef(0);

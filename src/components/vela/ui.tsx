@@ -3,6 +3,7 @@ import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, typ
 import { ChevronDown, Eye, EyeOff, Flame, Heart, Star } from "lucide-react";
 import { useT } from "@/lib/vela/i18n";
 import { cn } from "@/lib/cn";
+import { useBackLayer } from "@/lib/vela/back-stack";
 import type { RatingStyle } from "@/lib/vela/catalog";
 
 const buttonStyles = {
@@ -139,29 +140,8 @@ function ConfirmDialogBody({
   onCancel: () => void;
   children?: ReactNode;
 }) {
-  const cancelRef = useRef(onCancel);
-  cancelRef.current = onCancel;
-  useEffect(() => {
-    let popped = false;
-    history.pushState({ agConfirm: true, agStack: history.state?.agStack }, "");
-    const onPop = () => {
-      popped = true;
-      cancelRef.current();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      cancelRef.current();
-    };
-    window.addEventListener("popstate", onPop);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("popstate", onPop);
-      document.removeEventListener("keydown", onKey);
-      if (!popped && history.state?.agConfirm) history.back();
-    };
-  }, []);
+  // Back / gesture / Escape = Cancel (innermost layer first; see back-stack).
+  useBackLayer(true, onCancel, { name: "confirm" });
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 px-4 pb-6 sm:items-center"
@@ -272,20 +252,11 @@ export function MenuSelect<T extends string | number>({
     const close = (event: PointerEvent) => {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        setOpen(false);
-      }
-    };
     document.addEventListener("pointerdown", close);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", close);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("pointerdown", close);
   }, [open]);
+  // Back / gesture / Escape close the list first.
+  useBackLayer(open, () => setOpen(false), { name: "menu" });
 
   return (
     <div ref={root} className={cn(compact && "relative min-w-0 flex-1")}>

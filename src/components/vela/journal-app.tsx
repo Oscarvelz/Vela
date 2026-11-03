@@ -23,6 +23,7 @@ import { useScrollBars } from "./use-scroll-bars";
 import { CyclePill } from "./cycle-card";
 import { CycleLayers } from "./cycle-sheets";
 import { TabBar } from "./tab-bar";
+import { useBackLayer } from "@/lib/vela/back-stack";
 
 const TABS: { id: TabId; icon: (props: { className?: string }) => ReactNode; label: "navHome" | "navCalendar" | "navHistory" | "navInsights" }[] = [
   { id: "home", icon: HomeIcon, label: "navHome" },
@@ -165,93 +166,45 @@ function Shell() {
   // With the app lock off there is nothing to lock behind (the key stays on the device), so no Lock button.
   const lockable = lockTick >= 0 && appLockOn();
   const shift = useRef(16);
-  const stack = useRef<Array<"settings" | "edit" | "range">>([]);
-  const skip = useRef(false);
-  const seenEdit = useRef<string | null>(null);
-  const seenRange = useRef("");
   const pane = useRef<HTMLDivElement>(null);
   const [headerEl, setHeaderEl] = useState<HTMLElement | null>(null);
   const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
   useScrollBars({ scroller: window, header: headerEl, dock: dockEl });
 
-  useEffect(() => {
-    const closeLayer = (kind: "settings" | "edit" | "range") => {
-      const state = useJournal.getState();
-      if (kind === "edit") state.closeEdit();
-      else if (kind === "settings") state.setSettingsOpen(false);
-      else {
-        state.clearHistRange();
-        state.setTab("insights");
-      }
-    };
-    const onPop = (event: PopStateEvent) => {
-      const landed = Array.isArray(event.state?.agStack) ? (event.state.agStack as Array<"settings" | "edit" | "range">) : [];
-      if (skip.current) {
-        skip.current = false;
-        stack.current = landed;
-        return;
-      }
-      if (landed.length >= stack.current.length) return;
-      const closed = stack.current[stack.current.length - 1];
-      stack.current = landed;
-      if (closed) closeLayer(closed);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (!stack.current.length) return;
-      event.preventDefault();
-      history.back();
-    };
-    window.addEventListener("popstate", onPop);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("popstate", onPop);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (editingId && seenEdit.current !== editingId) {
-      const next = [...stack.current, "edit" as const];
-      stack.current = next;
-      history.pushState({ agStack: next }, "");
-    }
-    seenEdit.current = editingId;
-  }, [editingId]);
-
-  useEffect(() => {
-    const key = histPhase || histFrom || histTo ? `${histPhase}|${histFrom}|${histTo}` : "";
-    if (key && seenRange.current !== key && !stack.current.includes("range")) {
-      const next = [...stack.current, "range" as const];
-      stack.current = next;
-      history.pushState({ agStack: next }, "");
-    }
-    seenRange.current = key;
-  }, [histFrom, histTo, histPhase]);
-
-  function pushLayer(kind: "settings") {
-    const next = [...stack.current, kind];
-    stack.current = next;
-    history.pushState({ agStack: next }, "");
+  // Back / gesture (back-stack): open layers close innermost first; then a range drill-down returns to the
+  // tab it came from, any other tab returns to Home, and on Home back leaves the app.
+  const lastTab = useRef<TabId>(tab);
+  const prevTab = useRef<TabId>(tab);
+  if (prevTab.current !== tab) {
+    lastTab.current = prevTab.current;
+    prevTab.current = tab;
   }
+  const rangeOn = Boolean(histPhase || histFrom || histTo);
+  const rangeFrom = useRef<TabId>("insights");
+  useEffect(() => {
+    if (rangeOn) rangeFrom.current = tab === "history" && lastTab.current !== "history" ? lastTab.current : tab;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeOn]);
+  useBackLayer(tab !== "home", () => {
+    shift.current = -18;
+    useJournal.getState().setTab("home");
+  }, { tier: 0, name: "tab" });
+  useBackLayer(rangeOn, () => {
+    const state = useJournal.getState();
+    state.clearHistRange();
+    shift.current = -18;
+    if (state.tab === "history") state.setTab(rangeFrom.current);
+  }, { tier: 1, name: "range" });
+  useBackLayer(settingsOpen, () => setSettingsOpen(false), { tier: 3, name: "settings" });
+  useBackLayer(Boolean(editingId), () => closeEdit(), { name: "edit" });
 
   function goTab(next: TabId, direction: number) {
     shift.current = direction >= 0 ? 18 : -18;
     const state = useJournal.getState();
-    const top = stack.current[stack.current.length - 1];
-    if (state.editingId) {
-      skip.current = true;
-      state.closeEdit();
-      if (stack.current.length) history.back();
-    } else if (state.settingsOpen) {
-      skip.current = true;
-      state.setSettingsOpen(false);
-      if (stack.current.length) history.back();
-    } else if (top === "range") {
-      skip.current = true;
-      state.clearHistRange();
-      history.back();
-    }
+    // A tab tap closes what is open over the view (their history entries go with them, see back-stack).
+    if (state.editingId) state.closeEdit();
+    if (state.settingsOpen) state.setSettingsOpen(false);
+    if (state.histFrom || state.histTo || state.histPhase) state.clearHistRange();
     setTab(next);
   }
 
@@ -337,15 +290,7 @@ function Shell() {
             <IconButton
               label={t("openSettings")}
               className={cn("ag-hdr-btn", settingsOpen && "is-on")}
-              onClick={() => {
-                if (settingsOpen) {
-                  if (stack.current.length) history.back();
-                  else setSettingsOpen(false);
-                } else {
-                  pushLayer("settings");
-                  setSettingsOpen(true);
-                }
-              }}
+              onClick={() => setSettingsOpen(!settingsOpen)}
             >
               <Settings className="size-5" />
             </IconButton>
@@ -386,11 +331,7 @@ function Shell() {
       {editingId ? (
         <EditSheet
           id={editingId}
-          onClose={() => {
-            skip.current = true;
-            closeEdit();
-            if (stack.current.length) history.back();
-          }}
+          onClose={closeEdit}
         />
       ) : null}
     </div>

@@ -14,6 +14,7 @@ import { cn } from "@/lib/cn";
 import { FlameHalo, Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
 import { Button, ConfirmDialog, fieldClass, filledByBrowser, PassphraseInput } from "./ui";
+import { useBackLayer } from "@/lib/vela/back-stack";
 
 export function AuthScreen() {
   const t = useT();
@@ -28,6 +29,8 @@ export function AuthScreen() {
   const [error, setError] = useState("");
   const [fresh, setFresh] = useState(false);
   const [diag, setDiag] = useState(false);
+  // Back / gesture closes the diagnostics panel; nothing on this screen ever opens the journal.
+  useBackLayer(diag, () => setDiag(false), { name: "lock-diag" });
   const taps = useRef<number[]>([]);
 
   const cloudCopy = vault === "none" && user && remote && !fresh;

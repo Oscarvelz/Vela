@@ -4,9 +4,13 @@ import "./styles.css";
 import { JournalApp } from "@/components/vela/journal-app";
 import { useJournal } from "@/lib/vela/store";
 import { gateAsking } from "@/lib/vela/app-lock";
+import { installBackStack } from "@/lib/vela/back-stack";
 
 // Test-only hook (fake data seeding). Compiled out of the real build: VITE_E2E is never set for docs/.
 if (import.meta.env.VITE_E2E === "1") (window as unknown as { __velaStore: typeof useJournal }).__velaStore = useJournal;
+
+// Android back / browser Back / Escape: one layered stack (see back-stack.ts).
+installBackStack();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
