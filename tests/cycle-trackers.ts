@@ -87,7 +87,11 @@ ok("partner tracker by typed name, any case", trackerForPartner(all, " bea ")?.i
 ok("unknown partner → self tracker", trackerForPartner(all, "Cleo")?.id === "me");
 ok("no partner → self tracker", trackerForPartner(all, "")?.id === "me");
 ok("no self, unknown partner → none", trackerForPartner([ana, bea], "Cleo") === null);
-ok("single tracker applies to everyone (old behaviour)", trackerForPartner([ana], "Cleo")?.id === "ana" && trackerForPartner([ana], "")?.id === "ana");
+ok("only Ana's tracker: Cleo's and solo sessions get no phase (audit M9)", trackerForPartner([ana], "Cleo") === null && trackerForPartner([ana], "") === null);
+ok("only Ana's tracker: Ana's sessions still read against it", trackerForPartner([ana], "ana")?.id === "ana");
+const unnamed = { ...ana, id: "u", partnerLink: "", partnerName: "" };
+ok("sole unnamed partner tracker: any partner session uses it, solo doesn't", trackerForPartner([unnamed], "Cleo")?.id === "u" && trackerForPartner([unnamed], "") === null);
+ok("sole self tracker: solo and partner sessions use it", trackerForPartner([self], "")?.id === "me" && trackerForPartner([self], "Cleo")?.id === "me");
 ok("paused partner tracker → falls to self", trackerForPartner([self, { ...ana, enabled: false }], "Ana")?.id === "me");
 ok("nothing on → none", trackerForPartner([{ ...self, enabled: false }], "Ana") === null);
 const sessions = [

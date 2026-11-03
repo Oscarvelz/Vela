@@ -181,6 +181,10 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
   const fold = useFold(cycle.id, !inSheet);
   const [adding, setAdding] = useState(false);
   const trackerCount = useJournal((s) => s.journal.settings.cycles.length);
+  const switching = useJournal((s) => visibleTrackers(s.journal.settings.cycles).length >= 2);
+  // The row also holds the regularity chip and three buttons: with the switcher above naming the person the
+  // title is just "Cycle"; alone, a partner's card is titled by her name (fits one line at 360 px).
+  const cardTitle = switching ? t("cycleTitle") : cycle.perspective === "partner" && trackerLabel(cycle, t) !== t("cyPartnerUnnamed") ? trackerLabel(cycle, t) : w("cyTitle");
   const foldId = useId();
   const today = todayStr();
 
@@ -303,10 +307,10 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
         {fold.enabled ? (
           // The whole title row folds too; the chevron is the labelled control for assistive tech.
           <button type="button" className="cy-fold-title min-w-0 flex-1 truncate text-left text-xs font-semibold tracking-[0.16em] text-dim uppercase" tabIndex={-1} aria-hidden onClick={fold.toggle} data-testid="cycle-title">
-            {w("cyTitle")}
+            {cardTitle}
           </button>
         ) : (
-          <p className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.16em] text-dim uppercase">{w("cyTitle")}</p>
+          <p className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.16em] text-dim uppercase">{cardTitle}</p>
         )}
         <RegularityBadge regularity={stats.regularity} open={regInfo} onToggle={() => setRegInfo((open) => !open)} />
         {!inSheet && trackerCount < MAX_TRACKERS ? (
@@ -1464,6 +1468,7 @@ function TuneRow({
 
 export function CycleStats() {
   const { t, w, partner } = useCycleWords();
+  const switching = useJournal((s) => visibleTrackers(s.journal.settings.cycles).length >= 2);
   const lang = useLang();
   const cycle = useJournal(selectActiveCycle);
   const sessions = useJournal((s) => s.journal.sessions);
@@ -1494,14 +1499,14 @@ export function CycleStats() {
     <Card className="min-w-0 overflow-hidden" data-testid="cycle-stats">
       <TrackerSwitch className="mb-3" />
       <div className="flex items-center gap-2">
-        <h2 className="min-w-0 flex-1 truncate font-display text-2xl">{w("cyTitle")}</h2>
+        <h2 className="min-w-0 flex-1 truncate font-display text-xl min-[400px]:text-2xl">{switching ? t("cycleTitle") : w("cyTitle")}</h2>
         <RegularityBadge regularity={stats.regularity} open={regInfo} onToggle={() => setRegInfo((open) => !open)} />
       </div>
       {regInfo ? <RegularityInfo stats={stats} measured={lowChanceReady(cycle).measured} /> : null}
       <div className="mt-3 grid grid-cols-3 gap-2">
         <Mini value={`${stats.cycle}`} unit={t("cycleDaysWord")} label={t("cycleAvgLen")} />
         <Mini value={`${stats.period}`} unit={t("cycleDaysWord")} label={t("cyAvgPeriod")} />
-        <Mini value={snap.nextPeriod ? fmtShort(snap.nextPeriod, lang) : "—"} label={t("cycleNextPeriod")} />
+        <Mini value={snap.nextPeriod ? fmtShort(snap.nextPeriod, lang) : "—"} label={t("cyNextTile")} />
       </div>
       <p className="mt-3 text-sm text-dim">
         <span className="font-semibold text-fg">{t("cyRegularity")}:</span> {regularityLine}

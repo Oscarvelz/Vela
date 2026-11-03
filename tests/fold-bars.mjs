@@ -226,7 +226,8 @@ const p = await page.evaluate(() => ({
   title: document.querySelector('[data-testid="cycle-title"]')?.textContent,
   line: document.querySelector('[data-testid="cycle-mini-line"]')?.textContent,
 }));
-ok("partner folded: switcher + late indicator + her title", p.switcher && /Late \+\d+/.test(p.late || "") && /HER|LUNA/i.test(p.title), p);
+// With the switcher naming her, the folded title is just "Cycle" (Nov 2: one line at 360 px).
+ok("partner folded: switcher + late indicator + plain title", p.switcher && /Late \+\d+/.test(p.late || "") && /^cycle$/i.test((p.title || "").trim()), p);
 await card.screenshot({ path: `${OUT}/partner-folded-night.png` });
 await store(() => window.__velaStore.getState().setLanguage("es"));
 await page.waitForTimeout(400);

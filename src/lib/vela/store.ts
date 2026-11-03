@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { PLACES, POSITIONS, PROBLEMS, namedPlace, type Mode, type RatingStyle, type ThemeId, type WeekStart } from "./catalog";
-import { coverDates, coveringEncounter, samePartner } from "./encounters";
+import { coverDates, coveringEncounter, partnerKey, samePartner, spanDays } from "./encounters";
 import { MIN_PASSPHRASE, asEnvelope, newVaultKey, open, openWithCandidates, randomBytes, seal, toB64, type Envelope, type VaultKey } from "./vault-crypto";
 import { deleteSync, deleteVault, readUi, readVault, writeUi, writeVault } from "./vault-db";
 import { addDays, nowTime, pad, todayStr } from "./dates";
@@ -173,14 +173,17 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
         .map(asSession)
         .filter((s): s is Session => Boolean(s)),
     );
-    const partners = Array.isArray(data.partners) ? data.partners.filter((p) => typeof p === "string") : [];
+    const deletedMarks = cleanDeleted(data.deleted);
+    const partners = Array.isArray(data.partners)
+      ? data.partners.filter((p) => typeof p === "string" && !partnerRemoved(p, deletedMarks))
+      : [];
     const partnersClearedAt = Math.max(
       typeof data.partnersClearedAt === "number" ? data.partnersClearedAt : 0,
       typeof data.clearedAt === "number" ? data.clearedAt : 0,
     );
     for (const s of sessions) {
       if (s.createdAt <= partnersClearedAt) continue;
-      if (s.partnerName && !partners.includes(s.partnerName)) partners.push(s.partnerName);
+      if (s.partnerName && !partners.includes(s.partnerName) && !partnerRemoved(s.partnerName, deletedMarks)) partners.push(s.partnerName);
     }
     const profileRaw = data.profile;
     const profile: Profile | null =
@@ -250,6 +253,19 @@ function tombstone(journal: Journal, ids: string[]) {
   return deleted;
 }
 
+/**
+ * A partner removed in Settings stays removed (audit M3): removal writes `partner-:<key>` into `deleted`, a
+ * later re-add (typing the name again, logging with it) writes `partner+:<key>`. The newer one wins, on every
+ * device, because `deleted` merges by max. Sessions keep the name; it is only no longer offered as a partner.
+ */
+const PARTNER_OFF = "partner-:";
+const PARTNER_ON = "partner+:";
+export function partnerRemoved(name: string, deleted: Record<string, number> | undefined) {
+  const key = partnerKey(name);
+  const off = deleted?.[PARTNER_OFF + key] ?? 0;
+  return off > 0 && off > (deleted?.[PARTNER_ON + key] ?? 0);
+}
+
 export function mergeJournals(local: Journal, remote: Journal): Journal {
   const older = local.updatedAt >= remote.updatedAt ? remote : local;
   const newer = older === local ? remote : local;
@@ -285,6 +301,7 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       if (session.partnerName) livePartners.add(session.partnerName);
     }
   }
+  for (const name of [...livePartners]) if (partnerRemoved(name, deleted)) livePartners.delete(name);
   const cycles = mergeTrackerLists(newer.settings.cycles, older.settings.cycles, deleted);
   const settings: Settings = {
     ...newer.settings,
@@ -773,7 +790,15 @@ export const useJournal = create<Store>((set, get) => {
       set({ journal, ...extra });
       return;
     }
-    const next = { ...journal, updatedAt: Date.now() };
+    const prev = get().journal;
+    let next = { ...journal, updatedAt: Date.now() };
+    // A name back in the partner list after it was removed (re-added, or logged with again) is live again.
+    const back = next.partners.filter((name) => !prev.partners.includes(name) && partnerRemoved(name, next.deleted));
+    if (back.length) {
+      const deleted = { ...(next.deleted ?? {}) };
+      for (const name of back) deleted[PARTNER_ON + partnerKey(name)] = next.updatedAt;
+      next = { ...next, deleted };
+    }
     void persist(next);
     set({ journal: next, ...extra });
   };
@@ -1212,7 +1237,8 @@ export const useJournal = create<Store>((set, get) => {
     },
     saveBatch: (entries, partnerName) => {
       const fallback = partnerName.trim();
-      const list = entries.filter((entry) => entry.date && entry.count > 0 && (entry.partnerName?.trim() || fallback));
+      // A solo entry is saved with no partner (never the batch partner); others need a name from the text or the batch.
+      const list = entries.filter((entry) => entry.date && entry.count > 0 && (entry.solo || entry.partnerName?.trim() || fallback));
       if (list.length === 0) return;
       const journal = get().journal;
       const lang = journal.settings.language;
@@ -1221,10 +1247,16 @@ export const useJournal = create<Store>((set, get) => {
       const sessions = journal.sessions.slice();
       const stamp = Date.now();
       list.forEach((entry, index) => {
-        const partner = entry.partnerName?.trim() || fallback;
-        if (!partners.includes(partner)) partners.push(partner);
+        const partner = entry.solo ? "" : entry.partnerName?.trim() || fallback;
+        if (partner && !partners.includes(partner)) partners.push(partner);
         const encounterId = `e${stamp.toString(36)}${index.toString(36)}${Math.random().toString(36).slice(2, 5)}`;
-        const end = entry.nextDay ? addDays(entry.date, 1) : entry.date;
+        const rangeEnd = entry.endDate && entry.endDate > entry.date ? entry.endDate : entry.date;
+        const days = spanDays(entry.date, rangeEnd);
+        const [hourText0, minuteText0] = (entry.time || "21:00").split(":");
+        const startMins0 = (Number(hourText0) || 0) * 60 + (Number(minuteText0) || 0);
+        // Rounds 30 min apart that run past midnight land on the next day (audit L2).
+        const spill = days === 1 && !entry.nextDay && entry.count > 1 && startMins0 + (entry.count - 1) * 30 >= 1440 && !(entry.times?.length >= entry.count);
+        const end = days > 1 ? rangeEnd : entry.nextDay || spill ? addDays(entry.date, 1) : entry.date;
         encounters.push({
           id: encounterId,
           createdAt: stamp + index,
@@ -1246,12 +1278,16 @@ export const useJournal = create<Store>((set, get) => {
         const roundTimes = entry.times?.length >= entry.count ? entry.times : [];
         for (let sessionIndex = 0; sessionIndex < entry.count; sessionIndex += 1) {
           const onNext = entry.nextDay && sessionIndex === entry.count - 1 && entry.count > 1;
-          const mins = (startMins + sessionIndex * 30) % 1440;
+          const raw = startMins + sessionIndex * 30;
+          const mins = raw % 1440;
+          // A range spreads its rounds over its days (one per day when the count matches the days).
+          const dayIndex = days > 1 ? (entry.count === 1 ? 0 : Math.round((sessionIndex * (days - 1)) / (entry.count - 1))) : 0;
+          const date = days > 1 ? addDays(entry.date, Math.min(days - 1, dayIndex)) : onNext ? end : raw >= 1440 && spill ? end : entry.date;
           sessions.push({
             id: newId() + index.toString(36) + sessionIndex.toString(36),
             createdAt: stamp + index * 20 + sessionIndex,
             partnerName: partner,
-            date: onNext ? end : entry.date,
+            date,
             time: roundTimes[sessionIndex] || `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`,
             place: entry.place || "Other",
             durationMins: Math.min(240, Math.max(5, entry.durationMins || 30)),
@@ -1461,7 +1497,12 @@ export const useJournal = create<Store>((set, get) => {
         journal.settings.defaultPartner === name
           ? { ...journal.settings, defaultPartner: "" }
           : journal.settings;
-      commit({ ...journal, settings, partners: journal.partners.filter((p) => p !== name) });
+      commit({
+        ...journal,
+        settings,
+        partners: journal.partners.filter((p) => !samePartner(p, name)),
+        deleted: { ...(journal.deleted ?? {}), [PARTNER_OFF + partnerKey(name)]: Date.now() },
+      });
     },
     addCustom: (kind, value) => {
       const trimmed = value.trim();
@@ -1485,17 +1526,22 @@ export const useJournal = create<Store>((set, get) => {
       if (choice.positions) settings.customPositions = [];
       if (choice.problems) settings.customProblems = [];
       if (choice.partners) settings.defaultPartner = "";
+      // Encounters can't outlive their sessions: a sessions wipe removes every encounter too. An encounters-only
+      // wipe drops names, notes and spans, and regroups the kept sessions right away (one encounter per day and
+      // partner, created after the cut), so what you see now is what you see after the next unlock and on sync.
+      const dropEncounters = choice.sessions || choice.encounters;
       const sessions = choice.sessions
         ? []
-        : journal.sessions.map((session) => (choice.encounters ? { ...session, encounterId: "" } : session));
+        : journal.sessions.map((session) => (choice.encounters ? { ...session, encounterId: "", updatedAt: now } : session));
+      const encounters = choice.sessions ? [] : choice.encounters ? attachOrphans(sessions, [], now) : journal.encounters;
       commit({
         ...journal,
         settings,
         partners: choice.partners ? [] : journal.partners,
         sessions,
-        encounters: choice.encounters ? [] : journal.encounters,
+        encounters,
         sessionsClearedAt: choice.sessions ? now : journal.sessionsClearedAt,
-        encountersClearedAt: choice.encounters ? now : journal.encountersClearedAt,
+        encountersClearedAt: dropEncounters ? now : journal.encountersClearedAt,
         partnersClearedAt: choice.partners ? now : journal.partnersClearedAt,
       });
       set({

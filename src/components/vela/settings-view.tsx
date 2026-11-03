@@ -27,6 +27,7 @@ import { useLang, useT } from "@/lib/vela/i18n";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { MAX_TRACKERS, followsPartner, visibleTrackers, type CycleTracker } from "@/lib/vela/cycle-trackers";
 import { fill, trackerLabel } from "@/lib/vela/cycle-words";
+import { RemovePartnerDialog } from "./remove-partner-dialog";
 import type { CopyKey } from "@/lib/vela/copy";
 import type { JournalWipe } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
@@ -159,7 +160,7 @@ function Accordion({
         <span className="text-accent">{icon}</span>
         <span className="min-w-0 flex-1 font-semibold">{title}</span>
         {badge ? (
-          <span className="max-w-28 truncate rounded-full bg-accent-soft px-2 py-1 text-xs font-semibold text-accent">
+          <span className="max-w-36 truncate rounded-full bg-accent-soft px-2 py-1 text-xs font-semibold text-accent">
             {badge}
           </span>
         ) : null}
@@ -339,12 +340,8 @@ function PartnersSection() {
           {t("add")}
         </Button>
       </div>
-      <ConfirmDialog
-        open={drop !== null}
-        title={t("confirmRemoveQ")}
-        name={drop ?? ""}
-        confirmLabel={t("yesDelete")}
-        cancelLabel={t("keep")}
+      <RemovePartnerDialog
+        name={drop}
         onCancel={() => setDrop(null)}
         onConfirm={() => {
           if (drop) remove(drop);
@@ -793,20 +790,31 @@ function DataSection() {
         onConfirm={() => erase(wipe)}
       >
         <div className="mt-3 divide-y divide-border">
-          {rows.map((row) => (
-            <button
-              key={row.key}
-              type="button"
-              className="flex w-full items-center justify-between gap-3 py-2.5 text-left"
-              onClick={() => setWipe((current) => ({ ...current, [row.key]: !current[row.key] }))}
-            >
-              <span className="text-sm font-semibold">{row.label}</span>
-              <span className={cn("text-xs font-semibold", wipe[row.key] ? "text-danger" : "text-accent")}>
-                {wipe[row.key] ? t("wipeRemove") : t("wipeKeep")}
-              </span>
-            </button>
-          ))}
+          {rows.map((row) => {
+            // Encounters can't outlive their sessions: removing sessions removes encounters too.
+            const forced = row.key === "encounters" && wipe.sessions;
+            const on = wipe[row.key] || forced;
+            return (
+              <button
+                key={row.key}
+                type="button"
+                disabled={forced}
+                aria-pressed={on}
+                data-testid={`wipe-${row.key}`}
+                className={cn("flex w-full items-center justify-between gap-3 py-2.5 text-left", forced && "opacity-60")}
+                onClick={() => setWipe((current) => ({ ...current, [row.key]: !current[row.key] }))}
+              >
+                <span className="text-sm font-semibold">{row.label}</span>
+                <span className={cn("text-xs font-semibold", on ? "text-danger" : "text-accent")}>
+                  {on ? t("wipeRemove") : t("wipeKeep")}
+                </span>
+              </button>
+            );
+          })}
         </div>
+        {wipe.encounters && !wipe.sessions ? (
+          <p className="mt-2 text-xs leading-relaxed text-dim" data-testid="wipe-regroup-note">{t("wipeRegroupNote")}</p>
+        ) : null}
       </ConfirmDialog>
     </div>
   );

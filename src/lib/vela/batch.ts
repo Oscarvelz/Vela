@@ -60,9 +60,15 @@ export type BatchEntry = {
   overall: number;
   /** The original text this entry was read from. */
   source: string;
+  /** Last day of a stated range ("Oct 1-3", "del 1 al 3"); same as `date` otherwise. */
+  endDate: string;
+  /** The text says it was a solo moment (solo, alone, por mi cuenta…): never given the batch partner. */
+  solo: boolean;
 };
 
 export type BatchContext = {
+  /** App language: "es" reads an ambiguous 2/11 as 2 Nov (a Spanish line does too, whatever the app language). */
+  lang?: "en" | "es";
   partners?: string[];
   customPlaces?: string[];
   customPositions?: string[];
@@ -160,7 +166,10 @@ function negatedAt(folded: string, start: number, end: number) {
 
 // ------------------------------------------------------------------ dates & times
 
-type Anchor = Span & { date: string; stated: "explicit" | "relative"; year?: number; yearGiven?: boolean };
+type Anchor = Span & { date: string; stated: "explicit" | "relative"; year?: number; yearGiven?: boolean; to?: string; weak?: boolean };
+
+/** Longest stated range read as one encounter (days). */
+const MAX_RANGE_DAYS = 14;
 
 const MONTH_RE = Object.keys(MONTHS).sort((a, b) => b.length - a.length).join("|");
 const WEEKDAY_ABBR = "mon|monday|tue|tues|tuesday|wed|wednesday|thu|thur|thurs|thursday|fri|friday|sat|saturday|sun|sunday|lun|lunes|mar|martes|mie|miercoles|jue|jueves|vie|viernes|sab|sabado|dom|domingo";
@@ -178,7 +187,31 @@ function validDay(year: number, month: number, day: number) {
   return day <= new Date(year, month, 0).getDate();
 }
 
-type YearState = { carried: number | null };
+type YearState = { carried: number | null; dayFirst?: boolean };
+
+const ES_WORDS = /\b(?:con|ayer|anoche|antier|hoy|veces|vez|noche|semana|finde|despues|fue|fuimos|hicimos|estuvo|muy|pero|cama|sofa|ducha|carro|coche|sin|el dia|la|las|los|del|al|en la|en el|mi|nos|que|y)\b/g;
+const EN_WORDS = /\b(?:with|yesterday|last|night|today|times|twice|once|week|weekend|after|was|we|very|but|bed|couch|shower|car|without|the|and|on|in|at|my|her|his|that)\b/g;
+
+/** Whether a piece of text reads as Spanish (more Spanish function words than English ones). */
+export function looksSpanish(folded: string) {
+  const es = folded.match(ES_WORDS)?.length ?? 0;
+  const en = folded.match(EN_WORDS)?.length ?? 0;
+  return es > en;
+}
+
+/** The most recent past day `day` of a month (today counts): "el 28" on Nov 2 → Oct 28. */
+function recentDay(day: number, now: Date) {
+  let month = now.getMonth() + 1;
+  let year = now.getFullYear();
+  if (day > now.getDate()) {
+    month -= 1;
+    if (month === 0) {
+      month = 12;
+      year -= 1;
+    }
+  }
+  return { month, year };
+}
 
 function settleYear(month: number, day: number, now: Date, state: YearState, given: number | null) {
   if (given) {
@@ -194,7 +227,7 @@ function settleYear(month: number, day: number, now: Date, state: YearState, giv
 
 /** Finds every date mention. Ratings like 8/10 must already be in `blocked`. */
 function findAnchors(folded: string, now: Date, state: YearState, blocked: Span[]): Anchor[] {
-  const found: (Anchor & { month?: number; day?: number; givenYear?: number | null })[] = [];
+  const found: (Anchor & { month?: number; day?: number; givenYear?: number | null; month2?: number; day2?: number })[] = [];
   const push = (a: (typeof found)[number]) => {
     if (freeOf(blocked, a)) found.push(a);
   };
@@ -233,7 +266,7 @@ function findAnchors(folded: string, now: Date, state: YearState, blocked: Span[
       year = fullYear(m[4]);
       if (a > 12 && b <= 12) [day, month] = [a, b];
       else if (b > 12 && a <= 12) [month, day] = [a, b];
-      else if (sep === ".") [day, month] = [a, b];
+      else if (sep === "." || state.dayFirst) [day, month] = [a, b];
       else [month, day] = [a, b];
     }
     push({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length, date: "", stated: "explicit", month, day, givenYear: year });
@@ -245,21 +278,41 @@ function findAnchors(folded: string, now: Date, state: YearState, blocked: Span[
     let month = a;
     let day = b;
     if (a > 12 && b <= 12) [day, month] = [a, b];
+    // Spanish writes day/month: 2/11 = 2 Nov (when both readings are valid).
+    else if (state.dayFirst && b <= 12 && a <= 31) [day, month] = [a, b];
     push({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length, date: "", stated: "explicit", month, day, givenYear: null });
   }
-  // on the 28th / el dia 28
-  for (const m of matches(/\b(?:on the|the|el dia|el)\s+(\d{1,2})(?:st|nd|rd|th)\b|\bel dia (\d{1,2})\b/g, folded)) {
-    const day = Number(m[1] || m[2]);
-    let month = now.getMonth() + 1;
-    let year = now.getFullYear();
-    if (day > now.getDate()) {
-      month -= 1;
-      if (month === 0) {
-        month = 12;
-        year -= 1;
-      }
-    }
+  // on the 28th / el dia 28 / el 28 (the most recent past 28th)
+  for (const m of matches(/\b(?:on the|the|el dia|el)\s+(\d{1,2})(?:st|nd|rd|th)\b|\bel dia (\d{1,2})\b|\bel (\d{1,2})\b(?!\s*(?:de|del|of|veces|vez|times|x|rondas?|rounds?|min|mins|minutos?|horas?|hrs?|h|am|pm|estrellas?|stars?|%)\b)(?![\d/:.,]\d)/g, folded)) {
+    const day = Number(m[1] || m[2] || m[3]);
+    const { month, year } = recentDay(day, now);
     push({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length, date: "", stated: "explicit", month, day, givenYear: year });
+  }
+  // Ranges: "Oct 1-3", "Oct 25 - Oct 26", "Oct 31 to Nov 2", "1-3 de octubre", "del 1 al 3 (de octubre)".
+  const NOT_COUNT = "(?!\\s*(?:veces|vez|times|x\\b|rounds|rondas|min|mins|minutes|minutos|hours?|horas?|hrs?|am|pm|a\\.m|p\\.m)\\b)";
+  const DASH = "\\s*(?:-|–|—|to|thru|through|until|till|hasta|al)\\s*";
+  const ranges: [RegExp, (m: RegExpExecArray) => [number, number, number, number]][] = [
+    [new RegExp(`\\b(${MONTH_RE})\\b\\.?\\s*(\\d{1,2})(?:st|nd|rd|th)?${DASH}(?:(${MONTH_RE})\\b\\.?\\s*)?(\\d{1,2})(?:st|nd|rd|th)?\\b${NOT_COUNT}`, "g"),
+      (m) => [MONTHS[m[1]], Number(m[2]), m[3] ? MONTHS[m[3]] : MONTHS[m[1]], Number(m[4])]],
+    [new RegExp(`\\b(?:del?\\s+|from\\s+(?:the\\s+)?)?(\\d{1,2})(?:st|nd|rd|th)?${DASH}(?:el\\s+|the\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:de\\s+|of\\s+)?(${MONTH_RE})\\b`, "g"),
+      (m) => [MONTHS[m[3]], Number(m[1]), MONTHS[m[3]], Number(m[2])]],
+    [/\bdel\s+(\d{1,2})\s+al\s+(\d{1,2})\b(?!\s*(?:de|of)\b)/g,
+      (m) => { const b = recentDay(Number(m[2]), now); return [b.month, Number(m[1]), b.month, Number(m[2])]; }],
+  ];
+  for (const [re, read] of ranges) {
+    for (const m of matches(re, folded)) {
+      const [m1, d1, m2, d2] = read(m);
+      if (!m1 || !m2) continue;
+      push({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length, date: "", stated: "explicit", month: m1, day: d1, givenYear: null, month2: m2, day2: d2 });
+    }
+  }
+  // the weekend / el finde / este fin de semana → that weekend's Saturday; "last weekend" on a weekend → the one before.
+  for (const m of matches(/\b(?:(last|this past|past|this|the|over the|on the|el|este|ese|del)\s+)?(weekend|finde|fin de semana)(\s+pasado)?\b/g, folded)) {
+    if (!m[1] && !m[3]) continue; // a bare "weekend" ("weekend getaway") isn't a date by itself
+    const day = now.getDay();
+    let back = (day - 6 + 7) % 7; // days since the most recent Saturday (today counts)
+    if ((m[1] === "last" || Boolean(m[3])) && (day === 6 || day === 0)) back += 7;
+    push({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length, date: isoOf(shift(now, -back)), stated: "relative", weak: true });
   }
   const rel = (re: RegExp, days: (m: RegExpExecArray) => number | null) => {
     for (const m of matches(re, folded)) {
@@ -298,14 +351,31 @@ function findAnchors(folded: string, now: Date, state: YearState, blocked: Span[
       const month = item.month ?? 0;
       const day = item.day ?? 0;
       const year = item.givenYear && item.givenYear > 1900 ? item.givenYear : null;
+      if (item.month2) {
+        // A range: both ends valid, in order, under two weeks; the year follows the end day.
+        const m2 = item.month2;
+        const d2 = item.day2 ?? 0;
+        const y2 = settleYear(m2, d2, now, { ...state }, year);
+        const y1 = m2 < month ? y2 - 1 : y2;
+        if (!validDay(y1, month, day) || !validDay(y2, m2, d2)) continue;
+        const from = `${y1}-${pad(month)}-${pad(day)}`;
+        const to = `${y2}-${pad(m2)}-${pad(d2)}`;
+        const days = Math.round((new Date(y2, m2 - 1, d2).getTime() - new Date(y1, month - 1, day).getTime()) / 86_400_000);
+        if (to <= from || days >= MAX_RANGE_DAYS) continue;
+        settleYear(m2, d2, now, state, year);
+        kept.push({ start: item.start, end: item.end, date: from, stated: "explicit", to });
+        end = item.end;
+        continue;
+      }
       const settled = settleYear(month, day, now, state, year);
       if (!validDay(settled, month, day)) continue;
       item.date = `${settled}-${pad(month)}-${pad(day)}`;
     }
-    kept.push({ start: item.start, end: item.end, date: item.date, stated: item.stated });
+    kept.push({ start: item.start, end: item.end, date: item.date, stated: item.stated, weak: item.weak });
     end = item.end;
   }
-  return kept;
+  // "the weekend" only dates a piece that names no other day ("Oct 24, the weekend at the cabin" is Oct 24).
+  return kept.some((a) => !a.weak) ? kept.filter((a) => !a.weak) : kept;
 }
 
 type TimeHit = Span & { time: string; exact: boolean };
@@ -443,7 +513,9 @@ const COUNT_WORDS: [RegExp, number][] = [
   [/\b(?:five times|cinco veces)\b/g, 5],
   [/\b(?:six times|seis veces)\b/g, 6],
 ];
-const AGAIN = /\b(?:round (?:two|2)|second round|another round|one more round|(?:did it|do it|went at it|had sex|made love|fucked|we went) again|again (?:later|after|that night|in the morning)|otra ronda|segunda ronda|lo hicimos (?:otra vez|de nuevo)|otra vez mas tarde|una vez mas)\b/g;
+const AGAIN = /\b(?:round (?:two|2)|second round|another round|one more round|(?:did it|do it|went at it|had sex|made love|fucked|we went) again|again (?:later|after|that night|in the morning|(?:the )?(?:next|following) (?:day|morning|night|afternoon))|otra ronda|segunda ronda|lo hicimos (?:otra vez|de nuevo)|otra vez mas tarde|una vez mas|(?:otra vez|de nuevo) (?:al dia siguiente|el dia siguiente|a la manana siguiente|la manana siguiente|al otro dia|en la manana|por la manana))\b/g;
+/** "again at 1am" / "otra vez a las 2": a second round at a stated time. */
+const AGAIN_AT = /\b(?:again|otra vez|de nuevo)\s+(?:at|around|a las?|como a las?|sobre las?)\s+\d/g;
 
 function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[]; again: boolean } {
   const spans: Span[] = [];
@@ -465,9 +537,15 @@ function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[];
     }
   }
   let again = false;
+  for (const m of matches(AGAIN_AT, folded)) {
+    const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length - 1 };
+    if (!freeOf(blocked, { start: span.start, end: span.start + 5 })) continue;
+    again = true;
+  }
   for (const m of matches(AGAIN, folded)) {
     const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
-    if (!freeOf(blocked, span)) continue;
+    // "again the next morning": the time-of-day word inside is fine, only the start must be free
+    if (!freeOf(blocked, { start: span.start, end: Math.min(span.end, span.start + 5) })) continue;
     spans.push(span);
     again = true;
   }
@@ -606,6 +684,10 @@ function fuzzyHits(folded: string, fuzzy: ReturnType<typeof buildRules>["fuzzy"]
 
 // ------------------------------------------------------------------ partner
 
+/** A solo moment, said in the text. Bare "solo" counts only on its own ("Oct 30 solo"), never "solo una vez"/"solo con". */
+const SOLO_RE = /\b(?:masturbat\w*|masturb\w*|jerk(?:ed|ing)? off|jack(?:ed|ing)? off|by myself|on my own|just me|solo (?:session|moment|time)|me toque|me hice una paja|una paja|por mi cuenta|yo sol[oa]|a solas|solit[oa]|en solitario|momento en solitario)\b|\bsol[oa]\b(?=\s*(?:[,.;:!?)]|$|\b(?:tonight|today|yesterday|last night|this morning|hoy|ayer|anoche|en casa|at home|in bed|en la cama|in the shower|en la ducha)\b))|\balone\b(?=\s*(?:[,.;:!?)]|$|\b(?:at home|in bed|tonight|today|en casa)\b))/;
+const WE_RE = /\b(?:we|us|our|together|nosotros|juntos|lo hicimos|hicimos|fuimos|estuvimos)\b/;
+
 const NAME_STOP = new Set(
   "the a an my her his him our their your me us it this that el la los las un una mi su sus tu nosotros ella el ellos condom condon lube lubricante protection proteccion nothing nada " +
     "music musica love amor pleasure placer wine vino friends amigos everyone todos".split(" "),
@@ -699,7 +781,10 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
   taken.push(...anchors);
   const duration = findDuration(folded, taken);
   if (duration) taken.push(duration);
-  const times = findTimes(folded, [...numeric, ...(duration ? [duration] : []), ...anchors.filter((a) => a.stated === "explicit")]);
+  // "the next morning" says when the last round was, not when the encounter started.
+  const nextPhrases = [...matches(NEXT_DAY, folded)].map((m) => ({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length }));
+  const times = findTimes(folded, [...numeric, ...(duration ? [duration] : []), ...anchors.filter((a) => a.stated === "explicit")])
+    .filter((t) => t.exact || freeOf(nextPhrases, t));
   taken.push(...times);
 
   const bubbleHits = runRules(rules.bubble, folded, taken);
@@ -759,10 +844,16 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
   if (partner) claimed.push(partner);
 
   const firstAnchor = anchors[0];
+  const endDate = firstAnchor?.to ?? firstAnchor?.date ?? isoOf(now);
+  const rangeDays = firstAnchor?.to ? Math.round((new Date(`${firstAnchor.to}T12:00`).getTime() - new Date(`${firstAnchor.date}T12:00`).getTime()) / 86_400_000) + 1 : 1;
+  const solo = !partner && SOLO_RE.test(folded) && !WE_RE.test(folded);
+  const exactTimes = times.filter((t) => t.exact).map((t) => t.time);
+  // A later round at an earlier clock time ("10pm and again at 1am") ran past midnight.
+  const pastMidnight = (count.again || /\b(?:until|till|hasta)\b/.test(folded)) && exactTimes.length >= 2 && exactTimes[exactTimes.length - 1] < exactTimes[0];
   const exact = times.find((t) => t.exact);
   const slot = times.find((t) => !t.exact);
   const time = exact?.time ?? slot?.time ?? "21:00";
-  const baseCount = count.n || 1;
+  const baseCount = count.n || (rangeDays > 1 ? rangeDays : 1);
 
   return {
     title,
@@ -773,7 +864,7 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     times: times.filter((t) => t.exact).map((t) => t.time),
     place: placeHit?.rule.value ?? "",
     count: count.again ? Math.max(baseCount, 2) : baseCount,
-    nextDay: nextSpans.length > 0,
+    nextDay: rangeDays === 1 && (nextSpans.length > 0 || pastMidnight),
     notes: remainder(text, folded, claimed),
     contraception,
     problems,
@@ -783,6 +874,8 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     ...levels,
     overall,
     source: text.trim(),
+    endDate,
+    solo,
   };
 }
 
@@ -841,6 +934,35 @@ function cutAtDates(sentence: string, now: Date, state: YearState) {
     if (piece) parts.push(piece);
     cursor = at;
     current = anchor.date;
+  }
+  parts.push(sentence.slice(cursor).replace(/^\s*(?:,|and\b|y\b|then\b|luego\b)\s*/i, "").trim());
+  return parts.filter(Boolean);
+}
+
+/** Words that head a line with a colon but are not a partner ("Notes: …"). */
+const HEAD_STOP = new Set("notes note notas nota update today hoy ayer yesterday week semana total recap summary resumen esta this last ultima mood ps".split(" "));
+
+/** Cuts "with Ana, then later with Marco" before the second "with <another known partner>" (a clause break must lead it). */
+function cutAtPartners(sentence: string, partners: string[]) {
+  const folded = fold(sentence);
+  const hits: { at: number; key: string }[] = [];
+  for (const name of partners) {
+    const key = fold(name).trim();
+    if (key.length < 2) continue;
+    for (const m of matches(new RegExp(`\\b(?:with|con|w/)\\s+${escapeRe(key)}(?![a-z0-9])`, "g"), folded)) hits.push({ at: m.index ?? 0, key });
+  }
+  hits.sort((a, b) => a.at - b.at);
+  const parts: string[] = [];
+  let cursor = 0;
+  let current = hits[0]?.key;
+  for (const hit of hits.slice(1)) {
+    if (hit.key === current) continue;
+    const lead = folded.slice(cursor, hit.at);
+    const brk = Math.max(lead.lastIndexOf(","), lead.lastIndexOf(" and "), lead.lastIndexOf(" y "), lead.lastIndexOf(" then "), lead.lastIndexOf(" luego "));
+    if (brk <= 0) continue;
+    parts.push(sentence.slice(cursor, cursor + brk).replace(/[,\s]+$/, "").trim());
+    cursor += brk;
+    current = hit.key;
   }
   parts.push(sentence.slice(cursor).replace(/^\s*(?:,|and\b|y\b|then\b|luego\b)\s*/i, "").trim());
   return parts.filter(Boolean);
@@ -909,52 +1031,91 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
       return out;
     }, []);
 
-  type Draft = { title: string; parts: string[]; date: string | null };
+  type Draft = { title: string; parts: string[]; date: string | null; dayFirst: boolean; hint: string; partner: string };
   const drafts: Draft[] = [];
+  const known = ctx.partners ?? [];
+  const partnerOf = (piece: string) => findPartner(piece, fold(piece), known, [])?.name ?? "";
 
   for (const { text: rawLine, item } of lines) {
     let line = rawLine;
+    // Spanish writes day/month (2/11 = 2 Nov): when the app is in Spanish or the line reads as Spanish.
+    state.dayFirst = ctx.lang === "es" || looksSpanish(fold(line));
+    // "Ana: Oct 25 twice, Oct 27 once" — a partner heading applies to every entry on the line.
+    let hint = "";
+    const head = line.match(/^\s*([^\s:][^:\n]{0,30}?)\s*:\s+(?=\S)/);
+    if (head && !findAnchors(fold(head[1]), now, { ...state }, []).length) {
+      const name = known.find((p) => fold(p).trim() === fold(head[1]).trim()) ?? (/^[A-ZÁÉÍÓÚÑ][a-záéíóúñü]{1,20}$/.test(head[1].trim()) && !HEAD_STOP.has(fold(head[1]).trim()) && !MONTHS[fold(head[1]).trim()] && WEEKDAYS[fold(head[1]).trim()] === undefined ? head[1].trim() : "");
+      if (name) {
+        hint = name;
+        line = line.slice(head[0].length);
+      }
+    }
     const titleMatch = line.match(TITLE_RE);
     const title = titleMatch ? titleMatch[0].replace(/[.\s]+$/g, "") : "";
     if (titleMatch) line = line.slice(titleMatch[0].length);
     if (!line.trim() && !title) continue;
-    const pieces = sentences(line).flatMap((s) => cutAtDates(s, now, state));
+    const pieces = sentences(line).flatMap((s) => cutAtDates(s, now, state)).flatMap((s) => cutAtPartners(s, known));
     let lineStarted = false;
     for (const piece of pieces) {
       const folded = fold(piece);
       const blocked = findNumericRatings(folded);
       const anchor = findAnchors(folded, now, { ...state }, blocked)[0] ?? null;
       const current = drafts[drafts.length - 1];
-      const startNew = () => {
-        drafts.push({ title: lineStarted ? "" : title, parts: [piece], date: anchor?.date ?? null });
+      const piecePartner = partnerOf(piece);
+      const startNew = (date: string | null = anchor?.date ?? null) => {
+        drafts.push({ title: lineStarted ? "" : title, parts: [piece], date, dayFirst: Boolean(state.dayFirst), hint, partner: piecePartner });
         lineStarted = true;
       };
+      const join = (draft: Draft) => {
+        draft.parts.push(piece);
+        if (!draft.partner && piecePartner) draft.partner = piecePartner;
+      };
+      // A different partner on the same day is its own encounter ("Oct 25 with Ana. Oct 25 later with Marco").
+      const otherPartner = (draft: Draft | undefined) =>
+        Boolean(draft && draft.partner && piecePartner && fold(draft.partner) !== fold(piecePartner) &&
+          ((anchor && anchor.date === draft.date) || new RegExp(`\\b(?:with|con|w/|y con|and with)\\s+${escapeRe(fold(piecePartner))}`).test(fold(piece))));
       if (!lineStarted) {
         // A new line opens a new encounter when it carries a date or a title; otherwise it continues the last one.
-        if (anchor || title || item || !current) startNew();
+        if (anchor || title || item || !current || hint) startNew();
+        else if (otherPartner(current)) startNew(current.date);
         else {
-          current.parts.push(piece);
+          join(current);
           lineStarted = true;
         }
         continue;
       }
       const open = drafts[drafts.length - 1];
+      if (otherPartner(open)) {
+        startNew(anchor?.date ?? open.date);
+        continue;
+      }
       if (!anchor) {
-        open.parts.push(piece);
+        join(open);
         continue;
       }
       if (!open.date) {
         open.date = anchor.date;
-        open.parts.push(piece);
+        join(open);
         continue;
       }
       if (anchor.date === open.date) {
-        open.parts.push(piece);
+        join(open);
         continue;
       }
       startNew();
     }
   }
 
-  return drafts.map((draft) => readEntry(draft.parts.join(" "), draft.title, now, ctx, state, rules));
+  return drafts.map((draft) => {
+    state.dayFirst = draft.dayFirst;
+    const entry = readEntry(draft.parts.join(" "), draft.title, now, ctx, state, rules);
+    if (!entry.partnerName && !entry.solo && draft.hint) entry.partnerName = draft.hint;
+    // Split off for another partner without repeating the date: same day as the entry it came from.
+    if (!entry.dateStated && draft.date) {
+      entry.date = draft.date;
+      entry.endDate = draft.date;
+      entry.dateStated = true;
+    }
+    return entry;
+  });
 }

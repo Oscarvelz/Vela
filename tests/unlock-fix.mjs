@@ -99,9 +99,9 @@ async function tryUnlock(p, typed) {
   return r;
 }
 async function openPrivacy(p) {
-  if (!(await p.isVisible('button:has-text("Privacy & Security"), button:has-text("Privacidad y seguridad")')))
+  if (!(await p.isVisible('button:has-text("Privacy & Security"), button:has-text("Privacidad")')))
     await p.locator('button[aria-label="Open settings"], button[aria-label="Abrir ajustes"]').first().dispatchEvent("click");
-  const btn = p.locator('button:has-text("Privacy & Security"), button:has-text("Privacidad y seguridad")').first();
+  const btn = p.locator('button:has-text("Privacy & Security"), button:has-text("Privacidad")').first();
   await btn.waitFor({ timeout: 10000 });
   if ((await btn.getAttribute("aria-expanded")) !== "true") await btn.click();
   await p.waitForTimeout(400);

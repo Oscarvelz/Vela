@@ -157,5 +157,30 @@ const t0 = Date.now();
 for (let i = 0; i < 200; i += 1) cycleMarks(c, "2026-01-01", "2026-12-31", addDays(today, i % 30));
 ok("perf 200 year-maps < 1500ms", Date.now() - t0 < 1500, Date.now() - t0);
 
+// 8. The 14-day start merge (audit M1): moves a re-logged start, but never erases a separate period.
+{
+  const base = cleanCycle({ enabled: true, periodDays: 5, cycleDays: 28, lutealDays: 14, fertileDays: 5, starts: [] });
+  const mk = (starts: string[], ends: Record<string, string> = {}) => cleanCycle({ ...base, starts, ends });
+  let m = withStart(mk(["2026-10-01", "2026-10-20"]), "2026-10-23");
+  ok("merge: re-logged 3 days later moves the start", JSON.stringify(m.starts) === JSON.stringify(["2026-10-01", "2026-10-23"]), m.starts);
+  m = withStart(mk(["2026-10-10"], { "2026-10-10": "2026-10-14" }), "2026-10-22");
+  ok("merge (a): closed period (end before the new date) is kept → short cycle", JSON.stringify(m.starts) === JSON.stringify(["2026-10-10", "2026-10-22"]) && m.ends["2026-10-10"] === "2026-10-14", m);
+  m = withStart(mk(["2026-10-10"], { "2026-10-10": "2026-10-14" }), "2026-10-12");
+  ok("merge: a start inside a logged period moves it and keeps the end", JSON.stringify(m.starts) === JSON.stringify(["2026-10-12"]) && m.ends["2026-10-12"] === "2026-10-14", m);
+  m = withStart(mk(["2026-10-20"], { "2026-10-20": "2026-10-24" }), "2026-10-10");
+  ok("merge (b): backfilling never deletes a newer start that has its own end", JSON.stringify(m.starts) === JSON.stringify(["2026-10-10", "2026-10-20"]) && m.ends["2026-10-20"] === "2026-10-24", m);
+  m = withStart(mk(["2026-10-20"]), "2026-10-17");
+  ok("merge: an open newer start moves back when corrected earlier", JSON.stringify(m.starts) === JSON.stringify(["2026-10-17"]), m.starts);
+  m = withStart(mk(["2026-10-05", "2026-10-15"]), "2026-10-10");
+  ok("merge (c): one tap never removes two starts", m.starts.length === 2 && m.starts.includes("2026-10-10"), m.starts);
+  m = withStart(mk(["2026-10-05", "2026-10-16"]), "2026-10-14");
+  ok("merge (c): the nearest one is replaced", JSON.stringify(m.starts) === JSON.stringify(["2026-10-05", "2026-10-14"]), m.starts);
+  m = withStart(mk(["2026-09-01", "2026-09-29", "2026-10-01"]), "2026-10-15");
+  ok("merge (d): exactly 14 days later is kept", m.starts.includes("2026-10-01") && m.starts.includes("2026-10-15"), m.starts);
+  ok("merge (d): …and that 14-day gap counts in stats and past cycles", cycleStats(m).gaps.includes(14) && pastCycles(m).some((r) => r.start === "2026-10-01" && r.length === 14), { gaps: cycleStats(m).gaps, past: pastCycles(m) });
+  m = withStart(mk(["2026-10-10"]), "2026-10-10");
+  ok("merge: same day again changes nothing", JSON.stringify(m.starts) === JSON.stringify(["2026-10-10"]));
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
 process.exit(fails ? 1 : 0);

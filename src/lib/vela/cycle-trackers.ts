@@ -131,9 +131,10 @@ export function followsPartner(tracker: CycleTracker, partnerName: string) {
  * Which tracker gives a session its phase. Only switched-on trackers count.
  *  1. A partner tracker that follows the session's partner.
  *  2. Otherwise the user's own (self) tracker: their own cycle applies to any session, whoever it was with.
- *  3. Otherwise, when exactly one tracker is on, that one (the single-tracker behaviour before trackers
- *     existed: one cycle colours every session).
- *  4. Otherwise none: the session has no phase (2+ partner trackers, none of them this partner's).
+ *  3. Otherwise, when exactly one tracker is on and it is a partner's cycle with no name or link, that one
+ *     for any session with a partner (it can't tell whose it is). Never for a solo session, and never when
+ *     the only tracker is named for a different partner (audit M9, Nov 2 2026).
+ *  4. Otherwise none: the session has no phase.
  */
 export function trackerForPartner(trackers: CycleTracker[], partnerName: string): CycleTracker | null {
   const live = visibleTrackers(trackers);
@@ -142,7 +143,9 @@ export function trackerForPartner(trackers: CycleTracker[], partnerName: string)
   if (own) return own;
   const self = live.find((tracker) => tracker.perspective === "self");
   if (self) return self;
-  return live.length === 1 ? live[0] : null;
+  const sole = live.length === 1 ? live[0] : null;
+  if (sole && partnerName.trim() && sole.perspective === "partner" && !trackerName(sole)) return sole;
+  return null;
 }
 
 type Dated = { date: string; partnerName?: string };

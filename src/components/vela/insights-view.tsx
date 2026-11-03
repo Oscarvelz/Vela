@@ -63,6 +63,8 @@ export function InsightsView() {
   const buckets = timeBuckets(list);
   const bucketNames = [t("bucketLateNight"), t("bucketMorning"), t("bucketAfternoon"), t("bucketEvening")];
   const bestBucket = buckets.indexOf(Math.max(...buckets));
+  // The heading names the slot in a word so it fits one line; the meters below keep the hours.
+  const bucketShort = [t("bucketShortLateNight"), t("bucketShortMorning"), t("bucketShortAfternoon"), t("bucketShortEvening")];
   const monthMap = new Map<string, number>();
   for (const session of list) {
     const key = session.date.slice(0, 7);
@@ -82,8 +84,8 @@ export function InsightsView() {
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
       <div className="grid grid-cols-3 gap-2">
-        <Stat value={String(total)} label={t("sessionsWord")} />
-        <Stat value={String(encounters.length)} label={t("encountersWord")} />
+        <Stat value={String(total)} label={t(total === 1 ? "sessionWord" : "sessionsWord")} />
+        <Stat value={String(encounters.length)} label={t(encounters.length === 1 ? "encounterWord" : "encountersWord")} />
         <Stat value={String(streak)} label={t("streakShort")} />
       </div>
       <div className="grid grid-cols-3 gap-2">
@@ -91,22 +93,28 @@ export function InsightsView() {
           label={t("periodWeek")}
           sessions={weekCount(list, weekStart)}
           encounters={encountersNow.week}
-          sessionLabel={t("sessionsWord")}
-          encounterLabel={t("encountersWord")}
+          sessionLabel={t("sessionWord")}
+          sessionsLabel={t("sessionsWord")}
+          encounterLabel={t("encounterWord")}
+          encountersLabel={t("encountersWord")}
         />
         <Period
           label={t("periodMonth")}
           sessions={monthCount(list)}
           encounters={encountersNow.month}
-          sessionLabel={t("sessionsWord")}
-          encounterLabel={t("encountersWord")}
+          sessionLabel={t("sessionWord")}
+          sessionsLabel={t("sessionsWord")}
+          encounterLabel={t("encounterWord")}
+          encountersLabel={t("encountersWord")}
         />
         <Period
           label={t("periodYear")}
           sessions={yearCount(list)}
           encounters={encountersNow.year}
-          sessionLabel={t("sessionsWord")}
-          encounterLabel={t("encountersWord")}
+          sessionLabel={t("sessionWord")}
+          sessionsLabel={t("sessionsWord")}
+          encounterLabel={t("encounterWord")}
+          encountersLabel={t("encountersWord")}
         />
       </div>
       <CycleStats />
@@ -170,14 +178,14 @@ export function InsightsView() {
           >
             {t("howOftenA")} {activeDays} {t("activeDaysW")} ·{" "}
             <b className="text-fg">{activeDays ? (total / activeDays).toFixed(1) : "0"}</b> {t("aboutPerDay")} ·{" "}
-            <b className="text-accent">{encounters.length}</b> {t("encountersWord")}. {t("averagesLive")}
+            <b className="text-accent">{encounters.length}</b> {t(encounters.length === 1 ? "encounterWord" : "encountersWord")}. {t("averagesLive")}
           </button>
         ) : null}
       </Card>
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="min-w-0 overflow-hidden">
           <h2 className="font-display text-2xl leading-tight break-words">
-            {t("mostActiveWeekday")}: <span className="text-accent">{wdName}</span>
+            {t("busiestDay")}: <span className="text-accent">{wdName}</span>
           </h2>
           <div className="mt-3">
             {weekdays.map((count, index) => (
@@ -192,7 +200,7 @@ export function InsightsView() {
         </Card>
         <Card className="min-w-0 overflow-hidden">
           <h2 className="font-display text-2xl leading-tight break-words">
-            {t("timeOfDay")}: <span className="text-accent">{bucketNames[bestBucket]}</span>
+            {t("timeOfDayShort")}: <span className="text-accent">{bucketShort[bestBucket]}</span>
           </h2>
           <div className="mt-3">
             {bucketNames.map((name, index) => (
@@ -307,21 +315,25 @@ function Period({
   sessions,
   encounters,
   sessionLabel,
+  sessionsLabel,
   encounterLabel,
+  encountersLabel,
 }: {
   label: string;
   sessions: number;
   encounters: number;
   sessionLabel: string;
+  sessionsLabel: string;
   encounterLabel: string;
+  encountersLabel: string;
 }) {
   return (
     <div className="min-w-0 rounded-[14px] border border-border bg-surface-2 px-2 py-3 text-center">
       <p className="truncate text-[11px] font-semibold text-dim">{label}</p>
       <p className="mt-2 font-display text-2xl tabular-nums leading-none">{sessions}</p>
-      <p className="mt-1 truncate text-[10px] text-dim">{sessionLabel}</p>
+      <p className="mt-1 truncate text-[10px] text-dim">{sessions === 1 ? sessionLabel : sessionsLabel}</p>
       <p className="mt-2 font-display text-2xl tabular-nums leading-none text-accent">{encounters}</p>
-      <p className="mt-1 truncate text-[10px] text-dim">{encounterLabel}</p>
+      <p className="mt-1 truncate text-[10px] text-dim">{encounters === 1 ? encounterLabel : encountersLabel}</p>
     </div>
   );
 }

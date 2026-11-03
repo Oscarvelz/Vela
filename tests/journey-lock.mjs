@@ -582,7 +582,7 @@ if (RUN("P")) for (const [mode, lang] of [["night", "en"], ["day", "en"], ["nigh
     s.setLanguage(l);
   }, [mode, lang]);
   await p.waitForFunction(() => !window.__velaStore.getState().toast, null, { timeout: 6000 }).catch(() => undefined);
-  await openSection(p, lang === "es" ? "Privacidad y seguridad" : "Privacy & Security");
+  await openSection(p, lang === "es" ? "Privacidad" : "Privacy & Security");
   const card = p.locator('[data-testid="app-lock"]');
   await card.evaluate((e) => e.scrollIntoView({ block: "start" }));
   await p.evaluate(() => window.scrollBy(0, -90));

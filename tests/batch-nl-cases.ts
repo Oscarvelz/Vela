@@ -309,6 +309,23 @@ export const CASES: Case[] = [
     text: "Oct 8 around 10, missionary, not bad. Round two an hour later, doggy.",
     expect: [{ date: "2026-10-08", time: "22:00", count: 2, positions: ["Missionary", "Doggy"], overall: 3 }],
   },
+  // Audit M5–M8 (Nov 2 2026): bare Spanish day, d/m in Spanish, weekends, ranges, second partner, again, solo.
+  { name: "es el 28", text: "el 28 con Ana", expect: [{ date: "2026-10-28", partner: "Ana" }] },
+  { name: "es d/m 5/9", text: "5/9 con Ana dos veces", expect: [{ date: "2026-09-05", partner: "Ana", count: 2 }] },
+  { name: "en m/d 5/9 stays", text: "5/9 with Ana", expect: [{ date: "2026-05-09", partner: "Ana" }] },
+  { name: "es el finde", text: "el finde con Marco", expect: [{ date: "2026-10-31", partner: "Marco" }] },
+  { name: "en last weekend (on a Saturday = the one before)", text: "last weekend with Ana", expect: [{ date: "2026-10-24", partner: "Ana" }] },
+  { name: "es este fin de semana", text: "este fin de semana con Sofía", expect: [{ date: "2026-10-31", partner: "Sofía" }] },
+  { name: "es del 1 al 3", text: "del 1 al 3 con Ana", expect: [{ date: "2026-10-01", partner: "Ana", count: 3 }] },
+  { name: "en Oct 1-3", text: "Oct 1-3 with Marco", expect: [{ date: "2026-10-01", partner: "Marco", count: 3 }] },
+  { name: "en range with total", text: "Oct 25 - Oct 26 getaway with Ana, 5 times total", expect: [{ date: "2026-10-25", partner: "Ana", count: 5, notesHas: ["getaway"] }] },
+  { name: "en second partner same day", text: "Oct 25 with Ana. Oct 25 later with Marco", expect: [{ date: "2026-10-25", partner: "Ana" }, { date: "2026-10-25", partner: "Marco", notesHas: ["later"] }] },
+  { name: "en partner headings", text: "Ana: Oct 25 twice, Oct 27 once\nMarco: Oct 28 3 times", expect: [{ date: "2026-10-25", partner: "Ana", count: 2 }, { date: "2026-10-27", partner: "Ana" }, { date: "2026-10-28", partner: "Marco", count: 3 }] },
+  { name: "en again at 1am", text: "Oct 29 with Ana at 10pm and again at 1am", expect: [{ date: "2026-10-29", partner: "Ana", time: "22:00", count: 2, nextDay: true }] },
+  { name: "en again the next morning", text: "Oct 28 with Marco, again the next morning", expect: [{ date: "2026-10-28", partner: "Marco", count: 2, nextDay: true }] },
+  { name: "es otra vez al dia siguiente", text: "anoche con Sofía y otra vez a la mañana siguiente", expect: [{ date: "2026-10-30", partner: "Sofía", count: 2, nextDay: true }] },
+  { name: "en solo item gets no partner", text: "#1 Oct 29 with Ana\n#2 Oct 30 solo", expect: [{ date: "2026-10-29", partner: "Ana" }, { date: "2026-10-30", partner: "" }] },
+  { name: "es solo una vez is not solo", text: "solo una vez con Ana ayer", expect: [{ date: "2026-10-30", partner: "Ana" }] },
 ];
 
 // Held-out set: written after the reader was tuned on CASES, to measure how it

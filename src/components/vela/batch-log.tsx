@@ -4,7 +4,7 @@ import { parseBatch, type BatchEntry } from "@/lib/vela/batch";
 import { useBatchT } from "@/lib/vela/batch-copy";
 import { NAMED_PLACES, PLACES, POSITIONS, PROBLEMS, knownProblem, placeLabel, positionLabel } from "@/lib/vela/catalog";
 import type { CopyKey } from "@/lib/vela/copy";
-import { fmtDate, fmtDateShort, fmtDuration, fmtTime } from "@/lib/vela/dates";
+import { fmtDate, fmtDateShort, fmtDuration, fmtRange, fmtTime } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { ratingLabel } from "@/lib/vela/notes";
 import { useJournal } from "@/lib/vela/store";
@@ -61,12 +61,13 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
   const parsed = useMemo(
     () =>
       parseBatch(text, new Date(), {
+        lang,
         partners,
         customPlaces: settings.customPlaces,
         customPositions: settings.customPositions,
         customProblems: settings.customProblems,
       }),
-    [text, partners, settings.customPlaces, settings.customPositions, settings.customProblems],
+    [text, lang, partners, settings.customPlaces, settings.customPositions, settings.customProblems],
   );
   const cards = parsed.map((entry, index) => {
     const key = keyOf(entry, index);
@@ -75,7 +76,7 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
   });
   const batchPartner = typed.trim() || picked.trim();
   const kept = cards.filter((card) => !card.skip);
-  const missingPartner = kept.some((card) => !card.entry.partnerName && !batchPartner);
+  const missingPartner = kept.some((card) => !card.entry.partnerName && !card.entry.solo && !batchPartner);
   const sessionTotal = kept.reduce((sum, card) => sum + card.entry.count, 0);
   const showName = naming || partners.length === 0 || typed.length > 0;
   const blocked = kept.length === 0 || missingPartner;
@@ -277,12 +278,13 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
                       {String(index + 1).padStart(2, "0")}
                     </span>
                     <span className="vb-recap-when">
-                      {fmtDateShort(card.entry.date, lang)}
+                      {card.entry.endDate && card.entry.endDate > card.entry.date ? fmtRange(card.entry.date, card.entry.endDate, lang) : fmtDateShort(card.entry.date, lang)}
                       {card.entry.dateStated ? "" : <em className="vb-recap-q"> {b("recapToday")}</em>}
                       {card.entry.timeStated ? ` · ${fmtTime(card.entry.time, lang)}` : ""}
                     </span>
                     <span className="vb-recap-what">
                       {[
+                        card.entry.solo ? t("solo") : card.entry.partnerName || batchPartner,
                         card.entry.place ? placeLabel(lang, card.entry.place) : "",
                         card.entry.count > 1 ? `×${card.entry.count}` : "",
                         card.entry.overall > 0 ? `★${card.entry.overall}` : "",
@@ -295,10 +297,10 @@ export function BatchLog({ onSaved }: { onSaved: () => void }) {
               ),
             )}
           </ol>
-          {batchPartner || kept.every((card) => card.entry.partnerName) ? (
+          {batchPartner || kept.every((card) => card.entry.partnerName || card.entry.solo) ? (
             <p className="vb-recap-who">
               {(() => {
-                const names = [...new Set(kept.map((card) => card.entry.partnerName || batchPartner).filter(Boolean))];
+                const names = [...new Set(kept.map((card) => (card.entry.solo ? t("solo") : card.entry.partnerName || batchPartner)).filter(Boolean))];
                 return b("recapWith").replace("{name}", names.join(", "));
               })()}
             </p>
@@ -368,7 +370,7 @@ function EntryCard({
   const b = useBatchT();
   const lang = useLang();
   const ratingStyle = useJournal((s) => s.journal.settings.ratingStyle);
-  const partner = entry.partnerName || batchPartner;
+  const partner = entry.solo ? t("solo") : entry.partnerName || batchPartner;
   const methodName = (id: string) => {
     const row = METHODS.find((item) => item[0] === id);
     return row ? t(row[1]) : id;
@@ -393,7 +395,9 @@ function EntryCard({
         </span>
         <div className="min-w-0 flex-1">
           <p className="vb-card-kicker">{entry.title || `${b("entryN")} ${index + 1}`}</p>
-          <p className="vb-card-date font-display">{fmtDate(entry.date, lang)}</p>
+          <p className="vb-card-date font-display">
+            {entry.endDate && entry.endDate > entry.date ? fmtRange(entry.date, entry.endDate, lang) : fmtDate(entry.date, lang)}
+          </p>
           <p className="vb-card-meta">
             {fmtTime(entry.time, lang)}
             {entry.timeStated ? "" : ` (${b("assumedTime")})`}
@@ -407,7 +411,7 @@ function EntryCard({
       <p className="vb-card-who">
         {t("withWhom")}{" "}
         <span className="font-semibold text-fg">{partner || b("noPartner")}</span>
-        {partner ? <span className="vb-card-src"> · {entry.partnerName ? b("partnerFromText") : b("partnerFallback")}</span> : null}
+        {partner && !entry.solo ? <span className="vb-card-src"> · {entry.partnerName ? b("partnerFromText") : b("partnerFallback")}</span> : null}
       </p>
 
       {skip ? (
@@ -491,7 +495,7 @@ function EntryEditor({ entry, onChange }: { entry: BatchEntry; onChange: (change
             type="date"
             className={cn(fieldClass, "px-3 py-2 text-sm")}
             value={entry.date}
-            onChange={(event) => event.target.value && onChange({ date: event.target.value, dateStated: true })}
+            onChange={(event) => event.target.value && onChange({ date: event.target.value, endDate: event.target.value, dateStated: true })}
           />
         </label>
         <label className="block">
@@ -524,15 +528,18 @@ function EntryEditor({ entry, onChange }: { entry: BatchEntry; onChange: (change
 
       <Group title={b("pickPartner")}>
         {partners.map((name) => (
-          <Chip key={name} on={entry.partnerName === name} onClick={() => onChange({ partnerName: entry.partnerName === name ? "" : name })}>
+          <Chip key={name} on={!entry.solo && entry.partnerName === name} onClick={() => onChange({ partnerName: entry.partnerName === name && !entry.solo ? "" : name, solo: false })}>
             {name}
           </Chip>
         ))}
         {entry.partnerName && !partners.includes(entry.partnerName) ? (
-          <Chip on onClick={() => onChange({ partnerName: "" })}>
+          <Chip on={!entry.solo} onClick={() => onChange({ partnerName: "" })}>
             {entry.partnerName}
           </Chip>
         ) : null}
+        <Chip on={Boolean(entry.solo)} onClick={() => onChange({ solo: !entry.solo, partnerName: entry.solo ? entry.partnerName : "" })}>
+          {t("solo")}
+        </Chip>
       </Group>
 
       <Group title={t("place")}>

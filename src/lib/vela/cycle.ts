@@ -158,7 +158,7 @@ function gapsOf(starts: string[]) {
   const gaps: number[] = [];
   for (let index = 1; index < starts.length; index += 1) {
     const gap = daysBetween(starts[index - 1], starts[index]);
-    if (gap >= 15 && gap <= 60) gaps.push(gap);
+    if (gap >= START_MERGE_DAYS && gap <= 60) gaps.push(gap);
   }
   return gaps.slice(-6);
 }
@@ -208,7 +208,7 @@ export function pastCycles(cycle: CycleSettings, limit = 6) {
   for (let index = 1; index < starts.length; index += 1) {
     const start = starts[index - 1];
     const length = daysBetween(start, starts[index]);
-    if (length < 15 || length > 60) continue;
+    if (length < START_MERGE_DAYS || length > 60) continue;
     const end = cycle.ends[start];
     rows.push({
       start,
@@ -558,12 +558,31 @@ export function libidoByPhase(cycle: CycleSettings, today: string) {
 
 /* ── Mutations (pure; the store wraps them) ─────────────────────────────── */
 
-/** Two starts closer than this can't both be real cycles, so a new start this close moves the old one (Nov 1 2026). */
+/**
+ * Two starts closer than this are usually one period logged twice, so a new start this close MOVES the old one
+ * (Nov 1 2026: a wrong start re-logged 3 days later should move it). It is also the shortest gap counted as a
+ * cycle in stats and past cycles, so a start kept exactly 14 days later always counts.
+ */
 export const START_MERGE_DAYS = 14;
 
-/** The existing starts that a new start on `date` would replace (the 14-day merge). Lets the UI warn first. */
-export function startsReplacedBy(cycle: Pick<CycleSettings, "starts">, date: string): string[] {
-  return cycle.starts.filter((item) => item !== date && Math.abs(daysBetween(item, date)) < START_MERGE_DAYS).sort();
+/**
+ * The existing start (at most one) that a new start on `date` would replace. Lets the UI warn first.
+ * - Only a start within 14 days, the nearest one (a tie goes to the earlier start: the re-logged-later case).
+ * - Never one whose period already has a logged end before `date`: that is a separate period, so the new
+ *   start begins a new (short) cycle instead.
+ * - Never a newer start that has its own logged end (backfilling history must not erase a real period).
+ */
+export function startsReplacedBy(cycle: Pick<CycleSettings, "starts" | "ends">, date: string): string[] {
+  if (cycle.starts.includes(date)) return [];
+  const ends = cycle.ends ?? {};
+  const candidates = cycle.starts.filter((item) => {
+    if (Math.abs(daysBetween(item, date)) >= START_MERGE_DAYS) return false;
+    const end = ends[item];
+    if (item < date) return !end || end >= date;
+    return !end;
+  });
+  candidates.sort((a, b) => Math.abs(daysBetween(a, date)) - Math.abs(daysBetween(b, date)) || a.localeCompare(b));
+  return candidates.slice(0, 1);
 }
 
 export function withStart(cycle: CycleSettings, date: string): CycleSettings {

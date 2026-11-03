@@ -64,6 +64,16 @@ export function fmtShort(ds: string, lang: Lang) {
   return parseDate(ds).toLocaleDateString(localeOf(lang), { month: "short", day: "numeric" });
 }
 
+/** A short day range: "Oct 25–26" / "24–25 oct", "Oct 31–Nov 2" / "31 oct–2 nov". */
+export function fmtRange(from: string, to: string, lang: Lang) {
+  if (from.slice(0, 7) === to.slice(0, 7)) {
+    const a = Number(from.slice(8));
+    const b = Number(to.slice(8));
+    return lang === "es" ? `${a}–${fmtShort(to, lang)}` : `${fmtShort(from, lang)}–${b}`;
+  }
+  return `${fmtShort(from, lang)}–${fmtShort(to, lang)}`;
+}
+
 export function fmtTime(tm: string, lang: Lang) {
   const [hs, ms] = (tm || "21:00").split(":");
   let h = Number(hs);

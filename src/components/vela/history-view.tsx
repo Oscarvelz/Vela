@@ -98,7 +98,7 @@ export function HistoryView() {
           onChange={setPartner}
           options={[
             { value: "", label: t("all") },
-            ...partners.map((name) => ({ value: name, label: name })),
+            ...filterNames(partners, sessions).map((name) => ({ value: name, label: name })),
           ]}
         />
         <div className="flex shrink-0 gap-1 rounded-xl border border-border bg-black/15 p-1" role="group" aria-label={t("historyGrid")}>
@@ -464,4 +464,17 @@ function EncounterReport({
       </article>
     </div>
   );
+}
+
+/** Partner filter: names on file first, then names that only live on sessions (e.g. a removed partner). */
+function filterNames(partners: string[], sessions: { partnerName: string }[]) {
+  const seen = new Set(partners.map((name) => name.trim().toLocaleLowerCase()));
+  const out = partners.slice();
+  for (const session of sessions) {
+    const key = session.partnerName.trim().toLocaleLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(session.partnerName.trim());
+  }
+  return out;
 }

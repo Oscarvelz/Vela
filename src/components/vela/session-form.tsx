@@ -17,6 +17,7 @@ import { MonthDays } from "./month-days";
 import { SessionPhaseChip } from "./cycle-card";
 import { cycleMarks } from "@/lib/vela/cycle";
 import { MapAddress } from "./map-address";
+import { RemovePartnerDialog } from "./remove-partner-dialog";
 import { Button, ConfirmDialog, Field, RatingIcon, fieldClass, saveBurst } from "./ui";
 
 const METHODS = [
@@ -346,12 +347,8 @@ export function SessionForm({
           aria-label={t("addNewPartnerAria")}
           onChange={(event) => patch({ newPartner: event.target.value, partnerName: "" })}
         />
-        <ConfirmDialog
-          open={dropPartner !== null}
-          title={t("confirmRemoveQ")}
-          name={dropPartner ?? ""}
-          confirmLabel={t("yesDelete")}
-          cancelLabel={t("keep")}
+        <RemovePartnerDialog
+          name={dropPartner}
           onCancel={() => setDropPartner(null)}
           onConfirm={() => {
             if (!dropPartner) return;

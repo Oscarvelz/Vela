@@ -86,7 +86,9 @@ await card.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + 
 await page.waitForTimeout(900);
 const dialLuna = await page.locator(".cy-dial").getAttribute("aria-valuetext");
 const title = await card.locator('[data-testid=cycle-title], p.uppercase').first().innerText();
-ok("new tracker is shown: Luna's title", /luna/i.test(title), title);
+// With two trackers the switcher names the person, so the card title is just "Cycle" (fits one line at 360 px).
+const activeName = await sw.locator('button[aria-pressed="true"]').innerText();
+ok("new tracker is shown: Luna selected, plain title", /luna/i.test(activeName) && /^(cycle|ciclo)$/i.test(title.trim()), [activeName, title]);
 await card.screenshot({ path: `${OUT}/${tag}-card-luna.png` });
 await page.evaluate(() => scrollTo(0, 0));
 const pill = await page.locator('[data-testid="cycle-pill"]').innerText();
