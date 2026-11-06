@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Firmament night: the lock screen's ground (every fresh launch opens on it), the PWA background_color and the
+         icon's sky. -->
+    <color name="vela_night">#0D1636</color>
+    <color name="ic_bg">#0D1636</color>
+</resources>

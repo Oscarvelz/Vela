@@ -1,0 +1,69 @@
+# Vela for Android (WebView app, package com.oscarvelz.vela). Runs only on the `main` branch when android/ changes
+# (or by hand); it only builds the APK and never changes docs/ (GitHub Pages).
+# The signing key is NOT in this public repo. If the repository secrets VELA_KS_B64 (base64 of the PKCS12 keystore)
+# and VELA_KS_PASS exist, the APK is signed here and published as release android-<versionCode> with Vela.apk.
+# Without them the job uploads an unsigned APK artifact (vela-unsigned-N); it is signed privately with the same key and
+# pushed to the orphan branch `android-signed` (Vela.apk + VERSION=N), whose own workflow publishes release android-N.
+# versionCode = android/version.txt. Every update must be signed with that one key or Android refuses it.
+name: Vela for Android
+on:
+  push:
+    branches: [main]
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: vela-android
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.9' }
+      - name: Version
+        run: echo "N=$(tr -dc '0-9' < android/version.txt)" >> "$GITHUB_ENV"
+      - name: Signing key (only if the secrets exist)
+        env:
+          KS_B64: ${{ secrets.VELA_KS_B64 }}
+          KS_PASS: ${{ secrets.VELA_KS_PASS }}
+        run: |
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/vela.p12"
+            echo "VELA_KS_FILE=$RUNNER_TEMP/vela.p12" >> "$GITHUB_ENV"
+            echo "SIGNED=1" >> "$GITHUB_ENV"
+          else
+            echo "SIGNED=0" >> "$GITHUB_ENV"
+          fi
+      - name: Build
+        working-directory: android
+        run: gradle assembleRelease --no-daemon --stacktrace
+        env:
+          VELA_KS_PASS: ${{ secrets.VELA_KS_PASS }}
+      - name: Collect
+        run: |
+          ls -la android/app/build/outputs/apk/release/
+          if [ "$SIGNED" = "1" ]; then cp android/app/build/outputs/apk/release/app-release.apk Vela.apk
+          else cp android/app/build/outputs/apk/release/app-release-unsigned.apk Vela-unsigned.apk; fi
+          rm -f "$RUNNER_TEMP/vela.p12"
+      - name: Unsigned APK (signed privately afterwards)
+        if: env.SIGNED != '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vela-unsigned-${{ env.N }}
+          path: Vela-unsigned.apk
+          retention-days: 14
+      - name: Release
+        if: env.SIGNED == '1'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-${{ env.N }}
+          target_commitish: ${{ github.sha }}
+          name: Vela para Android ${{ env.N }}
+          body: Instala Vela.apk en el teléfono. La app abre https://oscarvelz.github.io/Vela/ con su propio almacenamiento; entra con tu cuenta y escribe tu frase una vez para traer tu diario cifrado.
+          files: Vela.apk
+          make_latest: 'true'
