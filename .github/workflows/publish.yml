@@ -1,0 +1,28 @@
+# Publishes the privately signed Vela for Android APK in this branch as GitHub release android-<VERSION> (asset Vela.apk).
+# This orphan branch only holds the latest signed APK (public by nature: it carries the certificate, never the key).
+# It never touches `main` (GitHub Pages).
+name: Vela for Android (publish signed APK)
+on:
+  push:
+    branches: [android-signed]
+    paths: ['Vela.apk', 'VERSION']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        run: |
+          echo "N=$(tr -dc '0-9' < VERSION)" >> "$GITHUB_ENV"
+          sha256sum Vela.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-${{ env.N }}
+          target_commitish: ${{ github.sha }}
+          name: Vela para Android ${{ env.N }}
+          body_path: NOTES.md
+          files: Vela.apk
+          make_latest: 'true'
