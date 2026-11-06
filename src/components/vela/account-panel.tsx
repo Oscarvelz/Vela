@@ -7,10 +7,14 @@ import { useJournal } from "@/lib/vela/store";
 import { adoptRemotePassphrase, signOut, syncNow, useCloud } from "@/lib/vela/sync";
 import { Button, ConfirmDialog, fieldClass, PassphraseInput, PasswordInput } from "./ui";
 import { useBioT } from "@/lib/vela/bio-copy";
+import { inAndroidApp } from "@/lib/vela/native";
 
 function appUrl() {
   return `${location.origin}${import.meta.env.BASE_URL}`;
 }
+
+/** Vela for Android: the sign-in link comes back to the app (vela://auth, opened by the app), not to Chrome. */
+const APP_AUTH_URL = "vela://auth";
 
 export function AccountPanel() {
   const t = useT();
@@ -195,8 +199,15 @@ export function AccountPanel() {
     try {
       const sb = await getClient();
       if (!sb) throw new Error("offline");
-      const { error: err } = await sb.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: appUrl() } });
+      const app = inAndroidApp();
+      const { error: err } = await sb.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: app ? APP_AUTH_URL : appUrl() } });
       if (err) setError(err.message || t("authFailed"));
+      else if (app)
+        setNote(
+          useJournal.getState().journal.settings.language === "es"
+            ? "Revisa tu correo en este teléfono y toca el enlace: abre la app Vela."
+            : "Open the email on this phone and tap the link: it opens the Vela app.",
+        );
       else setNote(t("magicSent"));
     } catch {
       setError(t("syncError"));

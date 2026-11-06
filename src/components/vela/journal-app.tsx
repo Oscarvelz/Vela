@@ -137,7 +137,14 @@ function useAutoLock() {
     window.addEventListener("pointerdown", bump, { passive: true });
     window.addEventListener("keydown", bump, { passive: true });
     document.addEventListener("visibilitychange", onVisible);
+    // Vela for Android: the app also says when it leaves and comes back (never fired in a browser).
+    const onNativeHidden = () => useJournal.getState().noteHidden();
+    const onNativeVisible = () => useJournal.getState().noteVisible();
+    window.addEventListener("velanative-hidden", onNativeHidden);
+    window.addEventListener("velanative-visible", onNativeVisible);
     return () => {
+      window.removeEventListener("velanative-hidden", onNativeHidden);
+      window.removeEventListener("velanative-visible", onNativeVisible);
       window.removeEventListener("pointerdown", bump);
       window.removeEventListener("keydown", bump);
       document.removeEventListener("visibilitychange", onVisible);

@@ -12,6 +12,7 @@
    - The credential is kept per owner (the signed-in account, or "local" when there is none), like Faro's
      faro.lock.<uid>, so signing out and back in, or removing the journal from this device, never asks to set
      the fingerprint up again. All of this is per device and not private (localStorage). */
+import { inAndroidApp, nativeAuth, nativeCanAuth } from "./native";
 import { b64ToBytes, bioBytes, bioFailCode, bioForUser, bioRecord, bioSupported, bytesToB64, enrollFingerprint, keepStorage } from "./fingerprint";
 
 const OWNER_LS = "vela.lock.owner";
@@ -31,6 +32,8 @@ const QUIET_WINDOW_MS = 60_000;
 const PICKER_MS = 3_000;
 
 export type LockRecord = { credentialId: string; at: number };
+/** Vela for Android: the app lock is the phone's own prompt (no WebAuthn credential), recorded under this id. */
+export const NATIVE_LOCK_ID = "android-prompt";
 
 function lsGet(key: string) {
   try {
@@ -151,6 +154,15 @@ export function setLockAfter(ms: number) {
 /** The gate is used: app lock on, this browser can do it, and a credential is enrolled for this owner. */
 export function gateReady() {
   return appLockOn() && bioSupported() && Boolean(lockRecord());
+}
+
+/**
+ * Android app only: the app lock is on and was set up here, but the phone can't show its prompt now (screen lock
+ * removed, or the phone refuses for a moment). Then the parked key must not open the journal by itself: the
+ * passphrase is asked instead. Never true in a browser.
+ */
+export function gateUnavailable() {
+  return inAndroidApp() && appLockOn() && Boolean(lockRecord()) && !nativeCanAuth();
 }
 
 /* ---- the one-time setup offer ---- */
@@ -290,6 +302,11 @@ export async function verifyAppLock(): Promise<GateOutcome> {
   if (asking) return { ok: false, code: "busy" };
   asking = true;
   try {
+    if (inAndroidApp()) {
+      // Fingerprint / face, or the phone's PIN, pattern or password; nothing else opens it.
+      const res = await nativeAuth();
+      return res.ok ? { ok: true } : { ok: false, code: res.code === "timeout" ? "failed" : res.code };
+    }
     const got = await navigator.credentials.get({
       publicKey: {
         challenge: bioBytes(32),
@@ -315,7 +332,18 @@ export async function enrollAppLock(vaultId: string, passphrase: string): Promis
   if (asking) throw Object.assign(new Error("busy"), { name: "InvalidStateError" });
   asking = true;
   try {
-    if (passphrase && vaultId) {
+    if (inAndroidApp()) {
+      // The phone's prompt confirms once that its lock works here; no passphrase is sealed (the parked key stays
+      // the device copy, as in the browser).
+      void vaultId;
+      void passphrase;
+      const res = await nativeAuth();
+      if (!res.ok) {
+        const name = res.code === "cancel" ? "NotAllowedError" : res.code === "unsupported" ? "NotSupportedError" : "Error";
+        throw Object.assign(new Error(res.code), { name });
+      }
+      saveRecord(NATIVE_LOCK_ID);
+    } else if (passphrase && vaultId) {
       await enrollFingerprint(passphrase, vaultId);
       const rec = bioForUser(vaultId);
       if (!rec) throw new Error("Fingerprint data on this device is missing.");

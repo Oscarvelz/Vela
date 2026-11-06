@@ -6,6 +6,8 @@
    The record is tied to this device's vault id; a new passphrase or a new
    journal clears it, and the user adds the fingerprint again. */
 
+import { inAndroidApp, nativeCanAuth } from "./native";
+
 const BIO_LS = "vela-fingerprint";
 const BIO_DB = "vela-bio";
 
@@ -47,6 +49,8 @@ export function b64ToBytes(value: string) {
 }
 
 export function bioSupported() {
+  // Vela for Android: no WebAuthn in the WebView; the app lock uses the phone's own prompt (native.ts).
+  if (inAndroidApp()) return nativeCanAuth();
   return Boolean(window.isSecureContext && window.PublicKeyCredential && navigator.credentials && crypto.subtle);
 }
 
@@ -258,6 +262,8 @@ function saveBioRecord(rec: BioRecord) {
 }
 
 export function enrollFingerprint(pin: string, profileKey: string) {
+  // The Android app never seals the passphrase with WebAuthn (not available there); the parked key is the device copy.
+  if (inAndroidApp()) return Promise.reject(Object.assign(new Error("unsupported"), { name: "NotSupportedError" }));
   if (!profileKey) return Promise.reject(new Error("Enter your PIN first."));
   return webAuthnCreate(profileKey).then((made) => {
     const credId = bytesToB64(new Uint8Array(made.cred.rawId));
@@ -292,6 +298,7 @@ export function enrollFingerprint(pin: string, profileKey: string) {
 }
 
 export function unlockFingerprint(profileKey: string) {
+  if (inAndroidApp()) return Promise.reject(Object.assign(new Error("unsupported"), { name: "NotSupportedError" }));
   const rec = bioCandidate(profileKey);
   if (!rec) return Promise.reject(new Error("Fingerprint isn't set up for this account on this device."));
   const request: PublicKeyCredentialRequestOptions = {
@@ -337,6 +344,7 @@ export function resetFingerprintPrompt() {
 
 /** True when this phone has a fingerprint / screen-lock authenticator WebAuthn can use. */
 export function platformAvailable(): Promise<boolean> {
+  if (inAndroidApp()) return Promise.resolve(nativeCanAuth());
   if (!bioSupported()) return Promise.resolve(false);
   try {
     const fn = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable;

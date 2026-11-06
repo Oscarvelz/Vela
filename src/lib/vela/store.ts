@@ -11,7 +11,7 @@ import { runMigrations } from "./migrations";
 import type { Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings, TabId } from "./types";
 import type { Lang } from "./copy";
 import { claimGrace, dropGrace, parkKey } from "./grace";
-import { appLockOn, clearSeen, gateAsking, gateReady, lockAfterMs, markSeen, migrateLock, pickerJustOpened, quietResume } from "./app-lock";
+import { appLockOn, clearSeen, gateAsking, gateReady, gateUnavailable, lockAfterMs, markSeen, migrateLock, pickerJustOpened, quietResume } from "./app-lock";
 import { lastUser } from "./cloud";
 import { cleanCycle, withDayLog, withEnd, withStart, withoutStart, type CycleSettings, type DayLog } from "./cycle";
 import {
@@ -912,6 +912,11 @@ export const useJournal = create<Store>((set, get) => {
         set({ journal: lockedShell(), legacy: readLegacyJournal(), vault: "locked", vaultId: vaultIdMem, keyParked: true, ready: true, unlocked: false, lastActivity: Date.now() });
         return;
       }
+      // Android app: the lock was set up but the phone's prompt can't run now → the passphrase, never an open journal.
+      if (parked && gateUnavailable() && !opts?.resume && !quietResume()) {
+        set({ journal: lockedShell(), legacy: readLegacyJournal(), vault: "locked", vaultId: vaultIdMem, keyParked: false, ready: true, unlocked: false, lastActivity: Date.now() });
+        return;
+      }
       if (parked && stored && env0 && (await openWith(parked.vk, env0))) {
         set({ ready: true });
         return;
@@ -967,7 +972,7 @@ export const useJournal = create<Store>((set, get) => {
       const awayMs = now - left;
       // The sheet flickering as it closes (hidden for a moment right after unlocking) is not leaving.
       const settling = left - unlockedAt < PROMPT_SETTLE_MS && awayMs < PROMPT_SETTLE_MS;
-      if (gateReady() && awayMs > lockAfterMs() && !settling) get().lock();
+      if ((gateReady() || gateUnavailable()) && awayMs > lockAfterMs() && !settling) get().lock();
     },
     // Locking hides the journal behind the app lock; the key stays parked, so coming back needs no passphrase.
     // With the app lock on but no fingerprint / screen lock usable here, the passphrase is the only lock left:

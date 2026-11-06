@@ -3,6 +3,7 @@ import { Fingerprint, ShieldAlert } from "lucide-react";
 import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
 import { bioCandidate, bioFailCode, bioRecord, bioSupported, fingerprintUnlock, platformAvailable } from "@/lib/vela/fingerprint";
+import { inAndroidApp } from "@/lib/vela/native";
 import { appLockOn, enrollAppLock, gateReady, lockRecord, verifyAppLock } from "@/lib/vela/app-lock";
 import { useBioT } from "@/lib/vela/bio-copy";
 import { useBioUi } from "@/lib/vela/bio-offer";
@@ -158,6 +159,8 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
     void platformAvailable().then(setPlatform);
   }, []);
   const busy = useRef(false);
+  /** When the last prompt ended (the Android app's PIN screen closing must not bring the prompt straight back). */
+  const lastEnd = useRef(0);
   /** Real failures/cancels in a row (an instant refusal because the page wasn't focused doesn't count). */
   const misses = useRef(0);
 
@@ -199,6 +202,7 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
             });
       void attempt.then((res) => {
         busy.current = false;
+        lastEnd.current = Date.now();
         setAsking(false);
         setTried(true);
         if (res.ok) {
@@ -239,12 +243,23 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
     if (mode === "pass" || fallen) return;
     const stop = whenFocused(() => ask());
     const onVisible = () => {
+      // Android app: the phone's PIN screen hides the page; closing it must not bring the prompt straight back.
+      if (inAndroidApp() && (busy.current || Date.now() - lastEnd.current < 2000)) return;
       if (document.visibilityState === "visible") whenFocused(() => ask());
     };
     document.addEventListener("visibilitychange", onVisible);
+    // Vela for Android: back in the app on the lock screen asks again too (never fired in a browser).
+    const onNativeVisible = () => {
+      if (busy.current || Date.now() - lastEnd.current < 2000) return;
+      whenFocused(() => {
+        if (Date.now() - lastEnd.current >= 2000) ask();
+      });
+    };
+    window.addEventListener("velanative-visible", onNativeVisible);
     return () => {
       stop();
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("velanative-visible", onNativeVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, fallen]);

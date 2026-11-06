@@ -170,6 +170,21 @@ export function useBackLayer(active: boolean, onBack: () => void, opts: { tier?:
   }, [active, tier, name]);
 }
 
+/** How many layers are open (the Android app's Back asks before deciding to close the app). */
+export function backLayerCount() {
+  return layers.length;
+}
+
+/**
+ * The Android app's Back (native.ts): closes the innermost layer exactly like a browser Back would. The history
+ * entry it owned is then removed quietly by reconcile(), the same path as a layer closed by its own button.
+ */
+export function nativeBackStep() {
+  const closed = closeTop();
+  schedule();
+  return closed;
+}
+
 /** For tests and diagnostics. */
 export function backLayerNames() {
   return layers.map((layer) => layer.name);

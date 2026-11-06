@@ -12,6 +12,7 @@ import {
   Moon,
   Palette,
   Settings2,
+  Smartphone,
   Sun,
   Upload,
   UserRound,
@@ -38,6 +39,7 @@ import { CycleTune, useCycleUndo } from "./cycle-card";
 import { AddTracker } from "./cycle-add";
 import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PassphraseInput } from "./ui";
 import { useBackLayer } from "@/lib/vela/back-stack";
+import { APK_URL, androidBrowser } from "@/lib/vela/native";
 
 export function SettingsView() {
   const t = useT();
@@ -130,6 +132,11 @@ export function SettingsView() {
       <Accordion id="prefs" icon={<Settings2 className="size-5" />} title={t("preferences")} open={open.prefs} onToggle={toggle}>
         <PrefsSection />
       </Accordion>
+      {androidBrowser() ? (
+        <Accordion id="android" icon={<Smartphone className="size-5" />} title={language === "es" ? "Instalar app Android" : "Install the Android app"} badge="APK" open={open.android} onToggle={toggle}>
+          <AndroidAppSection es={language === "es"} />
+        </Accordion>
+      ) : null}
       <p className="px-4 pt-3 text-center text-xs tracking-wide text-dim">{t("footer")}</p>
     </div>
   );
@@ -826,6 +833,36 @@ function DataSection() {
           <p className="mt-2 text-xs leading-relaxed text-dim" data-testid="wipe-regroup-note">{t("wipeRegroupNote")}</p>
         ) : null}
       </ConfirmDialog>
+    </div>
+  );
+}
+
+/** Only on an Android phone or tablet in Chrome / the PWA (never inside the app, never on a computer). */
+function AndroidAppSection({ es }: { es: boolean }) {
+  return (
+    <div className="space-y-3" data-testid="android-app">
+      <p className="text-sm leading-relaxed text-dim">
+        {es
+          ? "Vela como su propia app en este teléfono: se abre con tu huella o el bloqueo de pantalla, y no aparece en Recientes. Se actualiza sola desde aquí."
+          : "Vela as its own app on this phone: it opens with your fingerprint or screen lock and stays hidden in Recents. It updates itself from here."}
+      </p>
+      <p className="text-sm leading-relaxed text-dim">
+        {es
+          ? "La app guarda su diario aparte de Chrome. Antes, revisa en Datos y copias que diga En tu cuenta; en la app entra con tu cuenta y escribe tu frase una vez."
+          : "The app keeps its journal apart from Chrome. First check that Data & Backup says In your account; in the app, sign in and type your passphrase once."}
+      </p>
+      <Button
+        className="w-full"
+        onClick={() => {
+          location.href = APK_URL;
+        }}
+      >
+        <Download className="size-4" />
+        {es ? "Descargar Vela.apk" : "Download Vela.apk"}
+      </Button>
+      <p className="text-xs leading-relaxed text-dim">
+        {es ? "Ábrelo e instala. Android puede pedirte permitir apps de Chrome." : "Open it and install. Android may ask you to allow apps from Chrome."}
+      </p>
     </div>
   );
 }

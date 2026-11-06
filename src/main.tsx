@@ -5,12 +5,15 @@ import { JournalApp } from "@/components/vela/journal-app";
 import { useJournal } from "@/lib/vela/store";
 import { gateAsking } from "@/lib/vela/app-lock";
 import { installBackStack } from "@/lib/vela/back-stack";
+import { startNative } from "@/lib/vela/native";
 
 // Test-only hook (fake data seeding). Compiled out of the real build: VITE_E2E is never set for docs/.
 if (import.meta.env.VITE_E2E === "1") (window as unknown as { __velaStore: typeof useJournal }).__velaStore = useJournal;
 
 // Android back / browser Back / Escape: one layered stack (see back-stack.ts).
 installBackStack();
+// Vela for Android (WebView app): back, bar colours, downloads. Does nothing in a browser or the PWA.
+startNative();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

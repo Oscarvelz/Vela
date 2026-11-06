@@ -1,5 +1,6 @@
 /* When to offer the app lock ("Lock Vela with your fingerprint"): once per owner, dismissible. */
 import { create } from "zustand";
+import { inAndroidApp } from "./native";
 import { bioForUser, bioSupported, platformAvailable, sealFailed, sessionPass } from "./fingerprint";
 import { appLockOn, lockRecord, offerDone } from "./app-lock";
 
@@ -32,7 +33,8 @@ export const useBioUi = create<BioUi>((set, get) => ({
  */
 export async function maybeOfferFingerprint(vaultId: string, passTyped = false) {
   if (!vaultId || !bioSupported() || !appLockOn()) return false;
-  const reseal = passTyped && Boolean(sessionPass()) && (!bioForUser(vaultId) || sealFailed());
+  // The Android app's lock is the phone's own prompt and seals no passphrase: nothing to re-seal there.
+  const reseal = !inAndroidApp() && passTyped && Boolean(sessionPass()) && (!bioForUser(vaultId) || sealFailed());
   if (!reseal && (lockRecord() || offerDone())) return false;
   if (!(await platformAvailable())) return false;
   useBioUi.getState().setOffer(true, reseal && Boolean(lockRecord()));
