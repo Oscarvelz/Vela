@@ -422,8 +422,7 @@ class MainActivity : Activity() {
                         override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = authReply(id, true, "")
                         override fun onAuthenticationError(code: Int, msg: CharSequence) = authReply(id, false,
                             when (code) {
-                                BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED, BiometricPrompt.BIOMETRIC_ERROR_CANCELED,
-                                BiometricPrompt.BIOMETRIC_ERROR_NEGATIVE_BUTTON -> "cancel"
+                                BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED, BiometricPrompt.BIOMETRIC_ERROR_CANCELED -> "cancel"
                                 BiometricPrompt.BIOMETRIC_ERROR_TIMEOUT -> "timeout"
                                 BiometricPrompt.BIOMETRIC_ERROR_HW_NOT_PRESENT, BiometricPrompt.BIOMETRIC_ERROR_HW_UNAVAILABLE,
                                 BiometricPrompt.BIOMETRIC_ERROR_NO_BIOMETRICS, BiometricPrompt.BIOMETRIC_ERROR_NO_DEVICE_CREDENTIAL -> "unsupported"
