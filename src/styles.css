@@ -691,6 +691,38 @@ input[type="range"].ag-range::-moz-range-thumb {
   }
 }
 
+/* Tab paging (use-pager.ts): the whole screen takes a sideways swipe; the browser keeps vertical scrolling. */
+.ag-pager-host {
+  touch-action: pan-y pinch-zoom;
+}
+
+/* A committed swipe slides the next tab in from the far side (transform only, so panel blur stays intact). */
+@keyframes ag-swipe-in {
+  from {
+    transform: translate3d(var(--ag-from, 100%), 0, 0);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.ag-swipe-in {
+  animation: ag-swipe-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ag-swipe-in {
+    animation: none;
+  }
+}
+
+/* While a tab is dragged or sliding in, the small ambient loops inside drawings (constellation twinkle, the
+   cycle's today halo, the header flame) hold still: SVG animations repaint on the main thread. */
+[data-paging] svg *,
+[data-paging] .ag-save::after {
+  animation-play-state: paused !important;
+}
+
 
 /* ── Firmament sky layer ─────────────────────────────────────────────────── */
 [data-theme="firmament"][data-mode="night"] body {

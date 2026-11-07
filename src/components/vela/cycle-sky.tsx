@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { isPaging } from "@/lib/vela/paging";
 
 /*
   A small night sky inside the cycle ring (Firmament made literal).
@@ -155,6 +156,7 @@ export function CycleSky({
       raf = 0;
       if (!visible || document.visibilityState !== "visible") return;
       raf = requestAnimationFrame(frame);
+      if (isPaging()) return;
       if (now - last < 50) return;
       last = now;
       draw(now);

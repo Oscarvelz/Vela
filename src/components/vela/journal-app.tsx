@@ -26,6 +26,8 @@ import { TabBar } from "./tab-bar";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { finishSplash } from "@/lib/vela/splash";
 import { LaunchSplash } from "./launch-splash";
+import { usePager } from "./use-pager";
+import { setPaging } from "@/lib/vela/paging";
 
 const TABS: { id: TabId; icon: (props: { className?: string }) => ReactNode; label: "navHome" | "navCalendar" | "navHistory" | "navInsights" }[] = [
   { id: "home", icon: HomeIcon, label: "navHome" },
@@ -167,11 +169,16 @@ function Shell() {
   const histTo = useJournal((s) => s.histTo);
   const histPhase = useJournal((s) => s.histPhase);
   const toast = useJournal((s) => s.toast);
+  const toastAction = useJournal((s) => s.toastAction);
   const lockTick = useBioUi((s) => s.tick);
   // With the app lock off there is nothing to lock behind (the key stays on the device), so no Lock button.
   const lockable = lockTick >= 0 && appLockOn();
   const shift = useRef(16);
   const pane = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  // A swipe that commits slides the next tab in from that side (dir 1 = from the right); a tab-bar tap,
+  // back or settings keeps the soft fade. Held for the life of that view so its class never changes.
+  const slide = useRef<{ key: string; dir: number } | null>(null);
   const [headerEl, setHeaderEl] = useState<HTMLElement | null>(null);
   const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
   useScrollBars({ scroller: window, header: headerEl, dock: dockEl });
@@ -222,59 +229,24 @@ function Shell() {
 
   const cycleRef = useRef(cycle);
   cycleRef.current = cycle;
-
-  useEffect(() => {
-    const node = pane.current;
-    if (!node) return;
-    let gesture: { x: number; y: number; lock: "x" | "y" | null } | null = null;
-
-    const start = (event: TouchEvent) => {
-      const target = event.target as HTMLElement;
-      if (target.closest("[data-noswipe], input, textarea, select, nav")) {
-        gesture = null;
-        return;
-      }
-      const point = event.touches[0];
-      gesture = { x: point.clientX, y: point.clientY, lock: null };
-    };
-    const move = (event: TouchEvent) => {
-      if (!gesture) return;
-      const point = event.touches[0];
-      const dx = point.clientX - gesture.x;
-      const dy = point.clientY - gesture.y;
-      if (!gesture.lock) {
-        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-        gesture.lock = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-      }
-      if (gesture.lock !== "x") return;
-      event.preventDefault();
-    };
-    const end = (event: TouchEvent) => {
-      if (!gesture) return;
-      const point = event.changedTouches[0];
-      const dx = point.clientX - gesture.x;
-      const locked = gesture.lock;
-      gesture = null;
-      if (locked === "x" && Math.abs(dx) > 48) cycleRef.current(dx < 0 ? 1 : -1);
-    };
-
-    node.addEventListener("touchstart", start, { passive: true });
-    node.addEventListener("touchmove", move, { passive: false });
-    node.addEventListener("touchend", end);
-    node.addEventListener("touchcancel", end);
-    return () => {
-      node.removeEventListener("touchstart", start);
-      node.removeEventListener("touchmove", move);
-      node.removeEventListener("touchend", end);
-      node.removeEventListener("touchcancel", end);
-    };
-  }, []);
+  usePager(root, pane, (direction) => {
+    const state = useJournal.getState();
+    if (state.settingsOpen || state.editingId) return false;
+    const order: TabId[] = ["home", "calendar", "history", "insights"];
+    const next = order[(order.indexOf(state.tab) + direction + order.length) % order.length];
+    slide.current = { key: next, dir: direction };
+    cycleRef.current(direction);
+    return true;
+  });
+  const viewKey = settingsOpen ? "settings" : tab;
+  if (slide.current && slide.current.key !== viewKey) slide.current = null;
+  const slideDir = slide.current?.dir ?? 0;
 
   const brand = discreet ? t("discreetName") : "VELA";
   const tag = discreet ? t("discreetTagline") : t("tagline");
 
   return (
-    <div className="min-h-dvh max-w-full overflow-x-clip bg-bg text-fg">
+    <div ref={root} className="ag-pager-host min-h-dvh max-w-full overflow-x-clip bg-bg text-fg">
       <header ref={setHeaderEl} className="ag-header glow-header sticky top-0 z-30 border-b border-border backdrop-blur-md">
         <div className="ag-hdr-row mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
           <Mark alive className="-mx-1 size-12" />
@@ -304,8 +276,15 @@ function Shell() {
       </header>
       <main className="ag-screen mx-auto w-full min-w-0 max-w-5xl overflow-x-clip px-4 pt-4">
         <LegacyBanner />
-        <div ref={pane} className="min-w-0 max-w-full">
-        <div key={settingsOpen ? "settings" : tab} className="ag-enter" style={{ ["--ag-shift" as string]: `${shift.current}px` }}>
+        <div ref={pane} className="min-w-0 max-w-full" data-pager>
+        <div
+          key={viewKey}
+          className={slideDir ? "ag-swipe-in" : "ag-enter"}
+          style={{ ["--ag-shift" as string]: `${shift.current}px`, ["--ag-from" as string]: slideDir > 0 ? "100%" : "-100%" }}
+          onAnimationEnd={(event) => {
+            if (event.target === event.currentTarget && event.animationName === "ag-swipe-in") setPaging(false);
+          }}
+        >
           {settingsOpen ? (
             <SettingsView />
           ) : tab === "home" ? (
@@ -329,7 +308,25 @@ function Shell() {
       />
       {toast ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-28 z-50 flex justify-center px-4">
-          <p className="rounded-full border border-accent bg-surface-2 px-4 py-2 text-sm font-semibold shadow-lift">{toast}</p>
+          {toastAction ? (
+            <p className="pointer-events-auto flex items-center gap-1 rounded-full border border-accent bg-surface-2 py-1 pl-4 pr-1 text-sm font-semibold shadow-lift" data-noswipe>
+              <span className="min-w-0">{toast}</span>
+              <button
+                type="button"
+                className="min-h-10 shrink-0 rounded-full px-3 font-semibold text-accent"
+                data-testid="toast-action"
+                onClick={() => {
+                  const action = toastAction;
+                  useJournal.setState({ toast: null, toastAction: null });
+                  action.run();
+                }}
+              >
+                {toastAction.label}
+              </button>
+            </p>
+          ) : (
+            <p className="rounded-full border border-accent bg-surface-2 px-4 py-2 text-sm font-semibold shadow-lift">{toast}</p>
+          )}
         </div>
       ) : null}
       <CycleLayers />

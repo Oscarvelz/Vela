@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { isPaging } from "@/lib/vela/paging";
 
 /*
   Firmament sky: a quiet field of twinkling stars that drifts very slowly,
@@ -107,6 +108,11 @@ export function Starfield({ dense = false }: { dense?: boolean }) {
 
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
+      // A tab is being dragged or sliding in: hold the sky so the page gets every frame (see paging.ts).
+      if (isPaging()) {
+        last = now;
+        return;
+      }
       if (now - last < 33) return;
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;

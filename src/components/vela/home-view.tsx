@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { CircleHelp, Layers, PenLine, Plus, Repeat2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, CircleHelp, Layers, PenLine, Plus, Repeat2, X } from "lucide-react";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { sessionsSorted } from "@/lib/vela/stats";
 import { blankDraft, sessionToDraft, useJournal } from "@/lib/vela/store";
@@ -24,6 +24,15 @@ export function HomeView() {
   const saveNew = useJournal((s) => s.saveNew);
   const saveMany = useJournal((s) => s.saveMany);
   const showToast = useJournal((s) => s.showToast);
+  const deleteSession = useJournal((s) => s.deleteSession);
+  // "Count one session now" asks once: armed = when the first tap came (0 = resting). Reverts after 5 s.
+  const [armed, setArmed] = useState(0);
+  useEffect(() => {
+    if (!armed) return;
+    const id = window.setTimeout(() => setArmed(0), 5000);
+    return () => window.clearTimeout(id);
+  }, [armed]);
+  useBackLayer(armed > 0, () => setArmed(0), { name: "count-confirm" });
   const [formKey, setFormKey] = useState(0);
   const [showBatch, setShowBatch] = useState(false);
   const [help, setHelp] = useState(false);
@@ -56,16 +65,52 @@ export function HomeView() {
             </h2>
           </div>
           <p className="ag-hero-body">{t("homeEmptyBody")}</p>
-          <Button
-            className="ag-hero-cta mt-6 w-full whitespace-nowrap px-5 text-[15px]"
-            onClick={() => {
-              quickLog();
-              showToast(t("quickDoneMsg"));
-            }}
-          >
-            <Plus className="size-[18px]" strokeWidth={2.4} aria-hidden />
-            {t("countOneNowLabel")}
-          </Button>
+          {/* One tap asks (same spot, same height), the second counts; then Undo in the toast (Nov 6 2026:
+              single taps, some at the end of a swipe, had counted sessions by mistake). */}
+          <div className="mt-6 flex gap-2">
+            <Button
+              className={cn("ag-hero-cta min-w-0 flex-1 whitespace-nowrap text-[15px]", armed ? "px-3" : "px-5")}
+              data-testid="hero-count"
+              data-armed={armed ? "true" : undefined}
+              onClick={() => {
+                if (!armed) {
+                  setArmed(Date.now());
+                  return;
+                }
+                // A double tap is not a confirmation: the second tap must come a moment after the first.
+                if (Date.now() - armed < 350) return;
+                setArmed(0);
+                const id = quickLog();
+                showToast(t("quickDoneMsg"), {
+                  label: t("cyUndo"),
+                  run: () => {
+                    if (useJournal.getState().journal.sessions.some((item) => item.id === id)) {
+                      deleteSession(id);
+                      showToast(t("cyUndone"));
+                    }
+                  },
+                });
+              }}
+            >
+              {armed ? (
+                <Check className="size-[18px]" strokeWidth={2.4} aria-hidden />
+              ) : (
+                <Plus className="size-[18px]" strokeWidth={2.4} aria-hidden />
+              )}
+              {armed ? t("heroCountConfirm") : t("countOneNowLabel")}
+            </Button>
+            {armed ? (
+              <Button
+                variant="ghost"
+                className="ag-hero-cta w-[3.35rem] shrink-0 px-0"
+                aria-label={t("heroCountCancelAria")}
+                data-testid="hero-count-cancel"
+                onClick={() => setArmed(0)}
+              >
+                <X className="size-[18px]" strokeWidth={2.2} aria-hidden />
+              </Button>
+            ) : null}
+          </div>
           <div className="ag-hero-actions mt-3 grid grid-cols-3 gap-2.5" role="group" aria-label={t("logMoment")}>
             <button
               type="button"

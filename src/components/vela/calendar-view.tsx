@@ -72,7 +72,7 @@ export function CalendarView() {
 
   return (
     <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-5">
-      <Card data-noswipe className="px-4 py-5">
+      <Card className="px-4 py-5">
         <button
           type="button"
           className={cn(
@@ -88,6 +88,7 @@ export function CalendarView() {
         <div
           ref={frame}
           className="overflow-hidden"
+          data-noswipe
           style={{ touchAction: "pan-y" }}
           onPointerDown={(event) => {
             token.current += 1;

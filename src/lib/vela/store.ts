@@ -636,6 +636,8 @@ type Store = {
   histLayout: "list" | 2 | 3 | 4;
   compare: CompareMode;
   toast: string | null;
+  /** An action offered inside the toast (Undo after a quick count); the toast then stays 8 s. */
+  toastAction: { label: string; run: () => void } | null;
   lastActivity: number;
   /** "none": no journal on this device yet · "locked": there is an encrypted journal on this device. */
   vault: "loading" | "none" | "locked" | "unavailable";
@@ -685,7 +687,8 @@ type Store = {
   saveMany: (drafts: Draft[]) => void;
   saveBatch: (entries: BatchEntry[], partnerName: string) => void;
   saveEdit: (id: string, draft: Draft) => void;
-  quickLog: () => void;
+  /** Counts one bare session now and returns its id (for Undo). */
+  quickLog: () => string;
   addRound: (id: string) => string | null;
   deleteSession: (id: string) => void;
   removeEncounter: (id: string) => void;
@@ -739,7 +742,7 @@ type Store = {
   openHistPhase: (phase: "period" | "fertile" | "quiet") => void;
   clearHistRange: () => void;
   setCompare: (mode: CompareMode) => void;
-  showToast: (message: string) => void;
+  showToast: (message: string, action?: { label: string; run: () => void }) => void;
 };
 
 export type CloudPhase =
@@ -882,6 +885,7 @@ export const useJournal = create<Store>((set, get) => {
     histPhase: "",
     compare: "months",
     toast: null,
+    toastAction: null,
     lastActivity: Date.now(),
     hydrate: async (opts) => {
       // A failed read is never "no journal": that would show the setup screen to someone who has one.
@@ -998,6 +1002,7 @@ export const useJournal = create<Store>((set, get) => {
         histQ: "",
         histPartner: "",
         toast: null,
+        toastAction: null,
         unlocked: false,
         settingsOpen: false,
         editingId: null,
@@ -1369,6 +1374,7 @@ export const useJournal = create<Store>((set, get) => {
         encounterId: linked.encounterId,
       };
       commit({ ...journal, encounters: linked.encounters, sessions: renumber([...journal.sessions, session]) });
+      return session.id;
     },
     addRound: (id) => {
       const journal = get().journal;
@@ -1748,10 +1754,10 @@ export const useJournal = create<Store>((set, get) => {
       }),
     clearHistRange: () => set({ histFrom: "", histTo: "", histPhase: "" }),
     setCompare: (compare) => set({ compare }),
-    showToast: (message) => {
+    showToast: (message, action) => {
       if (toastTimer) clearTimeout(toastTimer);
-      set({ toast: message });
-      toastTimer = setTimeout(() => set({ toast: null }), 3200);
+      set({ toast: message, toastAction: action ?? null });
+      toastTimer = setTimeout(() => set({ toast: null, toastAction: null }), action ? 8000 : 3200);
     },
   };
 });

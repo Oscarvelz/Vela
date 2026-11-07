@@ -192,7 +192,7 @@ export function SessionForm({
   }
 
   return (
-    <div className={cn("space-y-5", !editing && slots.length > 1 && "pb-16")} data-noswipe>
+    <div className={cn("space-y-5", !editing && slots.length > 1 && "pb-16")}>
       <div className="grid grid-cols-2 gap-3">
         <Field label={t("date")}>
           <button
