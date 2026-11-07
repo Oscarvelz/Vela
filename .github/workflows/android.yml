@@ -1,7 +1,12 @@
 # Vela for Android (WebView app, package com.oscarvelz.vela). Runs only on the `main` branch when android/ changes
 # (or by hand); it only builds the APK and never changes docs/ (GitHub Pages).
-# The signing key is NOT in this public repo. If the repository secrets VELA_KS_B64 (base64 of the PKCS12 keystore)
-# and VELA_KS_PASS exist, the APK is signed here and published as release android-<versionCode> with Vela.apk.
+# The signing key is NOT in this public repo. VELA_KS_B64 (base64 of the PKCS12 keystore) and VELA_KS_PASS live as
+# ENVIRONMENT secrets of «release»: the job below declares environment: release, whose required reviewer is Oscarvelz
+# (admin bypass off), so a shell build waits for his approval in the Actions UI before checkout even starts -- no push
+# can turn into a signed release by itself. Oscar loaded the secrets himself from the master key archive; the key
+# never transits chat or any other AI. (They previously sat as plain repository secrets; in an environment job the
+# environment secrets are the ones that resolve.) If the secrets exist, the APK is signed here and published as
+# release android-<versionCode> with Vela.apk.
 # Without them the job uploads an unsigned APK artifact (vela-unsigned-N); it is signed privately with the same key and
 # pushed to the orphan branch `android-signed` (Vela.apk + VERSION=N), whose own workflow publishes release android-N.
 # versionCode = android/version.txt. Every update must be signed with that one key or Android refuses it.
@@ -18,6 +23,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
+    environment: release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

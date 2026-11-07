@@ -14,8 +14,10 @@ Web releases arrive on their own (the page is loaded live; the service worker ke
 - Sign-in link: inside the app "Email me a sign-in link" returns to `vela://auth` (in the Supabase redirect allow
   list), which opens the app with the session.
 - Build: `.github/workflows/android.yml` on `main` (only when `android/` changes). versionCode = `android/version.txt`.
-- Signing: the key is private and never committed. With repo secrets `VELA_KS_B64` + `VELA_KS_PASS` CI signs and
-  publishes; without them CI uploads `vela-unsigned-N`, the APK is signed privately (apksigner, alias `vela`) and pushed
+- Signing: the key is private and never committed. `VELA_KS_B64` + `VELA_KS_PASS` live as ENVIRONMENT secrets of the
+  `release` environment (required reviewer Oscarvelz, admin bypass off), so the Android job waits for his approval
+  before checkout and no push can become a signed release by itself; with the secrets CI signs and publishes. Without
+  them CI uploads `vela-unsigned-N`, the APK is signed privately (apksigner, alias `vela`) and pushed
   to the orphan branch `android-signed` (`Vela.apk`, `VERSION`=N, `NOTES.md`), whose workflow publishes release
   `android-N`. All updates must use the same key (certificate SHA-256 6a:fe:c9:39:…:df:6a:54).
 - Download: https://github.com/Oscarvelz/Vela/releases/latest/download/Vela.apk
