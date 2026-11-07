@@ -1733,3 +1733,80 @@ input[type="range"].ag-range::-moz-range-thumb {
 /* Hero "Repeat" tile before any moment exists (Nov 1 2026). */
 .ag-hero-tile.is-idle { opacity: .45; cursor: default; }
 .ag-hero-tile.is-idle:active { transform: none; }
+
+/* ── Launch splash (Nov 6 2026, launch-splash.tsx) ─────────────────────────────────────────────────────────────
+   Always the Firmament night sky (every launch opens on the lock screen, which wears it), whatever theme is saved.
+   Only transform/opacity animate (plus the wordmark's letter-spacing, once). */
+.vela-splash {
+  --color-fg: #eef1ff; --color-dim: #9ea9cc;
+  position: fixed; inset: 0; z-index: 90; overflow: hidden; isolation: isolate;
+  color: var(--color-fg); background: transparent;
+  transition: opacity 380ms cubic-bezier(.4, 0, .2, 1);
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.vs-sky {
+  position: absolute; inset: 0; background-color: #04060f;
+  background-image:
+    radial-gradient(900px 520px at 50% -12%, rgba(46, 72, 170, 0.38), transparent 62%),
+    radial-gradient(620px 380px at 50% 112%, rgba(255, 190, 90, 0.07), transparent 60%),
+    linear-gradient(180deg, #0d1636 0%, #070b1e 58%, #04060f 100%);
+  transition: opacity 480ms cubic-bezier(.4, 0, .2, 1);
+}
+.vela-splash .vela-sky { position: absolute; z-index: 0; }
+.vela-splash .vela-sky canvas { animation: vela-fade 900ms ease 120ms both; }
+.vs-native .vela-sky canvas { animation-delay: 0ms; animation-duration: 700ms; }
+.vs-hero {
+  position: absolute; left: 0; right: 0; top: calc(50% - 3rem); text-align: center;
+  transition: transform 480ms cubic-bezier(.45, 0, .15, 1); will-change: transform;
+}
+.vela-splash .vela-mark { --mark-halo: #ffc04d; --mark-halo-o: 0.55; --mark-tip: #ffd877; --mark-body: #f2b04a; --mark-base: #e08a2c; filter: drop-shadow(0 0 6px rgba(255, 190, 80, 0.35)); }
+.vela-splash .vela-mark-flame { filter: none; }
+.vela-splash .vela-halo { mix-blend-mode: screen; opacity: 1; transform-origin: 0 0; }
+.vela-splash .vela-wordmark { background: linear-gradient(180deg, #f8dfae 0%, #f5e8cf 34%, var(--color-fg) 72%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.vela-splash[data-phase="glide"] .vs-sky { opacity: 0; }
+.vela-splash[data-phase="fade"] { opacity: 0; }
+.vela-splash[data-phase="fade"] .vs-hero { transform: scale(1.04); transition-duration: 380ms; }
+
+/* Full show: ember → flame → light → stars → name. */
+.vs-flame { transform-origin: 50% 90%; }
+.vs-full .vs-flame { animation: vs-ignite 560ms cubic-bezier(.3, .7, .3, 1) both; }
+.vs-ember {
+  position: absolute; left: 50%; top: 84%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%;
+  background: radial-gradient(closest-side, #fff6dc 0%, rgba(255, 214, 140, .85) 28%, rgba(242, 176, 74, .35) 60%, rgba(242, 176, 74, 0) 100%);
+  opacity: 0; pointer-events: none;
+}
+.vs-full .vs-ember { animation: vs-ember 620ms ease-out both; }
+.vs-full .vela-halo { animation: vs-bloom 760ms cubic-bezier(.2, .7, .2, 1) 150ms both; }
+.vs-full .vs-word { animation: vs-word 620ms cubic-bezier(.2, .7, .2, 1) 380ms both; }
+.vs-full .vs-tag { animation: vs-tag 480ms cubic-bezier(.2, .7, .2, 1) 560ms both; }
+/* Android app: the phone's splash lit the flame already. */
+.vs-native .vela-halo { animation: vs-bloom-n 620ms cubic-bezier(.2, .7, .2, 1) both; }
+.vs-native .vs-word { animation: vs-word 520ms cubic-bezier(.2, .7, .2, 1) 40ms both; }
+.vs-native .vs-tag { animation: vs-tag 440ms cubic-bezier(.2, .7, .2, 1) 200ms both; }
+@keyframes vs-ignite {
+  0% { opacity: 0; transform: scale(.1, .06); }
+  22% { opacity: 1; transform: scale(.2, .22); }
+  68% { opacity: 1; transform: scale(1.05, 1.09); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes vs-ember { 0% { opacity: 0; transform: scale(.4); } 25% { opacity: 1; transform: scale(1); } 60% { opacity: .7; transform: scale(1.6); } 100% { opacity: 0; transform: scale(2.2); } }
+@keyframes vs-bloom { from { opacity: 0; transform: scale(.35); } to { opacity: 1; transform: scale(1); } }
+@keyframes vs-bloom-n { from { opacity: .55; transform: scale(.62); } to { opacity: 1; transform: scale(1); } }
+@keyframes vs-word {
+  from { opacity: 0; letter-spacing: .52em; padding-left: .36em; transform: translateY(6px); }
+  to { opacity: 1; letter-spacing: var(--tracking-brand); padding-left: 0; transform: none; }
+}
+@keyframes vs-tag { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* The lock screen under the splash: its hero is hidden (the splash's hero lands on it) and its panels wait to rise
+   until the splash starts leaving. */
+html[data-splash="on"] [data-vela-hero], html[data-splash="glide"] [data-vela-hero] { visibility: hidden; }
+html[data-splash="on"] .vela-rise { animation-play-state: paused; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vela-splash .vs-flame, .vela-splash .vs-ember, .vela-splash .vela-halo, .vela-splash .vs-word, .vela-splash .vs-tag { animation: none !important; }
+  .vela-splash .vs-ember { opacity: 0; }
+  .vela-splash[data-phase="fade"] .vs-hero { transform: none; }
+  .vela-splash, .vs-sky { transition-duration: 200ms !important; }
+}
+/* /launch splash */

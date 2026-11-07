@@ -27,11 +27,38 @@
           if (p.language === "es" || p.language === "en") root.lang = p.language;
           if (p.discreet) document.title = p.language === "es" ? "Diario" : "Journal";
         } catch (e) {}
+        // Launch splash (launch-splash.tsx): which show this load gets. A reload the app makes itself (an update on
+        // the lock screen) is quiet; inside the Vela Android app the phone's own splash has already lit the flame.
+        try {
+          var quiet = false;
+          try { quiet = sessionStorage.getItem("vela-quiet-boot") === "1"; sessionStorage.removeItem("vela-quiet-boot"); } catch (e) {}
+          var html = document.documentElement;
+          html.dataset.boot = quiet ? "quiet" : /VelaAndroid\//.test(navigator.userAgent) ? "native" : "full";
+          if (!quiet) html.dataset.splash = "on";
+        } catch (e) {}
       })();
     </script>
+    <style>
+      /* First paint, before the app's script runs: the splash's own sky (and, in the Android app, the flame the
+         phone's splash just lit, at the same spot), so the hand-off to the animated splash is invisible. */
+      #vela-boot { position: fixed; inset: 0; background-color: #04060f;
+        background-image: radial-gradient(900px 520px at 50% -12%, rgba(46, 72, 170, 0.38), transparent 62%),
+          radial-gradient(620px 380px at 50% 112%, rgba(255, 190, 90, 0.07), transparent 60%),
+          linear-gradient(180deg, #0d1636 0%, #070b1e 58%, #04060f 100%); }
+      #vela-boot svg, #vela-boot i { display: none; }
+      html[data-boot="native"] #vela-boot svg { display: block; position: absolute; left: 50%; top: 50%; width: 96px; height: 96px;
+        margin: -48px 0 0 -48px; overflow: visible; filter: drop-shadow(0 0 6px rgba(255, 190, 80, 0.35)); }
+      html[data-boot="native"] #vela-boot i { display: block; position: absolute; left: 50%; top: calc(50% + 11.5px); width: 150px; height: 160px;
+        margin: -80px 0 0 -75px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(255, 214, 140, .27) 0%, rgba(245, 186, 100, .13) 45%, rgba(232, 166, 80, 0) 100%); }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="vela-boot" aria-hidden="true"><i></i><svg viewBox="0 0 100 100"><defs><linearGradient id="vbo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd877"/><stop offset=".55" stop-color="#f2b04a"/><stop offset="1" stop-color="#e08a2c"/></linearGradient><radialGradient id="vbc" cx="50" cy="72" r="16" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fffaf0"/><stop offset=".6" stop-color="#ffe9b0"/><stop offset="1" stop-color="#ffd276"/></radialGradient></defs><path fill="url(#vbo)" d="M52 6 C49 20 70 34 72 56 C74 78 63 92 50 92 C36 92 26 80 27 63 C28 45 44 36 48 21 C49 15 51 10 52 6 Z"/><path fill="url(#vbc)" d="M51 44 C50 52 60 59 60 70 C60 79 56 84 50 84 C44 84 40 79 40 72 C40 62 48 57 49 50 C49.5 48 50 46 51 44 Z"/></svg></div></div>
+    <script>
+      // Vela for Android 2+: the page has painted its first frame, so the phone's splash may hand over.
+      try { if (window.VelaNative && window.VelaNative.painted) window.VelaNative.painted(); } catch (e) {}
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

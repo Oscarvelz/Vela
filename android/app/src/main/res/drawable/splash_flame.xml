@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Vela flame for the launch splash, lit (final frame of splash_flame_anim). 288 dp canvas = the Android 12+
+     splash icon without an icon background (only a 192 dp circle in the middle shows). The flame sits in a 96 dp box
+     centred on the canvas, exactly where the web page's own splash draws it, so the hand-off doesn't move it.
+     Shapes and colours = src/components/vela/mark.tsx (night). Also the Android 11 window background (layer list). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="288dp" android:height="288dp"
+    android:viewportWidth="288" android:viewportHeight="288">
+    <!-- Halo: light from the flame body, gone well before the 96 dp mask edge (no visible rim). -->
+    <group android:name="halo" android:pivotX="144" android:pivotY="153.6">
+        <path android:name="haloPath"
+            android:pathData="M64,153.6 a80,80 0 1,0 160,0 a80,80 0 1,0 -160,0 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="radial" android:centerX="144" android:centerY="153.6" android:gradientRadius="80">
+                    <item android:offset="0" android:color="#66FFC85A" />
+                    <item android:offset="0.3" android:color="#33F5B85A" />
+                    <item android:offset="0.62" android:color="#10E89A3A" />
+                    <item android:offset="1" android:color="#00E89A3A" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+    <!-- Ember the flame grows from (only seen during the ignition). -->
+    <group android:name="ember" android:pivotX="144" android:pivotY="176.6" android:scaleX="1" android:scaleY="1">
+        <path android:name="emberPath" android:fillAlpha="0"
+            android:pathData="M129,176.6 a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="radial" android:centerX="144" android:centerY="176.6" android:gradientRadius="15">
+                    <item android:offset="0" android:color="#FFFFF6DC" />
+                    <item android:offset="0.28" android:color="#D9FFD68C" />
+                    <item android:offset="0.6" android:color="#59F2B04A" />
+                    <item android:offset="1" android:color="#00F2B04A" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+    <!-- The flame: mark.tsx paths (0..100 box) placed in a 96 dp box at (96, 96). Fire pivots at its base. -->
+    <group android:name="fire" android:pivotX="144" android:pivotY="182.4">
+        <group android:translateX="96" android:translateY="96" android:scaleX="0.96" android:scaleY="0.96">
+            <!-- soft glow behind the body (the web mark's drop shadow) -->
+            <path
+                android:pathData="M50,58 m-30,0 a30,34 0 1,0 60,0 a30,34 0 1,0 -60,0 Z">
+                <aapt:attr name="android:fillColor">
+                    <gradient android:type="radial" android:centerX="50" android:centerY="62" android:gradientRadius="34">
+                        <item android:offset="0" android:color="#55FFBE50" />
+                        <item android:offset="1" android:color="#00FFBE50" />
+                    </gradient>
+                </aapt:attr>
+            </path>
+            <path
+                android:pathData="M52,6 C49,20 70,34 72,56 C74,78 63,92 50,92 C36,92 26,80 27,63 C28,45 44,36 48,21 C49,15 51,10 52,6 Z">
+                <aapt:attr name="android:fillColor">
+                    <gradient android:type="linear" android:startX="50" android:startY="6" android:endX="50" android:endY="92">
+                        <item android:offset="0" android:color="#FFFFD877" />
+                        <item android:offset="0.55" android:color="#FFF2B04A" />
+                        <item android:offset="1" android:color="#FFE08A2C" />
+                    </gradient>
+                </aapt:attr>
+            </path>
+            <path
+                android:pathData="M51,44 C50,52 60,59 60,70 C60,79 56,84 50,84 C44,84 40,79 40,72 C40,62 48,57 49,50 C49.5,48 50,46 51,44 Z">
+                <aapt:attr name="android:fillColor">
+                    <gradient android:type="radial" android:centerX="50" android:centerY="72" android:gradientRadius="16">
+                        <item android:offset="0" android:color="#FFFFFAF0" />
+                        <item android:offset="0.6" android:color="#FFFFE9B0" />
+                        <item android:offset="1" android:color="#FFFFD276" />
+                    </gradient>
+                </aapt:attr>
+            </path>
+        </group>
+    </group>
+</vector>

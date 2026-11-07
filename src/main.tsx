@@ -6,6 +6,7 @@ import { useJournal } from "@/lib/vela/store";
 import { gateAsking } from "@/lib/vela/app-lock";
 import { installBackStack } from "@/lib/vela/back-stack";
 import { startNative } from "@/lib/vela/native";
+import { afterSplash, markQuietBoot, splashActive } from "@/lib/vela/splash";
 
 // Test-only hook (fake data seeding). Compiled out of the real build: VITE_E2E is never set for docs/.
 if (import.meta.env.VITE_E2E === "1") (window as unknown as { __velaStore: typeof useJournal }).__velaStore = useJournal;
@@ -24,6 +25,8 @@ createRoot(document.getElementById("root")!).render(
 // Offline app shell. Only on https (GitHub Pages) or localhost.
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
   window.addEventListener("load", () => {
+    // The very first install claims this page, which already runs the newest files: no reload for that one.
+    let firstInstall = !navigator.serviceWorker.controller;
     navigator.serviceWorker
       .register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL })
       .then((reg) => {
@@ -33,7 +36,14 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
         let pending = false;
         const apply = () => {
           if (!pending || useJournal.getState().unlocked || gateAsking()) return;
+          // Never cut the launch splash short: the update waits until it has landed on the lock screen.
+          if (splashActive()) {
+            afterSplash(apply);
+            return;
+          }
           pending = false;
+          // The app reloads itself: no launch show for that (the lock screen simply comes back).
+          markQuietBoot();
           location.reload();
         };
         useJournal.subscribe((state, prev) => {
@@ -43,6 +53,10 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
         reg.addEventListener("updatefound", () => {
           const next = reg.installing;
           next?.addEventListener("statechange", () => {
+            if (next.state === "activated" && firstInstall) {
+              firstInstall = false;
+              return;
+            }
             if (next.state === "activated" && navigator.serviceWorker.controller) {
               pending = true;
               apply();

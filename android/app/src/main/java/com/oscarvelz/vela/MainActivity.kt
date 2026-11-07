@@ -25,6 +25,8 @@ import android.util.Base64
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
+import android.view.animation.DecelerateInterpolator
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
@@ -40,6 +42,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.time.Duration
+import java.time.Instant
 
 /**
  * Vela for Android: a thin shell around the Vela web app (private, end-to-end encrypted diary), loaded live from
@@ -62,14 +66,19 @@ class MainActivity : Activity() {
     private lateinit var statusBg: View
     private val home = "https://oscarvelz.github.io/Vela/"
     private val prefs by lazy { getSharedPreferences("vela-shell", MODE_PRIVATE) }
+    // Every launch opens on the splash/lock screen's Firmament night sky (top navy, bottom near-black), never on the
+    // colours of the theme the journal was last left in, so no light frame can flash before the page paints.
     private var topColor = Color.parseColor("#0D1636")
-    private var bottomColor = Color.parseColor("#0D1636")
+    private var bottomColor = Color.parseColor("#04060F")
     private var topDark = true
     private var bottomDark = true
     private var fileCb: ValueCallback<Array<Uri>>? = null
     private var geoAsk: Pair<String, GeolocationPermissions.Callback>? = null
     @Volatile private var trusted = false
     @Volatile private var pageReady = false
+    /** The page has painted its first frame (its own splash): the launch splash may hand over. */
+    @Volatile private var webPainted = false
+    private var launchedAt = 0L
     private val saves = ConcurrentHashMap<String, Save>()
     private val crashes = ArrayList<Long>()
     private val crumbLock = Any()
@@ -150,8 +159,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
-        topColor = prefs.getInt("top", topColor); bottomColor = prefs.getInt("bottom", bottomColor)
-        topDark = prefs.getBoolean("topDark", true); bottomDark = prefs.getBoolean("bottomDark", true)
+        launchedAt = SystemClock.uptimeMillis()
+        installLaunchSplash()
         addCrumb("shell start ${BuildConfig.VERSION_NAME}, WebView ${webViewVersion()}, Android ${Build.VERSION.RELEASE}")
         // A private diary: Recents shows a blank card instead of a picture of the open journal. Android 13+ can do
         // that without blocking screenshots (Oscar sends screenshots of bugs); older phones need FLAG_SECURE.
@@ -180,10 +189,45 @@ class MainActivity : Activity() {
             WindowInsets.CONSUMED
         }
         setContentView(root)
+        holdFirstFrame()
         applyBars()
         // Always a fresh page: a fresh launch must show the app lock, never a restored open journal.
         web.loadUrl(authUrl(intent) ?: home)
         checkUpdate()
+    }
+
+    /* ---------- launch splash: the phone's splash hands over to the page's with nothing in between ---------- */
+
+    /**
+     * Android 12+: the system splash shows the flame igniting (res/drawable/splash_flame_anim.xml). When it goes, it
+     * waits for that animation to finish, then fades out over the page, whose own splash already shows the lit flame
+     * at the same spot (index.html / launch-splash.tsx).
+     */
+    private fun installLaunchSplash() {
+        if (Build.VERSION.SDK_INT < 31) return
+        splashScreen.setOnExitAnimationListener { v ->
+            val start = runCatching { v.iconAnimationStart }.getOrNull()
+            val dur = runCatching { v.iconAnimationDuration }.getOrNull()
+            val left = if (start != null && dur != null) Duration.between(Instant.now(), start.plus(dur)).toMillis() else 0L
+            v.animate().alpha(0f).setStartDelay(left.coerceIn(0L, 700L)).setDuration(280L)
+                .setInterpolator(DecelerateInterpolator()).withEndAction { v.remove() }.start()
+        }
+    }
+
+    /**
+     * Holds the app's first frame (the system splash on Android 12+, the window's own flame on Android 11) until the
+     * page has painted (index.html calls painted(); onPageFinished as a fallback), at most 3.5 s, so the WebView's
+     * empty first frame is never seen.
+     */
+    private fun holdFirstFrame() {
+        val content = findViewById<View>(android.R.id.content)
+        content.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                if (!webPainted && SystemClock.uptimeMillis() - launchedAt < 3500) return false
+                content.viewTreeObserver.removeOnPreDrawListener(this)
+                return true
+            }
+        })
     }
 
     /** Builds the page's WebView. Also used to start a fresh one if the page's process is ever lost. */
@@ -216,6 +260,7 @@ class MainActivity : Activity() {
                 trusted = url != null && isVela(Uri.parse(url)); pageReady = false
             }
             override fun onPageFinished(v: WebView, url: String?) {
+                webPainted = true
                 trusted = url != null && isVela(Uri.parse(url)); pageReady = trusted
                 if (pageReady) addCrumb("page loaded")
             }
@@ -392,6 +437,9 @@ class MainActivity : Activity() {
                 applyBars()
             }
         }
+
+        /** index.html, as its first frame is laid out: the phone's splash may now hand over to the page's. */
+        @JavascriptInterface fun painted() { webPainted = true }
 
         @JavascriptInterface fun setLang(lang: String) {
             if (!trusted || (lang != "es" && lang != "en")) return

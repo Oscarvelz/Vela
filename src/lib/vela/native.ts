@@ -28,6 +28,8 @@ export type VelaNativeBridge = {
   saveBegin(name: string, mime: string): string;
   saveChunk(id: string, b64: string): string;
   saveEnd(id: string, msgTemplate: string): string;
+  /** Shell android-2+: the page painted its first frame (called by index.html), so the phone's splash may hand over. */
+  painted?(): void;
 };
 
 type W = Window & { VelaNative?: VelaNativeBridge; VelaBack?: () => string; __velaNativeOn?: boolean };
@@ -149,7 +151,8 @@ function installBars(n: VelaNativeBridge) {
       }
     }
     const meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
-    const top = meta?.content || "#0d1636";
+    // While the launch splash is up the whole screen is its night sky, whatever theme sits underneath.
+    const top = document.documentElement.dataset.splash ? "#0d1636" : meta?.content || "#0d1636";
     const bottom = bottomColor() || top;
     const t = rgb(top);
     const b = rgb(bottom);
@@ -170,7 +173,7 @@ function installBars(n: VelaNativeBridge) {
     attributes: true,
     childList: true,
     subtree: true,
-    attributeFilter: ["content", "data-theme", "data-mode", "lang", "class", "style"],
+    attributeFilter: ["content", "data-theme", "data-mode", "data-splash", "lang", "class", "style"],
   });
   addEventListener("scroll", soon, { passive: true });
   addEventListener("resize", soon);

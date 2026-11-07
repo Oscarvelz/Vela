@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Vela" parent="@android:style/Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/vela_night</item>
+        <item name="android:windowBackground">@drawable/window_launch</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:enforceNavigationBarContrast">false</item>

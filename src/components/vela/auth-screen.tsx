@@ -16,6 +16,7 @@ import { FlameHalo, Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
 import { Button, ConfirmDialog, fieldClass, filledByBrowser, PassphraseInput } from "./ui";
 import { useBackLayer } from "@/lib/vela/back-stack";
+import { afterSplash, splashActive, splashLanding } from "@/lib/vela/splash";
 
 export function AuthScreen() {
   const t = useT();
@@ -33,6 +34,8 @@ export function AuthScreen() {
   // Back / gesture closes the diagnostics panel; nothing on this screen ever opens the journal.
   useBackLayer(diag, () => setDiag(false), { name: "lock-diag" });
   const taps = useRef<number[]>([]);
+  // The launch splash glides its hero into this exact spot: then this hero takes over in place, with no rise of its own.
+  const [landed] = useState(() => splashLanding() && splashActive());
 
   const cloudCopy = vault === "none" && user && remote && !fresh;
   // No journal on this phone yet: never show the setup form while the account is still being checked
@@ -42,13 +45,13 @@ export function AuthScreen() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10">
-      <div className="text-center">
+      <div className="text-center" data-vela-hero>
         <div className="vela-flame-stage mx-auto size-24">
           <FlameHalo />
           <Mark alive className="relative size-24" />
         </div>
         <h1
-          className="vela-rise vela-wordmark mt-5 font-display text-4xl tracking-brand"
+          className={cn(!landed && "vela-rise", "vela-wordmark mt-5 font-display text-4xl tracking-brand")}
           style={{ animationDelay: "120ms" }}
           data-testid="lock-wordmark"
           onClick={() => {
@@ -63,7 +66,7 @@ export function AuthScreen() {
         >
           VELA
         </h1>
-        <p className="vela-rise mt-2 text-xs tracking-widest text-dim uppercase" style={{ animationDelay: "220ms" }}>
+        <p className={cn(!landed && "vela-rise", "mt-2 text-xs tracking-widest text-dim uppercase")} style={{ animationDelay: "220ms" }}>
           {t("tagline")}
         </p>
       </div>
@@ -241,7 +244,15 @@ function UnlockForm({ error, setError }: { error: string; setError: (v: string) 
   // Open → the prompt starts by itself. Coming back to the app on the lock screen asks again.
   useEffect(() => {
     if (mode === "pass" || fallen) return;
-    const stop = whenFocused(() => ask());
+    // Not while the launch splash is still on screen: the prompt comes up as it leaves.
+    let stopFocus = () => {};
+    const stopSplash = afterSplash(() => {
+      stopFocus = whenFocused(() => ask());
+    });
+    const stop = () => {
+      stopSplash();
+      stopFocus();
+    };
     const onVisible = () => {
       // Android app: the phone's PIN screen hides the page; closing it must not bring the prompt straight back.
       if (inAndroidApp() && (busy.current || Date.now() - lastEnd.current < 2000)) return;

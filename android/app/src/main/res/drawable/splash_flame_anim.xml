@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ launch splash: the flame ignites (an ember catches, the flame rises with a small overshoot, its light
+     blooms) in 700 ms, then holds lit until the page has painted its own splash at the same spot (MainActivity).
+     Same beats as the web splash's full show (vs-ignite / vs-ember / vs-bloom in styles.css). -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:drawable="@drawable/splash_flame">
+    <target android:name="fire">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="560" android:propertyName="scaleX">
+                    <propertyValuesHolder android:propertyName="scaleX" android:valueType="floatType">
+                        <keyframe android:fraction="0" android:value="0.1" />
+                        <keyframe android:fraction="0.22" android:value="0.2" />
+                        <keyframe android:fraction="0.68" android:value="1.05" android:interpolator="@android:interpolator/fast_out_slow_in" />
+                        <keyframe android:fraction="1" android:value="1" />
+                    </propertyValuesHolder>
+                </objectAnimator>
+                <objectAnimator android:duration="560" android:propertyName="scaleY">
+                    <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType">
+                        <keyframe android:fraction="0" android:value="0.06" />
+                        <keyframe android:fraction="0.22" android:value="0.22" />
+                        <keyframe android:fraction="0.68" android:value="1.09" android:interpolator="@android:interpolator/fast_out_slow_in" />
+                        <keyframe android:fraction="1" android:value="1" />
+                    </propertyValuesHolder>
+                </objectAnimator>
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="emberPath">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="620" android:propertyName="fillAlpha">
+                <propertyValuesHolder android:propertyName="fillAlpha" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.25" android:value="1" />
+                    <keyframe android:fraction="0.6" android:value="0.7" />
+                    <keyframe android:fraction="1" android:value="0" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="ember">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="620" android:propertyName="scaleX" android:valueFrom="0.4" android:valueTo="2.2" android:valueType="floatType" />
+                <objectAnimator android:duration="620" android:propertyName="scaleY" android:valueFrom="0.4" android:valueTo="2.2" android:valueType="floatType" />
+            </set>
+        </aapt:attr>
+    </target>
+    <!-- Keyframes rather than a start offset, so the halo is dark from the very first frame. -->
+    <target android:name="halo">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="700" android:propertyName="scaleX">
+                    <propertyValuesHolder android:propertyName="scaleX" android:valueType="floatType">
+                        <keyframe android:fraction="0" android:value="0.35" />
+                        <keyframe android:fraction="0.21" android:value="0.35" />
+                        <keyframe android:fraction="1" android:value="1" android:interpolator="@android:interpolator/decelerate_cubic" />
+                    </propertyValuesHolder>
+                </objectAnimator>
+                <objectAnimator android:duration="700" android:propertyName="scaleY">
+                    <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType">
+                        <keyframe android:fraction="0" android:value="0.35" />
+                        <keyframe android:fraction="0.21" android:value="0.35" />
+                        <keyframe android:fraction="1" android:value="1" android:interpolator="@android:interpolator/decelerate_cubic" />
+                    </propertyValuesHolder>
+                </objectAnimator>
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="haloPath">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="700" android:propertyName="fillAlpha">
+                <propertyValuesHolder android:propertyName="fillAlpha" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.21" android:value="0" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@android:interpolator/decelerate_cubic" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+</animated-vector>

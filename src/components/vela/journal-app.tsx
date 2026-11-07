@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { BarChart3, CalendarDays, List, Lock, Moon, Settings, Sun } from "lucide-react";
 import { useT } from "@/lib/vela/i18n";
 import { sessionToDraft, useJournal } from "@/lib/vela/store";
@@ -15,7 +15,7 @@ import { CloudSync } from "./cloud-sync";
 import { HistoryView } from "./history-view";
 import { HomeView } from "./home-view";
 import { InsightsView } from "./insights-view";
-import { FlameHalo, Mark } from "./mark";
+import { Mark } from "./mark";
 import { SessionForm } from "./session-form";
 import { SettingsView } from "./settings-view";
 import { Button, ConfirmDialog, IconButton } from "./ui";
@@ -24,6 +24,8 @@ import { CyclePill } from "./cycle-card";
 import { CycleLayers } from "./cycle-sheets";
 import { TabBar } from "./tab-bar";
 import { useBackLayer } from "@/lib/vela/back-stack";
+import { finishSplash } from "@/lib/vela/splash";
+import { LaunchSplash } from "./launch-splash";
 
 const TABS: { id: TabId; icon: (props: { className?: string }) => ReactNode; label: "navHome" | "navCalendar" | "navHistory" | "navInsights" }[] = [
   { id: "home", icon: HomeIcon, label: "navHome" },
@@ -43,29 +45,25 @@ function HomeIcon(props: { className?: string }) {
 export function JournalApp() {
   const ready = useJournal((s) => s.ready);
   const hydrate = useJournal((s) => s.hydrate);
+  // The launch splash: once per page load (never on in-app navigation), over the app as it mounts underneath.
+  const [splash, setSplash] = useState(true);
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
-  if (!ready) return <Splash />;
+  // Same frame as the splash leaves: the lock screen's hero shows in place and the fingerprint prompt may ask.
+  useLayoutEffect(() => {
+    if (!splash) finishSplash();
+  }, [splash]);
   return (
     <>
-      <CloudSync />
-      <Gate />
+      {ready ? (
+        <>
+          <CloudSync />
+          <Gate />
+        </>
+      ) : null}
+      {splash ? <LaunchSplash ready={ready} onDone={() => setSplash(false)} /> : null}
     </>
-  );
-}
-
-function Splash() {
-  return (
-    <div className="grid min-h-dvh place-items-center bg-bg">
-      <div className="text-center">
-        <div className="vela-flame-stage mx-auto size-24">
-          <FlameHalo />
-          <Mark alive className="relative size-24" />
-        </div>
-        <p className="vela-wordmark mt-4 font-display text-3xl tracking-brand">VELA</p>
-      </div>
-    </div>
   );
 }
 
