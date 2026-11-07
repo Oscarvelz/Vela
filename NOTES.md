@@ -1,5 +1,7 @@
 Instala **Vela.apk** en el teléfono o la tableta Android (11 o más nuevo).
 
+Novedad en la 1.2: pantalla de inicio animada. La llama se enciende en la pantalla de inicio del teléfono y pasa sin cortes a la de Vela, que la lleva hasta la pantalla de bloqueo; sin destellos blancos al abrir.
+
 - La app abre https://oscarvelz.github.io/Vela/ con su propio almacenamiento, aparte de Chrome: entra una vez con tu cuenta y escribe tu frase una vez; tu diario cifrado baja de la cuenta.
 - El bloqueo es el del teléfono: huella, cara o el PIN del teléfono, al abrir la app y al volver después del tiempo elegido (10 s por defecto). La frase sigue siendo solo para el cifrado.
 - Atrás del teléfono cierra lo que esté abierto y, en Inicio o en la pantalla de bloqueo, sale de la app.
