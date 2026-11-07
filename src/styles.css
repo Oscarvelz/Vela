@@ -1497,6 +1497,7 @@ input[type="range"].ag-range::-moz-range-thumb {
 .vb-card-warn { margin-top: .55rem; font-size: .76rem; font-weight: 600; color: var(--vb-star); }
 .vb-card-who { margin-top: .55rem; font-size: .88rem; color: color-mix(in srgb, var(--ag-text) 80%, transparent); }
 .vb-card-src { font-size: .75rem; color: var(--ag-dim); }
+.vb-card-src.is-check { font-weight: 600; color: var(--vb-star); }
 .vb-tag { display: inline-flex; align-items: center; gap: .15rem; min-height: 1.85rem; padding: 0 .7rem; border-radius: 999px; font-size: .76rem; font-weight: 600;
   color: color-mix(in srgb, var(--ag-accent) 62%, var(--ag-text)); background: color-mix(in srgb, var(--ag-accent) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ag-accent) 30%, transparent); }
 [data-mode="day"] .vb-tag { color: #7d4a0c; background: color-mix(in srgb, var(--ag-accent) 10%, #fff); }

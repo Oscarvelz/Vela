@@ -64,6 +64,10 @@ export type BatchEntry = {
   endDate: string;
   /** The text says it was a solo moment (solo, alone, por mi cuenta…): never given the batch partner. */
   solo: boolean;
+  /** Other people the text names (offered as chips in the preview). */
+  partnerAlts?: string[];
+  /** Two names were about equally likely: the preview asks for a check. */
+  partnerUnsure?: boolean;
 };
 
 export type BatchContext = {
@@ -225,11 +229,25 @@ function settleYear(month: number, day: number, now: Date, state: YearState, giv
   return year;
 }
 
+/** English "ago" ("2 years ago. 9:16") and the verb "set" are not months; "ago 9" / "set. 21" / "21 set" still are. */
+const AGO_AFTER = /\b(?:years?|yrs?|days?|weeks?|wks?|months?|hours?|hrs?|minutes?|mins?|while|time|long|decades?|nights?|mornings?|ages|moons?)\s*$/;
+function falseMonth(folded: string, span: Span) {
+  const piece = folded.slice(span.start, span.end);
+  for (const m of matches(/\b(ago|set)\b(\.?)/g, piece)) {
+    const at = span.start + (m.index ?? 0);
+    const lead = folded.slice(Math.max(0, at - 24), at);
+    if (m[1] === "ago" && AGO_AFTER.test(lead)) return true;
+    // "set" as a month: "set." / "21 (de) set" / a Spanish line; never "set 2 alarms"
+    if (m[1] === "set" && !m[2] && !/\d\s*(?:de\s+)?$/.test(lead) && !looksSpanish(folded)) return true;
+  }
+  return false;
+}
+
 /** Finds every date mention. Ratings like 8/10 must already be in `blocked`. */
 function findAnchors(folded: string, now: Date, state: YearState, blocked: Span[]): Anchor[] {
   const found: (Anchor & { month?: number; day?: number; givenYear?: number | null; month2?: number; day2?: number })[] = [];
   const push = (a: (typeof found)[number]) => {
-    if (freeOf(blocked, a)) found.push(a);
+    if (freeOf(blocked, a) && !(a.month && falseMonth(folded, a))) found.push(a);
   };
   const monthFirst = new RegExp(
     `(?:\\b(?:${WEEKDAY_ABBR})\\b[,.]?\\s+)?\\b(${MONTH_RE})\\b\\.?,?\\s*(\\d{1,2})(?:st|nd|rd|th)?\\b(?!\\s*(?:veces|times|x\\b|rounds|rondas|min|mins|minutes|minutos|hours?|horas?|hrs?)\\b)\\.?(?:,?\\s*((?:19|20)\\d{2})\\b)?`,
@@ -383,7 +401,7 @@ type TimeHit = Span & { time: string; exact: boolean };
 const SLOTS: { re: RegExp; time: string; part: "night" | "morning" | "afternoon" | "late" }[] = [
   { re: /\b(?:de |en la |esta |la )?madrugada\b|\bin the middle of the night\b/g, time: "02:00", part: "late" },
   { re: /\blate (?:last )?night\b|\blate at night\b|\btarde en la noche\b|\bya tarde\b/g, time: "00:30", part: "late" },
-  { re: /\bearly (?:this )?morning\b|\btemprano en la manana\b|\bat dawn\b|\bal amanecer\b/g, time: "06:00", part: "morning" },
+  { re: /\bearly (?:this )?morning\b|\bearly in the morning\b|\b(?:en la |por la |esta |la )?manana temprano\b|\btemprano en la manana\b|\bat dawn\b|\bal amanecer\b/g, time: "06:00", part: "morning" },
   { re: /\bmidnight\b|\bmedianoche\b/g, time: "00:00", part: "late" },
   { re: /\bnoon\b|\bmidday\b|\bmediodia\b/g, time: "12:00", part: "afternoon" },
   { re: /\blunch(?: ?break| time)?\b|\b(?:hora del )?almuerzo\b/g, time: "13:00", part: "afternoon" },
@@ -412,7 +430,7 @@ function resolveHour(hour: number, minute: number, mer: string | null, context: 
     return `${pad(h)}:${pad(minute)}`;
   }
   if (h >= 13 || h === 0) return `${pad(h % 24)}:${pad(minute)}`;
-  const local = /^\s*(?:de la |in the |at )?(noche|night|evening|tarde|afternoon|manana|morning|madrugada)\b/.exec(context);
+  const local = /^\s*(?:de la |en la |por la |in the |at |la )?(noche|night|evening|tarde|afternoon|manana|morning|madrugada)\b/.exec(context);
   const part = local ? local[1] : wholeContext;
   if (part === "manana" || part === "morning") return `${pad(h === 12 ? 12 : h)}:${pad(minute)}`;
   if (part === "madrugada" || part === "late") return `${pad(h === 12 ? 0 : h)}:${pad(minute)}`;
@@ -432,7 +450,7 @@ function findTimes(folded: string, blocked: Span[]): TimeHit[] {
     if (freeOf(blocked, hit) && freeOf(out, hit)) out.push(hit);
   };
   // 11pm, 11:30 p.m., 1am
-  for (const m of matches(/\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s?m\b\.?/g, folded)) {
+  for (const m of matches(/(?<![\d.:])\b(\d{1,2})(?:[:.h](\d{2}))?\s*([ap])\.?\s?m\b\.?/g, folded)) {
     const h = Number(m[1]);
     const min = Number(m[2] || 0);
     if (h > 12 || min > 59) continue;
@@ -445,6 +463,14 @@ function findTimes(folded: string, blocked: Span[]): TimeHit[] {
     if (h > 23 || min > 59) continue;
     const after = folded.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 20);
     add({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length, time: resolveHour(h, min, null, after, whole), exact: true });
+  }
+  // 9 de la noche, 9.16 de la mañana, 10 at night, 7 in the morning (either language, any mix)
+  for (const m of matches(/(?<![\d/.:])\b(\d{1,2})(?:[.h](\d{2}))?\s+(?=(?:de la|en la|por la|in the|at)\s+(?:noche|manana|tarde|madrugada|night|morning|afternoon|evening)\b)/g, folded)) {
+    const h = Number(m[1]);
+    const min = Number(m[2] || 0);
+    if (h > 12 || min > 59) continue;
+    const end = (m.index ?? 0) + m[0].length;
+    add({ start: m.index ?? 0, end, time: resolveHour(h, min, null, folded.slice(end, end + 20), whole), exact: true });
   }
   // at 10 / around 11 / a las 10 (de la noche)
   for (const m of matches(/\b(?:at|around|about|by|like|approx(?:imately)?|como a las|a eso de las|eso de las|alrededor de las|cerca de las|tipo|a las|las)\s+(\d{1,2})(?:\s*(?:o'?clock|en punto|y media|y cuarto|ish))?\b(?!\s*(?:\/|:|de (?:\d|octubre|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|noviembre|diciembre)|times|veces|x\b|min|mins|minutes|minutos|hours?|horas?|hrs?|days?|dias?|people|personas|st\b|nd\b|rd\b|th\b|stars?|estrellas?|out of|de 10|%))/g, folded)) {
@@ -506,7 +532,10 @@ function findDuration(folded: string, blocked: Span[]): (Span & { mins: number }
 }
 
 const COUNT_WORDS: [RegExp, number][] = [
-  [/\b(?:once|one time|una vez|1 vez)\b/g, 1],
+  [/\b(?:once|one time|una vez|1 vez|un round|one round|una ronda)\b/g, 1],
+  [/\b(?:a couple (?:of )?times|un par de (?:veces|rounds|rondas)|two veces|dos (?:times|rounds))\b/g, 2],
+  [/\b(?:three veces|tres (?:times|rounds))\b/g, 3],
+  [/\b(?:four veces|cuatro (?:times|rounds))\b/g, 4],
   [/\b(?:twice|two times|two rounds|both times|dos veces|dos rondas|2 rounds|2 rondas|ambas veces|las dos veces)\b/g, 2],
   [/\b(?:thrice|three times|three rounds|tres veces|tres rondas|3 rounds|3 rondas)\b/g, 3],
   [/\b(?:four times|four rounds|cuatro veces|cuatro rondas)\b/g, 4],
@@ -516,6 +545,30 @@ const COUNT_WORDS: [RegExp, number][] = [
 const AGAIN = /\b(?:round (?:two|2)|second round|another round|one more round|(?:did it|do it|went at it|had sex|made love|fucked|we went) again|again (?:later|after|that night|in the morning|(?:the )?(?:next|following) (?:day|morning|night|afternoon))|otra ronda|segunda ronda|lo hicimos (?:otra vez|de nuevo)|otra vez mas tarde|una vez mas|(?:otra vez|de nuevo) (?:al dia siguiente|el dia siguiente|a la manana siguiente|la manana siguiente|al otro dia|en la manana|por la manana))\b/g;
 /** "again at 1am" / "otra vez a las 2": a second round at a stated time. */
 const AGAIN_AT = /\b(?:again|otra vez|de nuevo)\s+(?:at|around|a las?|como a las?|sobre las?)\s+\d/g;
+
+/** "The second time was…" / "la segunda vez fue…": the encounter had at least that many rounds. Not "for the second time" / "por segunda vez" / "the second time we met". */
+const ORDINAL_ROUND = /\b(?:(?:the|our|my|that|a|el|la|su|mi|nuestra)\s+)?(second|2nd|third|3rd|fourth|4th|segunda|segundo|tercera|tercer|tercero|cuarta|cuarto|2da|2a|3ra|3a)\s+(?:time|round|one|go|vez|ronda|round)\b|\b(?:round|ronda)\s+(?:two|three|four|dos|tres|cuatro|[234])\b/g;
+const ORDINAL_VALUE: Record<string, number> = { second: 2, "2nd": 2, segunda: 2, segundo: 2, "2da": 2, "2a": 2, third: 3, "3rd": 3, tercera: 3, tercer: 3, tercero: 3, "3ra": 3, "3a": 3, fourth: 4, "4th": 4, cuarta: 4, cuarto: 4, two: 2, three: 3, four: 4, dos: 2, tres: 3, cuatro: 4, "2": 2, "3": 3, "4": 4 };
+
+function ordinalRounds(folded: string, blocked: Span[]) {
+  let n = 0;
+  const spans: Span[] = [];
+  for (const m of matches(ORDINAL_ROUND, folded)) {
+    const start = m.index ?? 0;
+    const end = start + m[0].length;
+    if (!freeOf(blocked, { start, end })) continue;
+    const before = folded.slice(Math.max(0, start - 10), start);
+    const after = folded.slice(end, end + 24);
+    if (/\b(?:for|por)\s*$/.test(before)) continue;
+    if (/^\s*(?:(?:that|que)\s+)?(?:we|i|she|he|they|ever|in|this|that|que|nos|lo|la|me|en|this year|este)\b/.test(after) && !/^\s*(?:was|fue|felt|se sintio|estuvo|lasted|duro)\b/.test(after)) continue;
+    const key = (m[1] ?? m[0].split(/\s+/).pop() ?? "").trim();
+    const value = ORDINAL_VALUE[key] ?? 0;
+    if (!value) continue;
+    spans.push({ start, end });
+    n = Math.max(n, value);
+  }
+  return { n, spans };
+}
 
 function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[]; again: boolean } {
   const spans: Span[] = [];
@@ -535,6 +588,12 @@ function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[];
       spans.push(span);
       n = Math.max(n, value);
     }
+  }
+  // An ordinal only raises the count when no count was stated ("twice … the second time was…" stays 2).
+  const ordinal = ordinalRounds(folded, [...blocked, ...spans]);
+  if (ordinal.n) {
+    spans.push(...ordinal.spans);
+    if (!n) n = ordinal.n;
   }
   let again = false;
   for (const m of matches(AGAIN_AT, folded)) {
@@ -693,36 +752,79 @@ const NAME_STOP = new Set(
     "music musica love amor pleasure placer wine vino friends amigos everyone todos".split(" "),
 );
 
-function findPartner(text: string, folded: string, partners: string[], bubbleTaken: Span[]): (Span & { name: string }) | null {
-  let best: (Span & { name: string }) | null = null;
+/** Words right before a name that say "the person I was with" (English, Spanish, any mix). */
+const PARTNER_CUE = /(?:\b(?:with|con|w\/|junto (?:a|con)|y con|and with|esperando (?:por|a)|esperaba (?:por|a)|espere (?:a|por)|waiting (?:for|on)|waited (?:for|on)|met up with|hooked up with|me vi con|nos vimos con|estuve con|estaba con|slept with|dormi con|visited|visite a|fui a ver a|went to see|picked up|recogi a|pase por|came over to|llego|vino|came over|showed up|appeared)\s+)$/;
+/** "met Ana 2 years ago", "conocí a Ana hace 2 años", "anniversary with Ana": a remark about the past, not tonight's partner. */
+const PAST_REMARK_BEFORE = /\b(?:met|meet|known|conoci a|conoci|conozco a|anniversary (?:with|of)|aniversario (?:con|de)|since i met|desde que conoci a)\s+$/;
+const PAST_REMARK_AFTER = /^[^.;!?\n]{0,30}\b(?:ago|hace|years?|anos|meses|months|anniversary|aniversario)\b/;
+/** "Lucia came over", "Lucia llegó": a name followed by arrival words. */
+const ARRIVAL_AFTER = /^\s+(?:came over|came by|showed up|arrived|got here|llego|vino|paso por|se quedo)\b/;
+const NAME_TOKEN = /[A-ZÁÉÍÓÚÑÜ][a-záéíóúñü]+(?:\s+[A-ZÁÉÍÓÚÑÜ][a-záéíóúñü]+)?/g;
+
+type PartnerPick = { best: (Span & { name: string }) | null; alts: string[]; unsure: boolean };
+
+function partnerCandidates(text: string, folded: string, partners: string[], bubbleTaken: Span[]) {
+  const seen = new Map<string, Span & { name: string; score: number }>();
+  const scoreAt = (start: number, end: number) => {
+    const before = folded.slice(Math.max(0, start - 30), start);
+    const after = folded.slice(end, end + 40);
+    let score = 1;
+    if (PARTNER_CUE.test(before) || ARRIVAL_AFTER.test(after)) score = 3;
+    if (PAST_REMARK_BEFORE.test(before) || (PAST_REMARK_AFTER.test(after) && !PARTNER_CUE.test(before))) score = -1;
+    return score;
+  };
+  const offer = (name: string, start: number, end: number, score: number) => {
+    const key = fold(name).trim();
+    const prev = seen.get(key);
+    if (!prev || score > prev.score) seen.set(key, { start: prev && prev.start < start && prev.score >= score ? prev.start : start, end, name, score });
+  };
   for (const name of partners) {
     const f = fold(name).trim();
     if (f.length < 2) continue;
     const re = new RegExp(`(?<![a-z0-9])${escapeRe(f).replace(/\s+/g, "\\s+")}(?![a-z0-9])`, "g");
     for (const m of matches(re, folded)) {
       const start = m.index ?? 0;
-      if (!best || start < best.start) best = { start, end: start + m[0].length, name };
-      break;
+      offer(name, start, start + m[0].length, scoreAt(start, start + m[0].length));
     }
   }
-  if (best) return best;
-  // "with Laura", "con Laura" — only a capitalised word right after with/con
-  for (const m of matches(/\b(?:with|con|w\/)\s+([A-ZÁÉÍÓÚÑÜ][a-záéíóúñü]+(?:\s+[A-ZÁÉÍÓÚÑÜ][a-záéíóúñü]+)?)/g, text)) {
-    const raw = m[1].split(/\s+/)[0];
+  // A capitalised name nobody saved yet: only after a partner cue, an arrival, or a "met X" remark.
+  for (const m of matches(NAME_TOKEN, text)) {
+    const raw = m[0].split(/\s+/)[0];
     const fRaw = fold(raw);
-    if (NAME_STOP.has(fRaw) || fRaw.length < 2) continue;
-    if (MONTHS[fRaw] || WEEKDAYS[fRaw] !== undefined) continue;
-    const start = (m.index ?? 0) + m[0].indexOf(raw);
+    const start = m.index ?? 0;
     const span = { start, end: start + raw.length };
+    if (NAME_STOP.has(fRaw) || fRaw.length < 2 || MONTHS[fRaw] || WEEKDAYS[fRaw] !== undefined) continue;
     if (!freeOf(bubbleTaken, span)) continue;
+    const before = folded.slice(Math.max(0, start - 30), start);
+    const after = folded.slice(span.end, span.end + 40);
+    const cued = PARTNER_CUE.test(before) || ARRIVAL_AFTER.test(after);
+    const remark = PAST_REMARK_BEFORE.test(before);
+    if (!cued && !remark) continue;
     // a nickname or typo of someone already saved ("Sofi" → Sofía, "Ana" ← "Anna")
     const known = partners.find((name) => {
       const f = fold(name).trim();
       return (fRaw.length >= 3 && f.startsWith(fRaw)) || (fRaw.length >= 4 && editDistance(fRaw, f) <= 1);
     });
-    return { ...span, name: known ?? raw };
+    offer(known ?? raw, span.start, span.end, scoreAt(span.start, span.end));
   }
-  return null;
+  return [...seen.values()].sort((a, b) => b.score - a.score || a.start - b.start);
+}
+
+/**
+ * Who the encounter was with. Several names can appear ("I met Ana 2 years ago… esperando por Lucia"):
+ * a name after a partner cue beats a plain mention, which beats a "met X … ago" remark. When two names are
+ * equally likely the best is still picked, never dropped, and `unsure` asks the preview to flag it.
+ */
+function pickPartner(text: string, folded: string, partners: string[], bubbleTaken: Span[]): PartnerPick {
+  const list = partnerCandidates(text, folded, partners, bubbleTaken);
+  if (!list.length) return { best: null, alts: [], unsure: false };
+  const [top, second] = list;
+  const unsure = Boolean(second && second.score >= top.score - 1) || top.score < 0;
+  return { best: { start: top.start, end: top.end, name: top.name }, alts: list.slice(1).map((c) => c.name), unsure };
+}
+
+function findPartner(text: string, folded: string, partners: string[], bubbleTaken: Span[]): (Span & { name: string }) | null {
+  return pickPartner(text, folded, partners, bubbleTaken).best;
 }
 
 // ------------------------------------------------------------------ notes
@@ -767,6 +869,25 @@ function remainder(text: string, folded: string, taken: Span[]) {
     .trim();
 }
 
+/** Words of story (letters, either language) in a piece of text. */
+function storyWords(text: string) {
+  return text.split(/\s+/).filter((w) => /[a-záéíóúñü]{2,}/i.test(w)).length;
+}
+
+/** From this many words on, an entry is a diary paragraph: its note keeps the whole text, word for word. */
+export const NARRATIVE_WORDS = 18;
+
+/**
+ * The note for one encounter. A short tag-like entry keeps only what was not turned into fields
+ * ("Oct 28 bedroom, condom" → nothing left over). A real paragraph keeps the whole original text, since
+ * the fields only summarise it. Never empty when the reader could not use a word of the text.
+ */
+function noteFor(text: string, rest: string) {
+  const whole = text.replace(/\s+/g, " ").trim();
+  if (storyWords(whole) >= NARRATIVE_WORDS) return whole;
+  return rest;
+}
+
 // ------------------------------------------------------------------ reading one entry
 
 const NEXT_DAY = /\b(?:the )?(?:next|following) (?:day|morning|afternoon|night)\b|\bal dia siguiente\b|\bel dia siguiente\b|\ba la manana siguiente\b|\bla manana siguiente\b|\bal otro dia\b/g;
@@ -799,7 +920,13 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
   const positive = (kind: Rule["kind"]) => [...bubbleHits, ...fuzzy].filter((h) => h.rule.kind === kind && !h.negated).sort((a, b) => a.start - b.start);
   const unique = (list: string[]) => list.filter((v, i) => list.indexOf(v) === i);
 
-  const placeHit = positive("place")[0];
+  // "after a long day at work … ya en el cuarto": a place you came from is not where it happened.
+  const placeHits = positive("place");
+  const cameFrom = (h: Hit) => {
+    const clause = clauseBefore(folded, h.start).slice(-48);
+    return /\b(?:after|despues de|from|back from|coming back from|on the way (?:back )?from|left|leaving|de vuelta de|volviendo de|volvimos de|regrese de|regresamos de|saliendo de|salimos de|day|dia|shift|turno|jornada)\b/.test(clause);
+  };
+  const placeHit = placeHits.find((h) => !cameFrom(h)) ?? placeHits[0];
   const positions = unique(positive("position").map((h) => h.rule.value));
   let contraception = unique(positive("method").map((h) => h.rule.value));
   if (contraception.length > 1) contraception = contraception.filter((id) => id !== "none");
@@ -834,7 +961,8 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
   }
   for (const n of numeric) if (n.dim !== "overall") levels[n.dim] = n.level;
 
-  const partner = findPartner(text, folded, ctx.partners ?? [], bubbleHits);
+  const pick = pickPartner(text, folded, ctx.partners ?? [], bubbleHits);
+  const partner = pick.best;
   const claimed: Span[] = [
     ...taken,
     ...bubbleHits.filter((h) => !h.negated && h.rule.kind !== "multi"),
@@ -865,7 +993,7 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     place: placeHit?.rule.value ?? "",
     count: count.again ? Math.max(baseCount, 2) : baseCount,
     nextDay: rangeDays === 1 && (nextSpans.length > 0 || pastMidnight),
-    notes: remainder(text, folded, claimed),
+    notes: noteFor(text, remainder(text, folded, claimed)),
     contraception,
     problems,
     partnerName: partner?.name ?? "",
@@ -876,6 +1004,8 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     source: text.trim(),
     endDate,
     solo,
+    partnerAlts: pick.alts,
+    partnerUnsure: Boolean(partner) && pick.unsure,
   };
 }
 
@@ -899,7 +1029,9 @@ function sentences(line: string) {
         const before = line.slice(Math.max(0, i - 5), i).toLowerCase();
         const next = line[i + 1] ?? "";
         if (/\d$/.test(before) && /\d/.test(next)) continue;
-        if (/\b(?:[ap]|[ap]\.m|oct|sept?|nov|dec|dic|jan|ene|feb|mar|apr|abr|aug|ago|jun|jul|dr|mr|mrs|st|vs|etc)$/.test(before) && next !== "\n") {
+        // "2 years ago. 9:16" ends a sentence; "ago. 9" (agosto) does not
+        const agoEnd = /\bago$/.test(before) && AGO_AFTER.test(line.slice(Math.max(0, i - 30), i - 3).toLowerCase());
+        if (!agoEnd && /\b(?:[ap]|[ap]\.m|oct|sept?|set|nov|dec|dic|jan|ene|feb|mar|apr|abr|aug|ago|jun|jul|dr|mr|mrs|st|vs|etc)$/.test(before) && next !== "\n") {
           if (/\b(?:[ap]\.m|[ap])$/.test(before) && /^\s*[A-ZÁÉÍÓÚÑ]/.test(line.slice(i + 1))) {
             // "11 p.m. Then" — a real end
           } else continue;
@@ -1031,7 +1163,7 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
       return out;
     }, []);
 
-  type Draft = { title: string; parts: string[]; date: string | null; dayFirst: boolean; hint: string; partner: string };
+  type Draft = { title: string; parts: string[]; date: string | null; dayFirst: boolean; hint: string; partner: string; explicit?: boolean };
   const drafts: Draft[] = [];
   const known = ctx.partners ?? [];
   const partnerOf = (piece: string) => findPartner(piece, fold(piece), known, [])?.name ?? "";
@@ -1063,7 +1195,7 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
       const current = drafts[drafts.length - 1];
       const piecePartner = partnerOf(piece);
       const startNew = (date: string | null = anchor?.date ?? null) => {
-        drafts.push({ title: lineStarted ? "" : title, parts: [piece], date, dayFirst: Boolean(state.dayFirst), hint, partner: piecePartner });
+        drafts.push({ title: lineStarted ? "" : title, parts: [piece], date, dayFirst: Boolean(state.dayFirst), hint, partner: piecePartner, explicit: anchor?.stated === "explicit" });
         lineStarted = true;
       };
       const join = (draft: Draft) => {
@@ -1085,6 +1217,13 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
         continue;
       }
       const open = drafts[drafts.length - 1];
+      // One numbered item is one encounter, however many dates or names its story mentions
+      // ("34. Sept 21. I met Ana 2 years ago…" is one encounter on Sep 21).
+      if (item) {
+        if (!open.date && anchor) open.date = anchor.date;
+        join(open);
+        continue;
+      }
       if (otherPartner(open)) {
         startNew(anchor?.date ?? open.date);
         continue;
@@ -1095,6 +1234,14 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
       }
       if (!open.date) {
         open.date = anchor.date;
+        join(open);
+        continue;
+      }
+      // "Nov 1. … twice tonight": today/tonight after a stated date on the same line means that date,
+      // and a piece that is only a date ("Sept 21.") never stands alone as an empty encounter.
+      const todayWord = /\b(?:today|tonight|this (?:morning|afternoon|evening)|hoy|esta (?:noche|manana|tarde|madrugada))\b/.test(folded);
+      const dateOnly = open.parts.length === 1 && storyWords(fold(open.parts[0]).replace(/\b(?:[a-z]{3,10})\b\.?\s*\d{1,2}|\d{1,2}\s*(?:de\s+)?[a-z]{3,10}\b/g, " ")) === 0;
+      if ((todayWord && open.explicit && anchor.date === isoOf(now) && open.date !== anchor.date) || dateOnly) {
         join(open);
         continue;
       }

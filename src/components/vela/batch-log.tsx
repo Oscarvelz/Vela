@@ -443,7 +443,13 @@ function EntryCard({
       <p className="vb-card-who">
         {t("withWhom")}{" "}
         <span className="font-semibold text-fg">{partner || b("noPartner")}</span>
-        {partner && !entry.solo ? <span className="vb-card-src"> · {entry.partnerName ? b("partnerFromText") : b("partnerFallback")}</span> : null}
+        {partner && !entry.solo ? (
+          entry.partnerName && entry.partnerUnsure ? (
+            <span className="vb-card-src is-check" data-testid="batch-partner-check"> · {b("partnerCheck")}</span>
+          ) : (
+            <span className="vb-card-src"> · {entry.partnerName ? b("partnerFromText") : b("partnerFallback")}</span>
+          )
+        ) : null}
       </p>
 
       {skip ? (
@@ -560,12 +566,19 @@ function EntryEditor({ entry, onChange }: { entry: BatchEntry; onChange: (change
 
       <Group title={b("pickPartner")}>
         {partners.map((name) => (
-          <Chip key={name} on={!entry.solo && entry.partnerName === name} onClick={() => onChange({ partnerName: entry.partnerName === name && !entry.solo ? "" : name, solo: false })}>
+          <Chip key={name} on={!entry.solo && entry.partnerName === name} onClick={() => onChange({ partnerName: entry.partnerName === name && !entry.solo ? "" : name, solo: false, partnerUnsure: false })}>
             {name}
           </Chip>
         ))}
+        {(entry.partnerAlts ?? [])
+          .filter((name, i, list) => !partners.includes(name) && name !== entry.partnerName && list.indexOf(name) === i)
+          .map((name) => (
+            <Chip key={`alt-${name}`} on={false} onClick={() => onChange({ partnerName: name, solo: false, partnerUnsure: false })}>
+              {name}
+            </Chip>
+          ))}
         {entry.partnerName && !partners.includes(entry.partnerName) ? (
-          <Chip on={!entry.solo} onClick={() => onChange({ partnerName: "" })}>
+          <Chip on={!entry.solo} onClick={() => onChange({ partnerName: "", partnerUnsure: false })}>
             {entry.partnerName}
           </Chip>
         ) : null}

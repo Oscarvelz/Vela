@@ -67,9 +67,9 @@ export const METHOD_RULES: Rule[] = [
 
 // ---------------------------------------------------------------- problems
 export const PROBLEM_RULES: Rule[] = [
-  { kind: "problem", value: "erection", prio: 2, selfNeg: true, re: r("couldn'?t get (?:it )?(?:hard|up)|could not get (?:it )?(?:hard|up)|lost (?:my|the|his) erection|went soft|got soft|wasn'?t (?:fully )?hard|no erection(?! (?:problems?|issues?|trouble))|no se me (?:paro|levanto|puso dura)|se me bajo|perdi la ereccion|no se le (?:paro|levanto)") },
-  { kind: "problem", value: "erection", re: r("erections? (?:problems?|issues?|trouble)|erectile|erection trouble|ereccion|disfuncion erectil|ed") },
-  { kind: "problem", value: "climax", prio: 2, selfNeg: true, re: r("couldn'?t (?:finish|come|cum|climax|orgasm)|could not (?:finish|come|climax)|didn'?t (?:finish|come|cum|climax)|did not (?:finish|come|climax)|never (?:finished|came)|not able to finish|no (?:orgasm|climax)|without (?:an )?orgasm|no (?:pude|pudo|pudimos) (?:terminar|acabar|venirme|venirse|llegar)|no (?:termine|acabe|llegue|me vine|se vino|termino|acabo|llego)|sin (?:orgasmo|terminar|acabar)") },
+  { kind: "problem", value: "erection", prio: 2, selfNeg: true, re: r("couldn'?t get (?:it )?(?:hard|up)|could not get (?:it )?(?:hard|up)|lost (?:my|the|his) erection|went soft|got soft|wasn'?t (?:fully )?hard|no erection(?! (?:problems?|issues?|trouble))|no se me (?:paro|levanto|puso dura)|se me bajo|perdi la ereccion|no se le (?:paro|levanto)|couldn'?t (?:stay|keep it) hard|could not (?:stay|keep it) hard|couldn'?t keep (?:an|my|the|his) erection|no (?:pude|pudo) (?:mantener|tener) (?:la |una )?ereccion|se me (?:fue|cayo) la ereccion") },
+  { kind: "problem", value: "erection", re: r("erections? (?:problems?|issues?|trouble|difficult(?:y|ies))|erectile|erection trouble|(?:difficult(?:y|ies)|trouble|problems?|issues?|a hard time|struggled?|struggling)(?: (?:to get|getting|to keep|keeping|with|to have|having|for))? (?:an |my |the |his |a )?(?:erection|it up|hard)|hard to (?:get|stay|keep it) hard|(?:problemas?|dificultad(?:es)?|fallas?|lios?)(?: (?:de|con|para|en))? (?:la |una |tener |lograr |mantener |tener una |mantener la )?(?:ereccion|erecto|parado)|(?:me|le) costo (?:tener |lograr |mantener )?(?:la |una )?(?:ereccion|que se me parara|que se le parara|pararse)|disfuncion erectil|ed") },
+  { kind: "problem", value: "climax", prio: 2, selfNeg: true, re: r("couldn'?t (?:finish|come|cum|climax|orgasm)|could not (?:finish|come|climax)|didn'?t (?:finish|come|cum|climax)|did not (?:finish|come|climax)|never (?:finished|came)|not able to finish|no (?:orgasm|climax)|without (?:an )?orgasm|no (?:pude|pudo|pudimos) (?:terminar|acabar|venirme|venirse|llegar)|no (?:termine|acabe|llegue|me vine|se vino|termino|acabo|llego)|sin (?:orgasmo|terminar|acabar)|didn'?t (?:have|get|reach) (?:an |any |the |my |her |his )?(?:orgasm|climax)s?|(?:she|he|i) didn'?t (?:the (?:first|second|third|last) (?:time|round)|this time|that time)|(?:ella|el|yo) no (?:la (?:primera|segunda|tercera|ultima) vez|esa vez)|no (?:tuve|tuvo|tuvimos|alcance|alcanzo|logre|logro) (?:un |ningun |el |mi |su )?(?:orgasmo|climax)") },
   { kind: "problem", value: "climax", re: r("hard to (?:finish|climax|come)|cuesta terminar|(?:me|le) costo (?:terminar|acabar|venirme|venirse|llegar)") },
   { kind: "problem", value: "timing", re: r("(?:came|finished|cum|acabe|termine|me vine|se vino) (?:way |too |really |muy |super |demasiado )?(?:fast|quick(?:ly)?|early|soon|rapido|pronto)|too (?:soon|fast|quick)|premature(?:ly)?|eyaculacion precoz|precoz|muy pronto|demasiado rapido") },
   { kind: "problem", value: "pain", re: r("pain|painful|hurt|hurts|hurting|sore|soreness|discomfort|ouch|dolor(?:oso|osa)?|dolio|duele|dolia|molestias?|me molesto") },
@@ -89,7 +89,7 @@ export const PROBLEM_RULES: Rule[] = [
   { kind: "problem", value: "medication", re: r("medications?|meds|medicine|antidepressants?|ssris?|viagra|cialis|sildenafil|medicacion|medicamentos?|medicina|antidepresivos?|pastillas para") },
   { kind: "problem", value: "interruption", re: r("interrupt\\w*|knock(?:ed|ing)? on the door|walked in on us|someone (?:came|walked) in|(?:kids?|baby) (?:woke|came in|knocked)|phone rang|interrump\\w*|interrupcion|tocaron (?:a )?la puerta|se desperto (?:el|la) (?:bebe|nino|nina)") },
   { kind: "problem", value: "bleeding", re: r("bleeding|bled|blood|spotting|sangr\\w*|manchado") },
-  { kind: "problem", value: "irritation", re: r("irritat\\w*|burning|burned|burn|itch(?:y|ing)?|rash|chafing|irritacion|irritad[oa]s?|ardor|ardia|arde|picazon|comezon|escozor|rozadura|rozad[oa]s?") },
+  { kind: "problem", value: "irritation", re: r("irritat\\w*|burning(?! (?:desire|passion|need|want|lust|hunger|for))|burned(?! with)|burn(?! (?:with|for))|itch(?:y|ing)?|rash|chafing|irritacion|irritad[oa]s?|ardor|ardia|arde|picazon|comezon|escozor|rozadura|rozad[oa]s?") },
 ];
 
 // ---------------------------------------------------------------- feelings (rating dims)
@@ -105,9 +105,10 @@ const dim = (d: Rule["dim"], level: number, source: string, prio = 1): Rule => (
 
 export const RATING_RULES: Rule[] = [
   // intensity: 1 Gentle · 2 Warm · 3 Passionate · 4 Electric · 5 Consuming
-  dim("intensity", 5, "consuming|lost track of time|perdimos (?:la nocion|la cuenta) del tiempo|absorbente|overwhelming|intensisimo|intensisima|insanely intense", 2),
+  dim("intensity", 5, "full (?:in |of )?intensity|full intensity|(?:max|maximum|top|pure|total) intensity|intensidad (?:maxima|total|plena|pura)|llen[oa] de intensidad|con toda la intensidad|consuming|lost track of time|perdimos (?:la nocion|la cuenta) del tiempo|absorbente|overwhelming|intensisimo|intensisima|insanely intense", 2),
   dim("intensity", 4, `${INTENSIFIER}? ?intens[oa]s?|${INTENSIFIER}? ?intense|electric|electrico|electrica|rough|urgent|aggressive|rudo|ruda`),
-  dim("intensity", 3, "passionate|passion|steamy|heated|hot and heavy|hot(?! (?:shower|tub|water|bath|day|weather))|apasionad[oa]s?|con pasion|pasional|caliente(?!s? (?:la ducha|el agua))|calientes"),
+  dim("intensity", 4, "burning (?:desire|passion|lust)|deseo ardiente|ardiente deseo|pasion ardiente|(?:full of|so much|lots of|a lot of|strong|huge|intense|high|raw) (?:desire|lust|passion)|(?:mucho|tanto|un gran|gran|puro|intenso) deseo|llen[oa] de (?:deseo|pasion|ganas)|(?:con )?(?:muchas|tantas) ganas|so horny|super horny|really horny|muy cachond[oa]s?|bien cachond[oa]s?|bien arrech[oa]s?|muy arrech[oa]s?", 2),
+  dim("intensity", 3, "horny|cachond[oa]s?|arrech[oa]s?|aroused|turned on|excitad[oa]s?|desire|deseo|lust|ganas|passionate|passion|steamy|heated|hot and heavy|hot(?! (?:shower|tub|water|bath|day|weather))|apasionad[oa]s?|con pasion|pasional|caliente(?!s? (?:la ducha|el agua))|calientes"),
   dim("intensity", 2, "warm|steady|calido|calida|constante"),
   dim("intensity", 1, "gentle|soft|slow|tender|suave|lento|lenta|despacio|despacito|tiern[oa]s?|delicad[oa]s?"),
   // connection: 1 Distant · 2 Sweet · 3 Close · 4 Soulful · 5 Profound
@@ -119,7 +120,8 @@ export const RATING_RULES: Rule[] = [
   // satisfaction: 1 Light · 2 Pleasant · 3 Great · 4 Deep · 5 Unforgettable
   dim("satisfaction", 5, "(?:completely|totally|fully|so|super) satisfied|completamente satisfech[oa]s?|multiple orgasms|varios orgasmos|squirted", 2),
   dim("satisfaction", 4, `deeply satisfying|${INTENSIFIER} satisfied|(?:we )?both (?:came|finished)|los dos (?:terminamos|acabamos|llegamos)|ambos (?:terminamos|acabamos|llegamos)|(?:so much|lots of|a lot of) pleasure|mucho placer|muy satisfech[oa]s?`, 2),
-  dim("satisfaction", 3, "satisfied|satisfying|satisfech[oa]s?|satisfactori[oa]|really satisfying"),
+  dim("satisfaction", 4, "(?:very|so|really|more|most|super|extremely|muy|bien|mas|super|tan) (?:pleasurable|placenter[oa]s?|enjoyable)|(?:intense|strong|huge|powerful|great|amazing|incredible|deep|big) orgasms?|orgasmos? (?:intensos?|fuertes?|brutal(?:es)?|increibles?|profundos?|riquisimos?)|came hard|(?:me|se) vino (?:rico|delicioso|fuerte)", 2),
+  dim("satisfaction", 3, "pleasurable|placenter[oa]s?|enjoyable|disfrute|disfrutamos|disfruto|orgasms?|orgasmos?|climax(?:ed)?|orgasmed|(?:i|he|she|we) came|me vine|se vino|me corri|se corrio|llegue al (?:orgasmo|climax)|llego al (?:orgasmo|climax)|satisfied|satisfying|satisfech[oa]s?|satisfactori[oa]|really satisfying"),
   dim("satisfaction", 2, "pleasant|agradable|(?:some|a little) pleasure|poco placer|little pleasure|not much pleasure"),
   dim("satisfaction", 1, "unsatisfied|unsatisfying|not satisfied|insatisfech[oa]s?|me quede con ganas|left wanting more|frustrated"),
   // energy: 1 Languid · 2 Relaxed · 3 Playful · 4 High · 5 Wild
@@ -243,7 +245,8 @@ export const MONTHS: Record<string, number> = {
   jun: 6, june: 6, junio: 6,
   jul: 7, july: 7, julio: 7,
   aug: 8, august: 8, ago: 8, agosto: 8,
-  sep: 9, sept: 9, september: 9, septiembre: 9, setiembre: 9,
+  // "set" (Spanish "set." / "21 set") is only read as September where batch.ts says so.
+  sep: 9, sept: 9, set: 9, september: 9, septiembre: 9, setiembre: 9,
   oct: 10, october: 10, octubre: 10,
   nov: 11, november: 11, noviembre: 11,
   dec: 12, december: 12, dic: 12, diciembre: 12,
