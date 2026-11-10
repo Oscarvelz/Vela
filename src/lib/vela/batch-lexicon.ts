@@ -161,7 +161,7 @@ export const OVERALL_RULES: Rule[] = [
   ov(2, "not great|not good|not the best|not (?:our|my|her|his|their) best|no fue (?:nuestro|nuestra|el|la|su) mejor(?: vez| noche)?|not amazing|not that good|no fue lo mejor|no tan buen[oa]|no muy buen[oa]|no estuvo tan bien|could have been better|pudo (?:ser|haber sido) mejor", 2),
   ov(3, "not bad|nada mal|no estuvo mal|no fue malo", 2),
   ov(5, "best (?:sex|night|time|session|one)? ?ever|best \\w+ of (?:my|her|his|our) li(?:fe|ves)|the best|amazing|amaizing|incredible|unbelievable|insane|mind ?-?blowing|unforgettable|perfect|out of this world|phenomenal|epic|spectacular|increible|espectacular|brutal|buenisim[oa]|riquisim[oa]|de lo mejor|lo mejor|lo maximo|fenomenal|inolvidable|perfect[oa]|la mejor|el mejor|10 de 10"),
-  ov(4, "great|awesome|fantastic|wonderful|lovely|so good|really good|very good|super good|pretty good|good|nice|enjoyed it|loved it|really enjoyed|(?:muy|super|bien|que) ric[oa]|ric[oa]|muy buen[oa]|bien buen[oa]|super buen[oa]|muy bien|genial|delicios[oa]|sabros[oa]|chevere|chido|bacano|hermos[oa]|precios[oa]"),
+  ov(4, "great|awesome|fantastic|wonderful|lovely|so good|really good|very good|super good|pretty good|good|enjoyed it|loved it|really enjoyed|(?:muy|super|bien|que) ric[oa]|ric[oa]|muy buen[oa]|bien buen[oa]|super buen[oa]|muy bien|genial|delicios[oa]|sabros[oa]|chevere|chido|bacano|hermos[oa]|precios[oa]"),
   ov(3, "okay|ok|fine|decent|alright|average|estuvo bien|fue bien|todo bien|normal|aceptable"),
   ov(2, "meh|so-?so|so so|mediocre|regular|mas o menos|nada especial|nothing special|nada del otro mundo|flojo|meh+"),
   ov(1, "bad|terrible|awful|horrible|worst|disappointing|boring|disaster|mal[oa]|pesim[oa]|fatal|aburrid[oa]|decepcionante|desastre"),

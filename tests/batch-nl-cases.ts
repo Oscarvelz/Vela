@@ -360,7 +360,7 @@ export const CASES: Case[] = [
   {
     name: "es position: a gatas",
     text: "26 oct con Ana. A gatas en la cama.",
-    expect: [{ date: "2026-10-26", partner: "Ana", positions: ["Doggy"] }],
+    expect: [{ date: "2026-10-26", partner: "Ana", place: "Bedroom", positions: ["Doggy"] }],
   },
   {
     // The difficulty frame's state family includes "impossible" (with its perception
@@ -384,7 +384,8 @@ export const CASES: Case[] = [
     // second round is mentioned — mentioned to say it never happened.
     name: "en count: only once caps a mentioned second round",
     text: "Oct 26 with Ana at the hotel. We did it only once. I was too tired, and it was too late to attempt a second round.",
-    expect: [{ date: "2026-10-26", partner: "Ana", place: "Hotel", count: 1 }],
+    // "I was too tired" is a true factor read and is pinned as such; the case guards the count.
+    expect: [{ date: "2026-10-26", partner: "Ana", place: "Hotel", count: 1, problems: ["fatigue"] }],
   },
   {
     // The pleasure family rates satisfaction as a pattern: a delight word is pleasure at
