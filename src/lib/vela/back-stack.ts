@@ -133,6 +133,17 @@ function onKey(event: KeyboardEvent) {
 export function installBackStack() {
   if (installed) return;
   installed = true;
+  // Our history entries are layer markers on the same URL, never places: the browser must never
+  // "restore" a scroll position for one. With the default ("auto"), closing a layer by its own
+  // button quietly calls history.back() (reconcile), and the browser then scrolls the page back to
+  // wherever it was when that entry was pushed — Oscar, Nov 9 2026: scrub the cycle dial to another
+  // day near the top, scroll down, tap "Today", and the page jumped back up instead of staying.
+  // Manual: nothing in Vela ever wants a restored scroll; the page stays where the reader left it.
+  try {
+    history.scrollRestoration = "manual";
+  } catch {
+    /* older engines: the layers still work, only the jump can reappear */
+  }
   window.addEventListener("popstate", onPop);
   for (const type of ["pointerdown", "pointerup", "touchend", "keydown", "click"]) {
     window.addEventListener(type, onInteract, { capture: true, passive: true });

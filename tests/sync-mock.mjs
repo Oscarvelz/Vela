@@ -1,7 +1,9 @@
 // Two-device sync test against an in-memory mock of the Supabase REST API
 // (build made with a fake SUPABASE_URL, served at http://localhost:8098/Vela/).
-// Checks: upload is ciphertext only, new-device open from cloud, conflict merge,
-// offline queue, passphrase changed on another device. Fake data only.
+// Checks: upload is ciphertext only, new-device open from cloud, a real divergence
+// PAUSES for the owner's choice (revision decides, never a clock: nothing is merged
+// or overwritten, the unchosen copy downloads as a backup first), one-sided changes
+// are adopted whole, offline queue, passphrase changed on another device. Fake data only.
 import { chromium } from "/workspace/work/browser-test/node_modules/playwright-core/index.mjs";
 
 const URL = "http://localhost:8098/Vela/";
@@ -17,7 +19,6 @@ const ok = (name, cond, extra = "") => {
 let row = null;
 const bodies = [];
 let conflicts = 0;
-let raceOnce = false;
 
 async function handle(route) {
   const req = route.request();
@@ -46,11 +47,6 @@ async function handle(route) {
   }
   if (method === "PATCH") {
     const base = Number((u.searchParams.get("revision") || "").replace("eq.", ""));
-    if (raceOnce && row) {
-      // Simulate another device writing between this device's pull and push.
-      raceOnce = false;
-      row = { ...row, revision: row.revision + 1 };
-    }
     if (!row || row.revision !== base) {
       conflicts += 1;
       return json(200, []);
@@ -68,7 +64,7 @@ const browser = await chromium.launch({
 });
 
 async function device(width) {
-  const ctx = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: "block" }); // SW first-install reload raced the form fill on localhost
+  const ctx = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: "block", acceptDownloads: true }); // SW first-install reload raced the form fill on localhost
   await ctx.route("https://fakeproj.supabase.co/**", handle);
   const session = {
     access_token: "fake.jwt.token",
@@ -142,18 +138,33 @@ await B.page.click('button:has-text("Open my journal")');
 await B.page.waitForSelector(".ag-tabbar", { timeout: 30000 });
 ok("B opened A's entry", await historyHas(B.page, "Alphonse Fakeone"));
 
-// B adds; A adds on a stale revision → conflict → pull, merge, retry.
+// B adds and syncs; A adds on a stale revision → both copies changed → sync PAUSES.
+// No clock decides, nothing is merged and nothing is overwritten until the owner chooses.
 await addEntry(B.page, "Beatrix Faketwo");
 await syncAndWait(B.page);
 const revAfterB = row.revision;
-const conflictsBefore = conflicts;
-raceOnce = true;
 await addEntry(A.page, "Cassius Fakethree");
-await syncAndWait(A.page);
-ok("A hit a conflict and recovered", conflicts > conflictsBefore && row.revision > revAfterB, `conflicts ${conflicts}, rev ${row.revision}`);
-ok("A merged B's entry with its own", await historyHas(A.page, "Alphonse Fakeone", "Beatrix Faketwo", "Cassius Fakethree"));
+await openData(A.page);
+await A.page.click('button:has-text("Sync now")');
+await A.page.waitForSelector('[data-testid="cloud-conflict"]', { timeout: 30000 });
+ok("A pauses on a real conflict instead of merging", true);
+ok("the account row was not overwritten", row.revision === revAfterB, `rev ${row.revision}`);
+ok("A kept its own entry", await historyHas(A.page, "Cassius Fakethree"));
+ok("A did not absorb B's entry", !(await historyHas(A.page, "Beatrix Faketwo")));
+// A chooses this device's copy: the account copy downloads as a backup first, then A pushes.
+// (The History checks above closed the settings sheet — reopen it to reach the panel.)
+await openData(A.page);
+await A.page.waitForSelector('[data-testid="cloud-conflict"]', { timeout: 30000 });
+const conflictDownload = A.page.waitForEvent("download", { timeout: 30000 });
+await A.page.click('button:has-text("Keep this device\'s copy")');
+const dl = await conflictDownload;
+ok("the account copy was downloaded as a backup first", (await dl.suggestedFilename()).startsWith("vela-account-copy-"), await dl.suggestedFilename());
+await A.page.waitForFunction(() => document.querySelector('[data-testid="cloud-status"]')?.textContent?.includes("Saved to your account"), null, { timeout: 30000 });
+ok("A pushed its copy as the next revision", row.revision === revAfterB + 1, `rev ${row.revision}`);
+// B has no unsynced edits of its own → it adopts the account copy whole.
 await syncAndWait(B.page);
-ok("B received A's entry", await historyHas(B.page, "Cassius Fakethree", "Beatrix Faketwo"));
+ok("B adopted the account copy whole", await historyHas(B.page, "Cassius Fakethree", "Alphonse Fakeone"));
+ok("B's replaced entry is gone from B (it survives in A's downloaded backup)", !(await historyHas(B.page, "Beatrix Faketwo")));
 
 // Offline queue on B.
 await B.ctx.setOffline(true);

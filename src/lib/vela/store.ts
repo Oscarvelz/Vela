@@ -754,6 +754,7 @@ export type CloudPhase =
   | "offline"
   | "error"
   | "needs-pass"
+  | "conflict"
   | "other-account";
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;

@@ -4,7 +4,7 @@ import { getClient, keepSignedIn, setKeepSignedIn } from "@/lib/vela/cloud";
 import { cloudConfigured } from "@/lib/vela/supabase-config";
 import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
-import { adoptRemotePassphrase, signOut, syncNow, useCloud } from "@/lib/vela/sync";
+import { adoptRemotePassphrase, resolveConflictKeepMine, resolveConflictUseCloud, signOut, syncNow, useCloud } from "@/lib/vela/sync";
 import { Button, ConfirmDialog, fieldClass, PassphraseInput, PasswordInput } from "./ui";
 import { useBioT } from "@/lib/vela/bio-copy";
 import { inAndroidApp } from "@/lib/vela/native";
@@ -20,6 +20,7 @@ export function AccountPanel() {
   const t = useT();
   const authReady = useCloud((s) => s.authReady);
   const user = useCloud((s) => s.user);
+  const conflict = useCloud((s) => s.conflict);
   const sessionGone = useCloud((s) => s.sessionGone);
   const lastEmail = useCloud((s) => s.lastEmail);
   const cloudPhase = useJournal((s) => s.cloudPhase);
@@ -60,7 +61,9 @@ export function AccountPanel() {
             ? t("syncError")
             : cloudPhase === "other-account"
               ? t("cloudOther")
-              : cloudPhase === "needs-pass"
+              : cloudPhase === "conflict"
+                ? t("cloudConflict")
+                : cloudPhase === "needs-pass"
                 ? t("cloudNeedsPass")
                 : cloudPhase === "saved"
                   ? t("synced")
@@ -97,6 +100,41 @@ export function AccountPanel() {
               {pending ? t("unlocking") : t("cloudPassBtn")}
             </Button>
           </form>
+        ) : null}
+        {unlocked && conflict ? (
+          <div className="space-y-2 rounded-xl border border-border bg-surface p-3" data-testid="cloud-conflict">
+            <p className="text-sm font-semibold">{t("conflictTitle")}</p>
+            <p className="text-sm leading-relaxed text-dim">{t("conflictBody")}</p>
+            <Button
+              className="w-full"
+              disabled={pending}
+              onClick={() => {
+                setError("");
+                setPending(true);
+                void resolveConflictKeepMine().then((ok) => {
+                  setPending(false);
+                  if (!ok) setError(t("syncError"));
+                });
+              }}
+            >
+              {t("conflictKeepMine")}
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              disabled={pending}
+              onClick={() => {
+                setError("");
+                setPending(true);
+                void resolveConflictUseCloud().then((ok) => {
+                  setPending(false);
+                  if (!ok) setError(t("syncError"));
+                });
+              }}
+            >
+              {t("conflictUseCloud")}
+            </Button>
+          </div>
         ) : null}
         {error ? (
           <p className="text-sm text-danger" role="alert">

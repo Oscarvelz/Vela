@@ -28,7 +28,8 @@ function box(on = keepSignedIn()): Storage {
 }
 
 /** Saves the choice and moves any existing auth entries to the matching storage,
-    so nobody is signed out by switching. */
+    so nobody is signed out by switching. The owner mark (LAST) never moves: it lives in
+    localStorage whatever the session choice is (see rememberUser). */
 export function setKeepSignedIn(on: boolean) {
   try {
     const was = keepSignedIn();
@@ -38,12 +39,16 @@ export function setKeepSignedIn(on: boolean) {
     const to = box(on);
     for (let i = from.length - 1; i >= 0; i -= 1) {
       const k = from.key(i);
-      if (k && (k.startsWith(AUTH_STORAGE_KEY) || k === LAST)) {
+      if (k && k.startsWith(AUTH_STORAGE_KEY)) {
         const v = from.getItem(k);
         if (v !== null) to.setItem(k, v);
         from.removeItem(k);
       }
     }
+    // A mark left in sessionStorage by an older build becomes the device mark again.
+    const stray = sessionStorage.getItem(LAST);
+    if (stray && !localStorage.getItem(LAST)) localStorage.setItem(LAST, stray);
+    sessionStorage.removeItem(LAST);
   } catch {
     /* storage unavailable */
   }
@@ -78,19 +83,33 @@ const authStorage = {
   },
 };
 
-/** The last account signed in here (id + email only), kept the same way as the session.
-    Lets Vela tell "the session ended by itself" apart from "never signed in". */
+/** The last account signed in here (id + email only): the device's owner mark.
+    It lives in localStorage OUTSIDE the session, whatever "keep me signed in" says — the session
+    may end (closed app, expired token, no signal) without the device forgetting whose journal
+    this is, so Vela opens locally and only the sync waits for a sign-in (the door rule Oscar set
+    for Brizna and Faro, Nov 9 2026). Only an explicit sign-out erases the mark (forgetUser). */
 export function rememberUser(u: { id: string; email: string } | null) {
   if (!u) return;
   try {
-    box().setItem(LAST, JSON.stringify({ id: u.id, email: u.email }));
+    localStorage.setItem(LAST, JSON.stringify({ id: u.id, email: u.email }));
+    sessionStorage.removeItem(LAST);
   } catch {
     /* ignore */
   }
 }
 export function lastUser(): { id: string; email: string } | null {
   try {
-    const u = JSON.parse(box().getItem(LAST) || "null") as { id?: unknown; email?: unknown } | null;
+    // Older builds kept the mark with the session (sessionStorage when "keep" was off): read it
+    // there once and promote it to the device mark.
+    let raw = localStorage.getItem(LAST);
+    if (!raw) {
+      raw = sessionStorage.getItem(LAST);
+      if (raw) {
+        localStorage.setItem(LAST, raw);
+        sessionStorage.removeItem(LAST);
+      }
+    }
+    const u = JSON.parse(raw || "null") as { id?: unknown; email?: unknown } | null;
     return u && typeof u.id === "string" ? { id: u.id, email: typeof u.email === "string" ? u.email : "" } : null;
   } catch {
     return null;

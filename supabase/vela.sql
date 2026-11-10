@@ -52,8 +52,11 @@ grant select, insert, update, delete on table public.vela_vault to authenticated
 
 -- Optimistic concurrency guard: a new row starts at revision 1, and every update
 -- must move the revision forward by exactly one. The app updates with
--- "where revision = <base>", so a stale device gets 0 rows back (a conflict),
--- pulls, merges, and retries. updated_at is always set by the server.
+-- "where revision = <base>", so a stale device gets 0 rows back. The app then
+-- observes the newer row and decides by revision only — never by any clock:
+-- adopt it whole, or, if this device also has unsynced changes, pause and let
+-- the owner choose which copy to keep (nothing is merged automatically).
+-- updated_at is always set by the server.
 create or replace function public.vela_vault_guard()
 returns trigger
 language plpgsql
