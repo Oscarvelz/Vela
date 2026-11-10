@@ -1001,6 +1001,45 @@ input[type="range"].ag-range::-moz-range-thumb {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 4px 12px color-mix(in srgb, var(--ag-accent) 18%, transparent);
 }
 
+/* ── Batch editor bubbles ───────────────────────────────────────────────────
+   The Adjust sheet's own bubble: the compact pass (2.1.6) squeezed the words
+   against the edges and Oscar sent it back — "que las burbujas no parezcan
+   apretadas". These carry their air inside: real padding, a comfortable line,
+   and a finished surface in every theme (a quiet top light when off; the
+   shared gold of .ag-chip-on when on). Geometry lives here, not in utilities,
+   so both states always share the same body. */
+.vb-bub {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 37px;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  text-align: center;
+  transition: transform 0.15s ease, box-shadow 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
+}
+.vb-bub:active { transform: scale(0.97); }
+.vb-bub-off {
+  color: color-mix(in srgb, var(--ag-text) 88%, transparent);
+  background-color: var(--ag-surface);
+  background-image: linear-gradient(180deg,
+    color-mix(in srgb, var(--ag-surface) 86%, #fff 8%),
+    color-mix(in srgb, var(--ag-surface) 97%, #fff 2%));
+  border-color: color-mix(in srgb, var(--ag-text) 14%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+[data-mode="day"] .vb-bub-off {
+  background-color: #fff;
+  background-image: linear-gradient(180deg, #fff, color-mix(in srgb, var(--ag-surface) 65%, #fff));
+  border-color: rgba(18, 26, 58, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 8px rgba(30, 30, 70, 0.08);
+}
+
 /* ── Cycle: phase colours, dial, calendar marks, sheets ──────────────────────
    Soft rose for the period, sea-glass teal for the fertile window, a brighter
    teal for ovulation. Night values glow on navy; day values hold contrast on paper. */

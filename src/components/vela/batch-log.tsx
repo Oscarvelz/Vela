@@ -553,13 +553,13 @@ function EntryEditor({ entry, onChange }: { entry: BatchEntry; onChange: (change
   };
 
   return (
-    <div className="mt-3 space-y-3 rounded-xl border border-fg/18 bg-bg/50 px-2.5 py-2.5">
+    <div className="mt-3 space-y-[0.9rem] rounded-[1.1rem] border border-fg/18 bg-bg/50 px-3 py-3">
       <div className="grid grid-cols-2 gap-2">
         <label className="block">
           <span className="mb-0.5 block text-[11px] font-semibold text-fg/70">{t("date")}</span>
           <input
             type="date"
-            className={cn(fieldClass, "px-2.5 py-1.5 text-sm")}
+            className={cn(fieldClass, "px-2.5 py-2 text-sm")}
             value={entry.date}
             onChange={(event) => event.target.value && onChange({ date: event.target.value, endDate: event.target.value, dateStated: true })}
           />
@@ -568,7 +568,7 @@ function EntryEditor({ entry, onChange }: { entry: BatchEntry; onChange: (change
           <span className="mb-0.5 block text-[11px] font-semibold text-fg/70">{t("time")}</span>
           <input
             type="time"
-            className={cn(fieldClass, "px-2.5 py-1.5 text-sm")}
+            className={cn(fieldClass, "px-2.5 py-2 text-sm")}
             value={entry.time}
             onChange={(event) => event.target.value && onChange({ time: event.target.value, timeStated: true, times: [] })}
           />
@@ -687,7 +687,7 @@ function EntryEditor({ entry, onChange }: { entry: BatchEntry; onChange: (change
 
       <label className="block">
         <span className="mb-1 block text-[13px] font-semibold">{b("note")}</span>
-        <textarea className={cn(fieldClass, "min-h-14 resize-y text-sm leading-relaxed")} value={entry.notes} onChange={(event) => onChange({ notes: event.target.value })} />
+        <textarea className={cn(fieldClass, "min-h-16 resize-y text-sm leading-relaxed")} value={entry.notes} onChange={(event) => onChange({ notes: event.target.value })} />
       </label>
     </div>
   );
@@ -696,20 +696,17 @@ function EntryEditor({ entry, onChange }: { entry: BatchEntry; onChange: (change
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div>
-      <p className="mb-1.5 text-[13px] font-semibold">{title}</p>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
+      <p className="mb-2 text-[13px] font-semibold">{title}</p>
+      <div className="flex flex-wrap gap-2">{children}</div>
     </div>
   );
 }
 
 function Chip({ on, children, onClick }: { on: boolean; children: ReactNode; onClick: () => void }) {
+  // The editor's own bubble (.vb-bub): air inside and a finished surface in both states —
+  // the shared gold when on, a quiet top-lit glass when off (styles.css).
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      className={cn("min-h-[31px] rounded-full border px-2.5 text-xs font-semibold", on ? "ag-chip-on" : "ag-pill border-border text-fg")}
-    >
+    <button type="button" aria-pressed={on} onClick={onClick} className={cn("vb-bub", on ? "ag-chip-on" : "vb-bub-off")}>
       {children}
     </button>
   );
@@ -737,10 +734,10 @@ function LevelRow({
           onClick={() => onPick(level)}
           className={cn(
             "grid size-8 place-items-center rounded-lg border transition-colors duration-200",
-            value >= level ? "ag-rate-on border-accent" : "border-border",
+            value >= level ? "ag-rate-on border-accent" : "border-border bg-gradient-to-b from-white/[0.05] to-transparent",
           )}
         >
-          <RatingIcon style={style} className="size-3.5" active={value >= level} />
+          <RatingIcon style={style} className="size-4" active={value >= level} />
         </button>
       ))}
     </div>
