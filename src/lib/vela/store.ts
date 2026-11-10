@@ -91,7 +91,23 @@ function asSettings(raw: unknown, language: Lang): Settings {
       : [],
     customProblems: Array.isArray(s.customProblems) ? s.customProblems.filter((x) => typeof x === "string") : [],
     defaultPartner: typeof s.defaultPartner === "string" ? s.defaultPartner : "",
+    batchDraft: asBatchDraft(s.batchDraft),
     ...cycleFields(s),
+  };
+}
+
+/** The batch work-in-progress rides inside the journal; keep only a well-shaped one. */
+function asBatchDraft(raw: unknown): Settings["batchDraft"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const d = raw as Partial<import("./types").BatchDraft>;
+  if (typeof d.text !== "string" || d.text.length > 200_000) return undefined;
+  return {
+    text: d.text,
+    picked: typeof d.picked === "string" ? d.picked : "",
+    typed: typeof d.typed === "string" ? d.typed : "",
+    edits: d.edits && typeof d.edits === "object" && !Array.isArray(d.edits) ? d.edits : {},
+    open: typeof d.open === "string" ? d.open : null,
+    at: typeof d.at === "number" ? d.at : 0,
   };
 }
 
@@ -701,6 +717,7 @@ type Store = {
   setWeekStart: (weekStart: WeekStart) => void;
   setDiscreet: (discreet: boolean) => void;
   setAutoLock: (mins: number) => void;
+  setBatchDraft: (draft: import("./types").BatchDraft | undefined) => void;
   setDefaultPartner: (name: string) => void;
   /** Changes the shown tracker, or tracker `id` (settings fields, enabled = on / paused, name, link). */
   setCycle: (partial: Partial<CycleTracker>, id?: string) => void;
@@ -1435,6 +1452,7 @@ export const useJournal = create<Store>((set, get) => {
     setWeekStart: (weekStart) => patchSettings({ weekStart }),
     setDiscreet: (discreet) => patchSettings({ discreet }),
     setAutoLock: (autoLockMins) => patchSettings({ autoLockMins }),
+    setBatchDraft: (batchDraft) => patchSettings({ batchDraft }),
     setDefaultPartner: (defaultPartner) => patchSettings({ defaultPartner: defaultPartner.trim() }),
     setCycle: (partial, id) => {
       patchTracker((cycle) => cleanCycle({ ...cycle, ...partial }), id, partial);

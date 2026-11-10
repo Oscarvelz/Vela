@@ -46,16 +46,43 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
   const b = useBatchT();
   const lang = useLang();
   const saveBatch = useJournal((s) => s.saveBatch);
+  const setBatchDraft = useJournal((s) => s.setBatchDraft);
   const partners = useJournal((s) => s.journal.partners);
   const settings = useJournal((s) => s.journal.settings);
   const defaultPartner = settings.defaultPartner;
-  const [text, setText] = useState("");
-  const [picked, setPicked] = useState(defaultPartner);
-  const [typed, setTyped] = useState("");
+  // The work in progress lives in the encrypted journal: whatever was here when the app
+  // locked, the page died, or the phone was put away is here again on return (Oscar, Nov 9
+  // 2026 — a mid-import app switch used to hand him back an empty sheet).
+  const [restored] = useState(() => useJournal.getState().journal.settings.batchDraft);
+  const [text, setText] = useState(restored?.text ?? "");
+  const [picked, setPicked] = useState(restored?.picked || defaultPartner);
+  const [typed, setTyped] = useState(restored?.typed ?? "");
   const [naming, setNaming] = useState(false);
   const [knows, setKnows] = useState(false);
-  const [edits, setEdits] = useState<Record<string, Edit>>({});
-  const [open, setOpen] = useState<string | null>(null);
+  const [edits, setEdits] = useState<Record<string, Edit>>(restored?.edits ?? {});
+  const [open, setOpen] = useState<string | null>(restored?.open ?? null);
+  // Keep the stored copy current: debounced as he works, and flushed the moment the page
+  // hides — the exact moment he leaves for another app.
+  const draftNow = (): { text: string; picked: string; typed: string; edits: Record<string, Edit>; open: string | null } | null =>
+    !text.trim() && !typed && Object.keys(edits).length === 0 ? null : { text, picked, typed, edits, open };
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const draft = draftNow();
+      setBatchDraft(draft ? { ...draft, at: Date.now() } : undefined);
+    }, 500);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, picked, typed, edits, open]);
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState !== "hidden") return;
+      const draft = draftNow();
+      setBatchDraft(draft ? { ...draft, at: Date.now() } : undefined);
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, picked, typed, edits, open]);
   // Back / gesture: an open Adjust panel, then the "what Vela understands" note, before Batch itself closes
   // (closing only hides it: the typed text stays).
   useBackLayer(live && knows, () => setKnows(false), { name: "batch-knows" });
@@ -222,7 +249,7 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
         />
         <div className="vb-page-foot">
           {text ? (
-            <button type="button" className="vb-mini" onClick={() => { setText(""); setEdits({}); setOpen(null); area.current?.focus(); }}>
+            <button type="button" className="vb-mini" onClick={() => { setText(""); setEdits({}); setOpen(null); setBatchDraft(undefined); area.current?.focus(); }}>
               <Eraser className="size-3.5" strokeWidth={2} aria-hidden />
               {b("clear")}
             </button>
@@ -360,6 +387,7 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
             setNaming(false);
             setEdits({});
             setOpen(null);
+            setBatchDraft(undefined);
             onSaved();
           }}
         >
@@ -547,21 +575,24 @@ function EntryEditor({ entry, onChange }: { entry: BatchEntry; onChange: (change
         </label>
       </div>
 
-      {/* Rounds and the overnight switch share one row: each used to eat a full row of the
-          editor, and together they made the adjust sheet feel endless (Oscar, Nov 9 2026). */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] font-semibold">{b("rounds2")}</span>
-          <button type="button" aria-label="−" className="grid size-8 place-items-center rounded-full border border-border" onClick={() => onChange({ count: Math.max(1, entry.count - 1) })}>
-            <Minus className="size-4" />
-          </button>
-          <span className="w-5 text-center text-sm font-semibold tabular-nums">{entry.count}</span>
-          <button type="button" aria-label="+" className="grid size-8 place-items-center rounded-full border border-border" onClick={() => onChange({ count: Math.min(12, entry.count + 1) })}>
-            <Plus className="size-4" />
-          </button>
+      {/* Rounds is a small stack — its word on top, the stepper under it — so the overnight
+          switch and its label get the rest of the row to themselves. Squeezed into one line,
+          "Ends the next day" broke into four stacked words (Oscar's layout, Nov 9 2026). */}
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="mb-1 text-[13px] font-semibold">{b("rounds2")}</p>
+          <div className="flex items-center gap-1.5">
+            <button type="button" aria-label="−" className="grid size-7 place-items-center rounded-full border border-border" onClick={() => onChange({ count: Math.max(1, entry.count - 1) })}>
+              <Minus className="size-3.5" />
+            </button>
+            <span className="w-5 text-center text-sm font-semibold tabular-nums">{entry.count}</span>
+            <button type="button" aria-label="+" className="grid size-7 place-items-center rounded-full border border-border" onClick={() => onChange({ count: Math.min(12, entry.count + 1) })}>
+              <Plus className="size-3.5" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-fg/80">{b("nextDay")}</span>
+        <div className="flex items-center gap-2 pb-0.5">
+          <span className="max-w-[8rem] text-xs font-semibold leading-snug text-fg/80">{b("nextDay")}</span>
           <Switch checked={entry.nextDay} label={b("nextDay")} onChange={(nextDay) => onChange({ nextDay })} />
         </div>
       </div>

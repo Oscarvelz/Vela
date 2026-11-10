@@ -1,7 +1,24 @@
+import type { BatchEntry } from "./batch";
 import type { Mode, RatingStyle, ThemeId, WeekStart } from "./catalog";
 import type { CycleSettings } from "./cycle";
 import type { CycleTracker } from "./cycle-trackers";
 import type { Lang } from "./copy";
+
+/**
+ * The batch sheet's work in progress, kept inside the encrypted journal: the pasted text,
+ * the partner choices and every card edit. Leaving mid-import — the app locking, the phone
+ * killing the page, anything — must never cost the work (Oscar, Nov 9 2026: he switched apps
+ * mid-import and came back to a locked, emptied sheet). Cleared when the batch is saved or
+ * the sheet is cleared by hand.
+ */
+export type BatchDraft = {
+  text: string;
+  picked: string;
+  typed: string;
+  edits: Record<string, Partial<BatchEntry> & { skip?: boolean }>;
+  open: string | null;
+  at: number;
+};
 
 export type Settings = {
   theme: ThemeId;
@@ -23,6 +40,8 @@ export type Settings = {
   cycleSelected: string;
   /** 2 = Firmament became the default theme (Oct 31, 2026). */
   themeVersion?: number;
+  /** The batch sheet's unsaved work, so an interruption never costs an import in progress. */
+  batchDraft?: BatchDraft;
 };
 
 export type Profile = {
