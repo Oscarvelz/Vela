@@ -40,6 +40,7 @@ import { AddTracker } from "./cycle-add";
 import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PassphraseInput } from "./ui";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { APK_URL, androidBrowser } from "@/lib/vela/native";
+import { APP_VERSION } from "@/lib/vela/version";
 
 export function SettingsView() {
   const t = useT();
@@ -138,6 +139,7 @@ export function SettingsView() {
         </Accordion>
       ) : null}
       <p className="px-4 pt-3 text-center text-xs tracking-wide text-dim">{t("footer")}</p>
+      <p className="px-4 pb-2 pt-1 text-center text-[11px] tracking-wide text-dim/70">{language === "es" ? "Versión" : "Version"} {APP_VERSION}</p>
     </div>
   );
 }

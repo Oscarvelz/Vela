@@ -20,6 +20,7 @@ type Want = Partial<{
   positions: string[];
   contraception: string[];
   problems: string[];
+  solo: boolean;
   minIntensity: number;
   minConnection: number;
   minSatisfaction: number;
@@ -47,6 +48,7 @@ function check(name: string, text: string, want: Want, ctx: object = {}, index =
       if (w !== undefined && JSON.stringify(g) !== JSON.stringify(w)) bad.push(`${k} ${JSON.stringify(g)}≠${JSON.stringify(w)}`);
     };
     eq("date", e.date, want.date);
+    eq("solo", e.solo, want.solo);
     eq("time", e.time, want.time);
     eq("count", e.count, want.count);
     eq("partner", e.partnerName, want.partner);
@@ -197,6 +199,11 @@ check("mix: lunes en la noche twice", "Oct 19, el lunes en la noche with Ana, tw
 check("mix: Oct 20th, a eso de las 11", "Oct 20th, a eso de las 11, con Lucia", { date: "2026-10-20", time: "23:00" });
 check("es: 21 de octubre en la madrugada", "21 de octubre en la madrugada con Ana, en el sillón, sin protección", { date: "2026-10-21", time: "02:00", place: "Living room", contraception: ["none"] });
 check("en: on Oct 22 at 11:30 p.m.", "On Oct 22 at 11:30 p.m. with Lucia, in the car, condom, 8/10", { time: "23:30", place: "Car", contraception: ["condom"], overall: 4 });
+
+// ---- solo is a conclusion of absence: a solo marker never outvotes another person on stage
+check("solo: preliminary act, she takes part", "Oct 23. I masturbated before, at home. In the car. She stimulated me and I made her finish.", { solo: false, place: "Car" });
+check("solo: nobody else on stage", "Oct 24. I masturbated at home, alone in bed.", { solo: true });
+check("solo: me toque solo", "25 de octubre. Me toque solo en casa.", { solo: true });
 
 // ---- never an empty encounter
 const empty = all.filter((e) => !e.notes.trim() && !e.partnerName && !e.place && !e.positions.length && !e.contraception.length && !e.problems.length && !e.overall && !e.intensity && !e.connection && !e.satisfaction && !e.energy && !e.durationMins && !e.timeStated);

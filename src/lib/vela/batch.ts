@@ -746,6 +746,12 @@ function fuzzyHits(folded: string, fuzzy: ReturnType<typeof buildRules>["fuzzy"]
 /** A solo moment, said in the text. Bare "solo" counts only on its own ("Oct 30 solo"), never "solo una vez"/"solo con". */
 const SOLO_RE = /\b(?:masturbat\w*|masturb\w*|jerk(?:ed|ing)? off|jack(?:ed|ing)? off|by myself|on my own|just me|solo (?:session|moment|time)|me toque|me hice una paja|una paja|por mi cuenta|yo sol[oa]|a solas|solit[oa]|en solitario|momento en solitario)\b|\bsol[oa]\b(?=\s*(?:[,.;:!?)]|$|\b(?:tonight|today|yesterday|last night|this morning|hoy|ayer|anoche|en casa|at home|in bed|en la cama|in the shower|en la ducha)\b))|\balone\b(?=\s*(?:[,.;:!?)]|$|\b(?:at home|in bed|tonight|today|en casa)\b))/;
 const WE_RE = /\b(?:we|us|our|together|nosotros|juntos|lo hicimos|hicimos|fuimos|estuvimos)\b/;
+/** Another person taking part, named or not: in a first-person encounter log, a she/her/he/him
+ * on stage IS the partner ("she stimulated me", "I made her finish"). Solo is a conclusion of
+ * absence — a solo marker only brands the encounter when nobody else appears in it at all.
+ * A preliminary solo act ("I masturbated before, at home") never outvotes the encounter itself,
+ * and with no solo reading the batch partner applies, as the batch promises. */
+const PARTNER_SIGNS = /\b(?:she|her|he|him|ella)\b/;
 
 const NAME_STOP = new Set(
   "the a an my her his him our their your me us it this that el la los las un una mi su sus tu nosotros ella el ellos condom condon lube lubricante protection proteccion nothing nada " +
@@ -974,7 +980,7 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
   const firstAnchor = anchors[0];
   const endDate = firstAnchor?.to ?? firstAnchor?.date ?? isoOf(now);
   const rangeDays = firstAnchor?.to ? Math.round((new Date(`${firstAnchor.to}T12:00`).getTime() - new Date(`${firstAnchor.date}T12:00`).getTime()) / 86_400_000) + 1 : 1;
-  const solo = !partner && SOLO_RE.test(folded) && !WE_RE.test(folded);
+  const solo = !partner && SOLO_RE.test(folded) && !WE_RE.test(folded) && !PARTNER_SIGNS.test(folded);
   const exactTimes = times.filter((t) => t.exact).map((t) => t.time);
   // A later round at an earlier clock time ("10pm and again at 1am") ran past midnight.
   const pastMidnight = (count.again || /\b(?:until|till|hasta)\b/.test(folded)) && exactTimes.length >= 2 && exactTimes[exactTimes.length - 1] < exactTimes[0];

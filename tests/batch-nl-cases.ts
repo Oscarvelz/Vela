@@ -286,6 +286,28 @@ export const CASES: Case[] = [
     ],
   },
   {
+    // The pattern, not the example (Oscar, Nov 9 2026): a preliminary solo act does not brand an
+    // encounter solo when she takes part in it, and "couldn't get an erection" is the erection
+    // problem stated in the frame's plainest form.
+    name: "multi: preliminary solo act, partner present, couldnt get an erection",
+    text: "5. Oct 11, 2025. Twice at the hotel with Ana.\n6. Squirt. Twice. I masturbated before, at home. In the car. Past place. Sat, Oct 18th. 2nd time was difficult; I couldn't get an erection, but she stimulated me manually and orally. 2nd time I made her finish as well.",
+    expect: [
+      { date: "2025-10-11", count: 2, partner: "Ana", place: "Hotel" },
+      { date: "2025-10-18", count: 2, place: "Car", problems: ["erection"], notesHas: ["she stimulated me manually and orally"] },
+    ],
+  },
+  {
+    name: "en frame: could not keep an erection",
+    text: "Oct 12 with Ana. I could not keep an erection for long.",
+    expect: [{ date: "2026-10-12", partner: "Ana", problems: ["erection"] }],
+  },
+  {
+    // "Hard" after "the erection was" is praise — the difficulty frame must not fire on it.
+    name: "en guard: the erection was hard is not a problem",
+    text: "Oct 13 with Ana. The erection was hard and lasted all night.",
+    expect: [{ date: "2026-10-13", partner: "Ana" }],
+  },
+  {
     // A headed item that states no date opens on the day the text was last on, never on today.
     name: "multi: headed item without a date inherits the previous day",
     text: "1st time. Oct 12 at the hotel with Ana. Twice.\n\n2nd time. At the cabin, once, condom.",

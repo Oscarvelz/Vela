@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { BarChart3, CalendarDays, List, Lock, Moon, Settings, Sun } from "lucide-react";
+import { BarChart3, CalendarDays, List, Moon, Settings, Sun } from "lucide-react";
 import { useT } from "@/lib/vela/i18n";
 import { sessionToDraft, useJournal } from "@/lib/vela/store";
 import { PLACES } from "@/lib/vela/catalog";
@@ -8,8 +8,7 @@ import { cn } from "@/lib/cn";
 import { Starfield } from "./starfield";
 import { AuthScreen } from "./auth-screen";
 import { BioOffer } from "./bio";
-import { appLockOn, markSeen } from "@/lib/vela/app-lock";
-import { useBioUi } from "@/lib/vela/bio-offer";
+import { markSeen } from "@/lib/vela/app-lock";
 import { CalendarView } from "./calendar-view";
 import { CloudSync } from "./cloud-sync";
 import { HistoryView } from "./history-view";
@@ -170,9 +169,6 @@ function Shell() {
   const histPhase = useJournal((s) => s.histPhase);
   const toast = useJournal((s) => s.toast);
   const toastAction = useJournal((s) => s.toastAction);
-  const lockTick = useBioUi((s) => s.tick);
-  // With the app lock off there is nothing to lock behind (the key stays on the device), so no Lock button.
-  const lockable = lockTick >= 0 && appLockOn();
   const shift = useRef(16);
   const pane = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -259,11 +255,8 @@ function Shell() {
             <IconButton className="ag-hdr-btn" label={mode === "night" ? t("switchToDay") : t("switchToNight")} onClick={toggleMode}>
               {mode === "night" ? <Sun className="size-[19px]" /> : <Moon className="size-[19px]" />}
             </IconButton>
-            {lockable ? (
-              <IconButton className="ag-hdr-btn" label={t("lockVela")} data-testid="header-lock" onClick={() => useJournal.getState().lock()}>
-                <Lock className="size-[19px]" />
-              </IconButton>
-            ) : null}
+            {/* No manual Lock button in the header (Oscar, Nov 9 2026): locking his phone or
+                swiping Vela out of recents locks it — the auto-lock stays, the candadito goes. */}
             <IconButton
               label={t("openSettings")}
               className={cn("ag-hdr-btn", settingsOpen && "is-on")}
