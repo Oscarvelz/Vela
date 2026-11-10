@@ -275,7 +275,7 @@ function matchesSession(session: Session, partner: string, q: string, lang: Retu
 
 function Empty({ title, body }: { title: string; body: string }) {
   return (
-    <Card className="py-10 text-center">
+    <Card className="ag-glass py-10 text-center">
       <Sparkle className="mx-auto size-7 text-fg" />
       <h2 className="mt-4 font-display text-3xl">{title}</h2>
       <p className="mt-2 text-sm leading-relaxed text-dim">{body}</p>
@@ -412,7 +412,7 @@ function EncounterReport({
 
   if (!roomy) {
     return (
-      <Card className={density === 4 ? "p-1.5" : "p-2"}>
+      <Card className={`ag-glass ${density === 4 ? "p-1.5" : "p-2"}`}>
         {face}
       </Card>
     );

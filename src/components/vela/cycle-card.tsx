@@ -305,7 +305,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
 
   return (
     <div
-      className={cn(!inSheet && "ag-panel rounded-card border border-border px-4 py-4", fold.enabled && "cy-foldcard")}
+      className={cn(!inSheet && "ag-panel ag-glass rounded-card border border-border px-4 py-4", fold.enabled && "cy-foldcard")}
       id={inSheet ? undefined : "cycle-card"}
       data-testid="cycle-card"
       data-folded={fold.enabled ? String(folded) : undefined}

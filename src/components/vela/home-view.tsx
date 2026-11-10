@@ -54,7 +54,7 @@ export function HomeView() {
   return (
     <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-5">
       <div className="space-y-4">
-        <Card className={cn("ag-hero relative isolate overflow-hidden px-5 pb-5 pt-6", "is-empty")}>
+        <Card className={cn("ag-hero ag-glass relative isolate overflow-hidden px-5 pb-5 pt-6", "is-empty")}>
           <div className="ag-hero-sky" aria-hidden>
             <Constellation className="ag-hero-mark" />
           </div>

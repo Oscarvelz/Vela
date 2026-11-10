@@ -34,7 +34,7 @@ export function InsightsView() {
 
   if (list.length === 0) {
     return (
-      <Card className="px-6 py-12 text-center">
+      <Card className="ag-glass px-6 py-12 text-center">
         <Sparkle className="mx-auto size-8 text-fg" />
         <h2 className="mt-5 font-display text-4xl leading-tight">{t("insightsEmptyTitle")}</h2>
         <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-dim">{t("insightsEmptyBody")}</p>
@@ -118,7 +118,7 @@ export function InsightsView() {
         />
       </div>
       <CycleStats />
-      <Card className="min-w-0 overflow-hidden">
+      <Card className="ag-glass min-w-0 overflow-hidden">
         <h2 className="font-display text-2xl">{t("avgGlowLength")}</h2>
         <p className="mt-2 flex items-center gap-2 text-base">
           <RatingIcon style={ratingStyle} className="size-4" />
@@ -126,7 +126,7 @@ export function InsightsView() {
           {t("avg")}
         </p>
       </Card>
-      <Card className="ag-aurora min-w-0 overflow-hidden">
+      <Card className="ag-glass ag-aurora min-w-0 overflow-hidden">
         <h2 className="font-display text-2xl">{t("compareOverTime")}</h2>
         <div className="mt-3 flex flex-wrap gap-2" role="group">
           {(["weeks", "months", "years"] as const).map((mode) => (
@@ -183,7 +183,7 @@ export function InsightsView() {
         ) : null}
       </Card>
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="min-w-0 overflow-hidden">
+        <Card className="ag-glass min-w-0 overflow-hidden">
           <h2 className="font-display text-2xl leading-tight break-words">
             {t("busiestDay")}: <span className="text-accent">{wdName}</span>
           </h2>
@@ -198,7 +198,7 @@ export function InsightsView() {
             ))}
           </div>
         </Card>
-        <Card className="min-w-0 overflow-hidden">
+        <Card className="ag-glass min-w-0 overflow-hidden">
           <h2 className="font-display text-2xl leading-tight break-words">
             {t("timeOfDayShort")}: <span className="text-accent">{bucketShort[bestBucket]}</span>
           </h2>
@@ -208,7 +208,7 @@ export function InsightsView() {
             ))}
           </div>
         </Card>
-        <Card className="min-w-0 overflow-hidden">
+        <Card className="ag-glass min-w-0 overflow-hidden">
           <h2 className="font-display text-2xl">{t("withWhomPartner")}</h2>
           <div className="mt-3">
             {partners.map(([name, count]) => {
@@ -228,7 +228,7 @@ export function InsightsView() {
             })}
           </div>
         </Card>
-        <Card className="min-w-0 overflow-hidden">
+        <Card className="ag-glass min-w-0 overflow-hidden">
           <h2 className="font-display text-2xl">{t("byPlace")}</h2>
           <div className="mt-3">
             {places.map(([name, count]) => (
@@ -241,7 +241,7 @@ export function InsightsView() {
             ))}
           </div>
         </Card>
-        <Card className="min-w-0 overflow-hidden">
+        <Card className="ag-glass min-w-0 overflow-hidden">
           <h2 className="font-display text-2xl">{t("byPosition")}</h2>
           <div className="mt-3">
             {positions.length === 0 ? (
@@ -268,7 +268,7 @@ export function InsightsView() {
             )}
           </div>
         </Card>
-        <Card className="ag-aurora min-w-0 overflow-hidden">
+        <Card className="ag-glass ag-aurora min-w-0 overflow-hidden">
           <h2 className="flex items-center gap-2 font-display text-2xl">
             <Sparkle className="size-4 text-accent" />
             {t("yourStory")}

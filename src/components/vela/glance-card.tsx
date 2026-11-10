@@ -22,7 +22,7 @@ export function GlanceCard() {
   )[0];
   const streak = longestStreak(sessions);
   return (
-    <Card data-testid="glance-card">
+    <Card className="ag-glass" data-testid="glance-card">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <h2 className="font-display text-2xl">{t("atAGlance")}</h2>
             <button type="button" className="text-sm font-semibold text-accent" onClick={() => setTab("insights")}>

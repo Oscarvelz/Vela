@@ -2003,3 +2003,77 @@ html[data-splash="on"] .vela-rise { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) { .vela-flies > i { animation: none; opacity: 0.35; } }
 @media print { .vela-flies { display: none; } }
 /* /Noche viva */
+
+/* ── Crystal · the top windows (2026-11-10, Oscar's order) ────────────────
+   A small amount of professional transparency for the top windows only —
+   the hero, At a glance, the Calendar window, the Insights cards, History's
+   chrome and the cycle card — so the fireflies shine through them while
+   every word stays exactly as readable. Built research-first, as a team
+   (his standing rule): the web's glass recipes converge on translucent fill
+   + light border + top highlight, but their standard blur(10–12px) would
+   extinguish a firefly's glow entirely and re-blur every panel on every
+   frame over an animated backdrop. So here ALPHA does the work and the big
+   windows carry no backdrop-filter at all — the glow comes through at full
+   strength and costs nothing. The glass is the theme's own surface at
+   alpha, never a generic white: every theme keeps its identity. Scoped by
+   class to the named windows; settings, dialogs, auth cards, sheets and
+   the session rows keep their solid surfaces. Removable as a unit: this
+   block plus the ag-glass class at those call sites. */
+.ag-glass {
+  background-color: color-mix(in srgb, var(--ag-surface) 82%, transparent);
+  border-color: color-mix(in srgb, var(--ag-text) 16%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--ag-text) 7%, transparent),
+    0 14px 34px rgb(0 0 0 / 0.22);
+}
+[data-mode="day"] .ag-glass {
+  background-color: color-mix(in srgb, var(--ag-surface) 86%, transparent);
+  border-color: color-mix(in srgb, var(--ag-text) 12%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--ag-text) 6%, transparent),
+    0 14px 30px rgb(30 20 10 / 0.08);
+}
+/* The hero's gradient paints over its color, so its stops take the alpha
+   themselves — same hues, same path. (Firmament night's own hero rule
+   outranks this one; its stops were already alpha'd.) */
+.ag-hero.ag-glass {
+  background-image: linear-gradient(108deg,
+    color-mix(in srgb, color-mix(in srgb, var(--ag-wine) 88%, var(--ag-surface)) 88%, transparent) 0%,
+    color-mix(in srgb, color-mix(in srgb, var(--ag-wine) 46%, var(--ag-surface)) 84%, transparent) 42%,
+    color-mix(in srgb, var(--ag-surface) 80%, transparent) 100%);
+}
+[data-mode="day"] .ag-hero.ag-glass {
+  background-image:
+    radial-gradient(300px 200px at 92% -4%, rgba(232, 170, 70, 0.2), transparent 70%),
+    linear-gradient(165deg, rgb(255 255 255 / 0.88) 0%, rgb(241 244 253 / 0.84) 55%, rgb(251 241 223 / 0.80) 100%);
+}
+/* The cycle, like crystal: one step clearer, a rim of the theme's accent. */
+#cycle-card.ag-glass {
+  background-color: color-mix(in srgb, var(--ag-surface) 74%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--ag-text) 10%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--ag-accent) 10%, transparent),
+    0 18px 40px rgb(0 0 0 / 0.26);
+}
+[data-mode="day"] #cycle-card.ag-glass {
+  background-color: color-mix(in srgb, var(--ag-surface) 80%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--ag-text) 6%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--ag-accent) 12%, transparent),
+    0 18px 36px rgb(30 20 10 / 0.10);
+}
+/* Firmament night already glasses every panel at 0.68 under a 12px blur —
+   its named windows trade that blur for clarity, so its fireflies read as
+   fireflies. Its other panels keep the settled recipe untouched. */
+[data-theme="firmament"][data-mode="night"] .ag-glass {
+  background-color: color-mix(in srgb, var(--ag-surface) 78%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* Reduced transparency asks for solid surfaces; it gets them. */
+@media (prefers-reduced-transparency: reduce) {
+  .ag-glass, #cycle-card.ag-glass { background-color: var(--ag-surface); }
+}
+/* /Crystal */
