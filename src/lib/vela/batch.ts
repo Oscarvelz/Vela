@@ -1202,11 +1202,17 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
   // form is narrative, not a heading: "Mar 12. Twice. 2nd time, the erection was difficult…"
   // is ONE encounter whose second round is being told, and cutting before "2nd" orphaned the
   // story into a dateless entry dated today (Oscar, Nov 9 2026).
+  const MARKER_SPLIT = /(?=\b\d+(?:st|nd|rd|th)\s+time\b\s*\.)|(?=\b\d+\.?\s*(?:ª|º)\s*vez\b)|(?=\b(?:primera|segunda|tercera|cuarta|quinta)\s+vez\b\.)/i;
   const lines = source
-    .split(/\n+|(?=\b\d+(?:st|nd|rd|th)\s+time\b\s*\.)|(?=\b\d+\.?\s*(?:ª|º)\s*vez\b)|(?=\b(?:primera|segunda|tercera|cuarta|quinta)\s+vez\b\.)/i)
+    .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean)
     .flatMap(splitLists)
+    // The "2nd time." / "segunda vez." headings cut an UNNUMBERED log into encounters. Inside a
+    // numbered item they are the item's own rounds: the numbers are the author's count, counted
+    // exactly, and a headed round never starts a new encounter there (Oscar, Nov 9 2026: his 37
+    // numbered items imported as 39 because two items narrated a round under a heading).
+    .flatMap((line) => (line.item ? [line] : line.text.split(MARKER_SPLIT).map((t) => t.trim()).filter(Boolean).map((text) => ({ text, item: false }))))
     // A heading line ("Esta semana:") right before a numbered list leads into its first item.
     .reduce<{ text: string; item: boolean }[]>((out, line) => {
       const prev = out[out.length - 1];
@@ -1215,7 +1221,7 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
       return out;
     }, []);
 
-  type Draft = { title: string; parts: string[]; date: string | null; dayFirst: boolean; hint: string; partner: string; explicit?: boolean };
+  type Draft = { title: string; parts: string[]; date: string | null; dayFirst: boolean; hint: string; partner: string; explicit?: boolean; item?: boolean };
   const drafts: Draft[] = [];
   const known = ctx.partners ?? [];
   const partnerOf = (piece: string) => findPartner(piece, fold(piece), known, [])?.name ?? "";
@@ -1251,7 +1257,7 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
         // the day the text was last on — the same rule as a partner split below — never on
         // today: the day he is typing is the one date the story is almost never about. If its
         // own pieces state a date, readEntry's stated date wins and this is ignored.
-        drafts.push({ title: lineStarted ? "" : title, parts: [piece], date: date ?? drafts[drafts.length - 1]?.date ?? null, dayFirst: Boolean(state.dayFirst), hint, partner: piecePartner, explicit: anchor?.stated === "explicit" });
+        drafts.push({ title: lineStarted ? "" : title, parts: [piece], date: date ?? drafts[drafts.length - 1]?.date ?? null, dayFirst: Boolean(state.dayFirst), hint, partner: piecePartner, explicit: anchor?.stated === "explicit", item });
         lineStarted = true;
       };
       const join = (draft: Draft) => {
@@ -1263,6 +1269,13 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
         Boolean(draft && draft.partner && piecePartner && fold(draft.partner) !== fold(piecePartner) &&
           ((anchor && anchor.date === draft.date) || new RegExp(`\\b(?:with|con|w/|y con|and with)\\s+${escapeRe(fold(piecePartner))}`).test(fold(piece))));
       if (!lineStarted) {
+        // Inside a numbered item, a following line that is not itself an item belongs to the
+        // item — its headed rounds and continuations included — until the next number.
+        if (current?.item && !item && !hint) {
+          join(current);
+          lineStarted = true;
+          continue;
+        }
         // A new line opens a new encounter when it carries a date or a title; otherwise it continues the last one.
         if (anchor || title || item || !current || hint) startNew();
         else if (otherPartner(current)) startNew(current.date);
@@ -1275,7 +1288,7 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
       const open = drafts[drafts.length - 1];
       // One numbered item is one encounter, however many dates or names its story mentions
       // ("34. Sept 21. I met Ana 2 years ago…" is one encounter on Sep 21).
-      if (item) {
+      if (item || open.item) {
         if (!open.date && anchor) open.date = anchor.date;
         join(open);
         continue;

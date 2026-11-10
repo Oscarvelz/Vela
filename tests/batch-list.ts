@@ -21,5 +21,11 @@ check("rating then number is not a list", "Oct 28 bedroom, rated it 4. 2 rounds 
 check("clock time is not a list", "Oct 30 at 10:30 pm, 45 min, 8/10", 1);
 check("lone 1. mid-sentence is not a list", "Oct 28 we did it 1. time only", 1);
 check("3-4 times is not a list", "3-4 times on Oct 28", 1);
+// The numbers are the author's exact count: a headed round inside an item — inline or on its
+// own line — is the item's own round, never a new encounter (Oscar, Nov 9 2026: 37 items read as 39).
+check("numbered item, inline headed round stays one", "1. Oct 26 hotel, twice. 2nd time. She was on top.\n2. Oct 27 car", 2);
+check("numbered item, own-line headed round stays one", "1. Oct 26 hotel, twice.\n2nd time. She was on top.\n2. Oct 27 car", 2);
+check("numbered item, own-line segunda vez stays one", "1. 26 oct hotel, dos veces.\nSegunda vez. Ella arriba.\n2. 27 oct carro", 2);
+check("unnumbered headed round still splits", "Oct 26 hotel, twice.\n2nd time. She was on top.", 2);
 console.log(`batch-list: ${pass}/${pass + fail}`);
 if (fail) process.exit(1);
