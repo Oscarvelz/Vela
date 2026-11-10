@@ -1903,13 +1903,9 @@ html[data-splash="on"] .vela-rise { animation-play-state: paused; }
    light finally falls inside its rooms. And the hero's moon-glow breathes —
    a nine-second swell, transform and opacity only, barely there. Every
    theme and both modes share that glow layer, so every face of the app
-   blooms the same quiet way. Removable as a unit. */
-.ag-pager-host {
-  background-image:
-    radial-gradient(980px 520px at -8% -10%, var(--ag-wash), transparent 58%),
-    radial-gradient(760px 460px at 110% 0%, var(--ag-wash-2), transparent 52%);
-  background-attachment: fixed;
-}
+   blooms the same quiet way. Removable as a unit.
+   (The shell's background stack itself is carried by the Noche viva block
+   below, which keeps these two washes as its topmost layers.) */
 @media (prefers-reduced-motion: no-preference) {
   .ag-hero-sky::after {
     animation: ag-hero-breathe 9s ease-in-out infinite alternate;
@@ -1920,3 +1916,90 @@ html[data-splash="on"] .vela-rise { animation-play-state: paused; }
   to { opacity: 1; transform: scale(1.05); }
 }
 /* /skin wave 2 */
+
+/* ── Noche viva · the living background (2026-11-10, Oscar's order) ────────
+   The background Oscar loves in Brizna — the gradient sky, the moon's glow,
+   nine quiet stars, and the drifting fireflies — carried into EVERY Vela
+   theme, each theme wearing its own sky: the gradient and the moon take
+   their colours from that theme's identity, never one pasted backdrop.
+   Nights get the full scene; days get the same artwork translated to
+   daylight (a soft sun-glow, no stars, the fireflies as barely-there warm
+   motes). Skin only: one fixed layer behind all content, pointer-events
+   none — the flies show in the gaps, never over text. The artwork
+   whispers. Removable as a unit: this block, the token lines inside it,
+   and the <Fireflies /> mount in journal-app.tsx. */
+
+/* The sky each theme wears. */
+[data-theme="velvet"][data-mode="night"] { --nv-top: #25122a; --nv-mid: #1a0e1a; --nv-low: #10060f; --nv-moon: #f3d9a4; }
+[data-theme="firmament"][data-mode="night"] { --nv-top: #0d1636; --nv-mid: #070b1e; --nv-low: #04060f; --nv-moon: #ebbd63; }
+[data-theme="noir"][data-mode="night"] { --nv-top: #14141b; --nv-mid: #0c0c10; --nv-low: #060608; --nv-moon: #e8ecf5; }
+[data-theme="rose"][data-mode="night"] { --nv-top: #30141e; --nv-mid: #241016; --nv-low: #180a0e; --nv-moon: #f6d3ba; }
+[data-theme="ocean"][data-mode="night"] { --nv-top: #0a2126; --nv-mid: #071618; --nv-low: #040d0f; --nv-moon: #cfeee8; }
+[data-theme="emerald"][data-mode="night"] { --nv-top: #10231a; --nv-mid: #0b1910; --nv-low: #060f09; --nv-moon: #eef7a6; }
+[data-theme="velvet"][data-mode="day"] { --nv-top: #f3e2d0; --nv-mid: #f8efe8; --nv-low: #fdf8f1; --nv-moon: #e8a558; }
+[data-theme="firmament"][data-mode="day"] { --nv-top: #dde4f5; --nv-mid: #eef1fa; --nv-low: #f8fafe; --nv-moon: #e9b558; }
+[data-theme="noir"][data-mode="day"] { --nv-top: #e4e4ec; --nv-mid: #f3f3f6; --nv-low: #fbfbfc; --nv-moon: #dcbc7c; }
+[data-theme="rose"][data-mode="day"] { --nv-top: #ffe0e9; --nv-mid: #fff5f7; --nv-low: #fffafb; --nv-moon: #f2a65a; }
+[data-theme="ocean"][data-mode="day"] { --nv-top: #d7eeeb; --nv-mid: #eef8f7; --nv-low: #f7fdfc; --nv-moon: #eec25e; }
+[data-theme="emerald"][data-mode="day"] { --nv-top: #deeddf; --nv-mid: #f2f8f4; --nv-low: #fafdfb; --nv-moon: #e8b64c; }
+
+/* The nine quiet stars — nights only; days carry none. */
+[data-mode="night"] {
+  --vela-stars:
+    radial-gradient(1.4px 1.4px at 12% 22%, rgba(246, 239, 214, 0.75), transparent 60%),
+    radial-gradient(1.2px 1.2px at 68% 9%, rgba(246, 239, 214, 0.6), transparent 60%),
+    radial-gradient(1.6px 1.6px at 88% 27%, rgba(246, 239, 214, 0.55), transparent 60%),
+    radial-gradient(1.2px 1.2px at 41% 31%, rgba(246, 239, 214, 0.5), transparent 60%),
+    radial-gradient(1.3px 1.3px at 26% 47%, rgba(246, 239, 214, 0.4), transparent 60%),
+    radial-gradient(1.2px 1.2px at 79% 52%, rgba(246, 239, 214, 0.35), transparent 60%),
+    radial-gradient(1.3px 1.3px at 6% 64%, rgba(246, 239, 214, 0.35), transparent 60%),
+    radial-gradient(1.2px 1.2px at 58% 70%, rgba(246, 239, 214, 0.3), transparent 60%),
+    radial-gradient(1.4px 1.4px at 93% 78%, rgba(246, 239, 214, 0.3), transparent 60%);
+}
+[data-mode="day"] { --vela-stars: none; }
+
+/* The shell's full sky: 2.1.14's washes on top, then the moon's glow, the
+   quiet stars, and the three-stop sky itself over the theme's base. */
+.ag-pager-host {
+  background-image:
+    radial-gradient(980px 520px at -8% -10%, var(--ag-wash), transparent 58%),
+    radial-gradient(760px 460px at 110% 0%, var(--ag-wash-2), transparent 52%),
+    radial-gradient(110% 50% at 90% 0%, color-mix(in srgb, var(--nv-moon) 12%, transparent) 0, transparent 62%),
+    var(--vela-stars),
+    linear-gradient(180deg, var(--nv-top) 0%, var(--nv-mid) 38%, var(--nv-low) 100%);
+  background-attachment: fixed;
+}
+
+/* Content rides above the fireflies; the header (z-30), dock (z-40) and
+   sheets (z-50) already do — the screen joins them explicitly. */
+.ag-screen { position: relative; z-index: 1; }
+
+/* The fireflies (from Brizna's .wx-flies, renamed): fixed seeds, two drifts
+   and a blink, transform and opacity only. */
+.vela-flies { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.vela-flies > i {
+  position: absolute; width: 3px; height: 3px; border-radius: 50%;
+  background: #f3f7b4; opacity: 0;
+  box-shadow: 0 0 5px 1.5px rgb(226 240 120 / 0.7), 0 0 16px 5px rgb(200 230 90 / 0.22);
+  animation-name: vela-fly-drift, vela-fly-blink; animation-timing-function: ease-in-out, ease-in-out;
+  animation-iteration-count: infinite, infinite; animation-direction: alternate, normal;
+  will-change: transform, opacity;
+}
+.vela-flies > i:nth-child(3n) { width: 2.25px; height: 2.25px; }
+.vela-flies > i:nth-child(4n+1) { animation-name: vela-fly-drift2, vela-fly-blink; }
+@keyframes vela-fly-drift {
+  0% { transform: translate(0, 0); } 25% { transform: translate(34px, -40px); }
+  50% { transform: translate(-18px, -76px); } 75% { transform: translate(-48px, -26px); } 100% { transform: translate(14px, 18px); }
+}
+@keyframes vela-fly-drift2 {
+  0% { transform: translate(-38px, 30px); }
+  66% { transform: translate(26px, 58px); } 100% { transform: translate(52px, -22px); }
+}
+@keyframes vela-fly-blink { 0%, 100% { opacity: 0.05; } 30% { opacity: 0.3; } 50% { opacity: 0.85; } 70% { opacity: 0.4; } }
+/* Phones: twelve; wider screens: all eighteen. */
+@media (max-width: 767px) { .vela-flies > i:nth-child(n+13) { display: none; } }
+/* Daylight: the same artwork, whispered — warm motes, barely there. */
+[data-mode="day"] .vela-flies { opacity: 0.22; }
+@media (prefers-reduced-motion: reduce) { .vela-flies > i { animation: none; opacity: 0.35; } }
+@media print { .vela-flies { display: none; } }
+/* /Noche viva */

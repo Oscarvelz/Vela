@@ -6,6 +6,7 @@ import { PLACES } from "@/lib/vela/catalog";
 import type { TabId } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
 import { Starfield } from "./starfield";
+import { Fireflies } from "./fireflies";
 import { AuthScreen } from "./auth-screen";
 import { BioOffer } from "./bio";
 import { markSeen } from "@/lib/vela/app-lock";
@@ -243,6 +244,7 @@ function Shell() {
 
   return (
     <div ref={root} className="ag-pager-host min-h-dvh max-w-full overflow-x-clip bg-bg text-fg">
+      <Fireflies />
       <header ref={setHeaderEl} className="ag-header glow-header sticky top-0 z-30 border-b border-border backdrop-blur-md">
         <div className="ag-hdr-row mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
           <Mark alive className="-mx-1 size-12" />
