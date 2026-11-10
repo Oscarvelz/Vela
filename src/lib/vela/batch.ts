@@ -1161,8 +1161,17 @@ function splitLists(line: string): { text: string; item: boolean }[] {
   const markerAt = (n: number, from: number) => {
     const re = new RegExp(`(?:^|[\\s:;,])(\\(\\s*${n}\\s*\\)|#\\s*${n}\\b[.):\\-–—]?|${n}\\s*[.)](?!\\d))\\s`, "g");
     re.lastIndex = from;
-    const m = re.exec(line);
-    return m ? m.index + m[0].length - m[1].length - 1 : -1;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(line))) {
+      const at = m.index + m[0].length - m[1].length - 1;
+      // A number right after a month name is a DATE, never a list marker: inside item 28,
+      // "July 29." is the 29th of July — cutting there invented item 29 out of the date and
+      // left a phantom card whose whole note was "July" (Oscar, Nov 9 2026).
+      const digitsAt = at + m[1].search(/\d/);
+      if (new RegExp(`\\b(?:${MONTH_RE})\\.?\\s*$`).test(fold(line.slice(0, digitsAt)))) continue;
+      return at;
+    }
+    return -1;
   };
   let first = -1;
   let n = 1;

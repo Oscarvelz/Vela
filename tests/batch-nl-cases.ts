@@ -334,6 +334,18 @@ export const CASES: Case[] = [
     expect: [{ date: "2026-08-21", place: "Cabin", notesHas: ["by the river where the road ends"] }],
   },
   {
+    // The pleasure family rates satisfaction as a pattern: a delight word is pleasure at
+    // strength, and an intensifier lifts "satisfying" the way it lifts "satisfied".
+    name: "en satisfaction: a delightful night",
+    text: "Aug 13 with Ana. A delightful night, twice.",
+    expect: [{ date: "2026-08-13", partner: "Ana", count: 2, satisfaction: 4 }],
+  },
+  {
+    name: "en satisfaction: strongly satisfying",
+    text: "Aug 30 with Ana. It was strongly satisfying.",
+    expect: [{ date: "2026-08-30", partner: "Ana", satisfaction: 4 }],
+  },
+  {
     name: "en frame: could not keep an erection",
     text: "Oct 12 with Ana. I could not keep an erection for long.",
     expect: [{ date: "2026-10-12", partner: "Ana", problems: ["erection"] }],

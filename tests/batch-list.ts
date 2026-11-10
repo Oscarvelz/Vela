@@ -27,5 +27,9 @@ check("numbered item, inline headed round stays one", "1. Oct 26 hotel, twice. 2
 check("numbered item, own-line headed round stays one", "1. Oct 26 hotel, twice.\n2nd time. She was on top.\n2. Oct 27 car", 2);
 check("numbered item, own-line segunda vez stays one", "1. 26 oct hotel, dos veces.\nSegunda vez. Ella arriba.\n2. 27 oct carro", 2);
 check("unnumbered headed round still splits", "Oct 26 hotel, twice.\n2nd time. She was on top.", 2);
+// A number right after a month name is a date, not the next marker: item 14 saying "March 15."
+// must not give birth to item 15 out of its own date (Oscar, Nov 9 2026: the phantom "July" card).
+check("month-day inside an item is not a marker", "14. March 15. Twice at the lake.\n15. March 20 at the cabin", 2);
+check("month-day inline, the real marker still cuts", "14. March 15. Twice at the lake. 15. March 20 at the cabin", 2);
 console.log(`batch-list: ${pass}/${pass + fail}`);
 if (fail) process.exit(1);
