@@ -334,6 +334,18 @@ export const CASES: Case[] = [
     expect: [{ date: "2026-08-21", place: "Cabin", notesHas: ["by the river where the road ends"] }],
   },
   {
+    // "On all fours" (and ES "a gatas") is the position named by its shape, the twin of the
+    // already-known "en cuatro / a cuatro patas".
+    name: "en position: on all fours",
+    text: "Oct 26 with Ana at the hotel, on all fours.",
+    expect: [{ date: "2026-10-26", partner: "Ana", place: "Hotel", positions: ["Doggy"] }],
+  },
+  {
+    name: "es position: a gatas",
+    text: "26 oct con Ana. A gatas en la cama.",
+    expect: [{ date: "2026-10-26", partner: "Ana", positions: ["Doggy"] }],
+  },
+  {
     // The difficulty frame's state family includes "impossible" (with its perception
     // idioms guarded), and an erection that "kept fading" is the kept-declining shape.
     name: "en frame: keeping an erection was nearly impossible",

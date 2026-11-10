@@ -36,7 +36,7 @@ export const PLACE_RULES: Rule[] = [
 export const POSITION_RULES: Rule[] = [
   { kind: "position", value: "Reverse Cowgirl", prio: 2, re: r("reverse cowgirl|reverse riding|vaquera (?:invertida|al reves|de espaldas)|reversa") },
   { kind: "position", value: "Missionary", re: r("missionary|misionero|misionera|man on top") },
-  { kind: "position", value: "Doggy", re: r("doggy ?style|doggystyle|doggy|doggie|dog ?style|from behind|de (?:a )?perrito|perrito|en cuatro|a cuatro patas|cuatro patas|en 4|por detras") },
+  { kind: "position", value: "Doggy", re: r("doggy ?style|doggystyle|doggy|doggie|dog ?style|from behind|on all fours|de (?:a )?perrito|perrito|en cuatro|a cuatro patas|cuatro patas|a gatas|en 4|por detras") },
   { kind: "position", value: "Cowgirl", re: r("cowgirl|she (?:was|got|climbed) on top|she rode me|she was riding me|riding me|rode me|on top of me|she rode|on top(?=\\s*(?:,|;|\\.|and\\b|y\\b|then\\b|luego\\b|$))|vaquera|ella (?:arriba|encima)|(?:me|lo) (?:monto|cabalgo)|cabalgando|montandome") },
   { kind: "position", value: "Spooning", re: r("spooning|spoon|cucharita|cuchara|de lado|side by side|on our sides") },
   { kind: "position", value: "Standing", re: r("standing(?: up)?|stood|against the wall|up against|de pie|parados|paraditos|contra la pared") },
