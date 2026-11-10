@@ -608,6 +608,13 @@ function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[];
     spans.push(span);
     again = true;
   }
+  // An explicit total outranks an inferred extra round: "we did it only once … too tired to
+  // attempt a second round" is ONE encounter — the second round was mentioned to say it never
+  // happened (Oscar's item 37, Nov 9 2026).
+  if (/\b(?:only|just) (?:once|one (?:time|round))\b|\buna sola vez\b|\bsolo una vez\b/.test(folded)) {
+    again = false;
+    if (n > 1) n = 1;
+  }
   return { n: Math.min(12, n), spans, again };
 }
 

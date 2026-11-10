@@ -334,6 +334,13 @@ export const CASES: Case[] = [
     expect: [{ date: "2026-08-21", place: "Cabin", notesHas: ["by the river where the road ends"] }],
   },
   {
+    // An explicit total outranks an inferred round: "only once" caps the count even when a
+    // second round is mentioned — mentioned to say it never happened.
+    name: "en count: only once caps a mentioned second round",
+    text: "Oct 26 with Ana at the hotel. We did it only once. I was too tired, and it was too late to attempt a second round.",
+    expect: [{ date: "2026-10-26", partner: "Ana", place: "Hotel", count: 1 }],
+  },
+  {
     // The pleasure family rates satisfaction as a pattern: a delight word is pleasure at
     // strength, and an intensifier lifts "satisfying" the way it lifts "satisfied".
     name: "en satisfaction: a delightful night",
