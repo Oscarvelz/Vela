@@ -297,6 +297,29 @@ export const CASES: Case[] = [
     ],
   },
   {
+    // Oscar's rule (Nov 9 2026): a note sentence that only restates the captured contraception
+    // comes out — the method already lives in the bubbles. Story sentences stay word for word.
+    name: "en echo: pull out and pill restated in the note comes out",
+    text: "Jul 13th at SpringHill Suites by Marriott Miami Downtown with Ana, the room was huge and the night felt endless and slow. (3+ penetrations; 4 times, with ejaculation, the next day.). Pull out and pill.",
+    expect: [{ date: "2026-07-13", count: 4, nextDay: true, partner: "Ana", place: "Bedroom", intensity: 1, contraception: ["pullout", "pill"], notesHas: ["SpringHill Suites"], notesNot: ["Pull out and pill"] }],
+  },
+  {
+    name: "en echo: (twice) condom plus pill comes out",
+    text: "Jan 5, 2025. Early morning at Denny's parking lot at Northwest with Ana, after we left the party and drove around for a while talking about everything. (Twice) Condom plus pill.",
+    expect: [{ date: "2025-01-05", count: 2, partner: "Ana", contraception: ["condom", "pill"], notesHas: ["Denny's parking lot"], notesNot: ["Condom plus pill"] }],
+  },
+  {
+    name: "en echo guard: a method inside a story sentence stays",
+    text: "Oct 20 with Ana at the hotel. She told me the pill made her feel sick all week, so we talked about switching soon, maybe next month or the one after.",
+    expect: [{ date: "2026-10-20", partner: "Ana", place: "Hotel", contraception: ["pill"], notesHas: ["pill made her feel sick"] }],
+  },
+  {
+    // "No condom" was not captured as a bubble, so the sentence stays — nothing is lost.
+    name: "en echo guard: an uncaptured no condom stays in the note",
+    text: "Oct 21 with Ana at the hotel, late and quiet and perfect in every single way that night mattered to us both. No condom.",
+    expect: [{ date: "2026-10-21", partner: "Ana", place: "Hotel", overall: 5, notesHas: ["No condom"] }],
+  },
+  {
     name: "en frame: could not keep an erection",
     text: "Oct 12 with Ana. I could not keep an erection for long.",
     expect: [{ date: "2026-10-12", partner: "Ana", problems: ["erection"] }],

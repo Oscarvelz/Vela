@@ -880,6 +880,32 @@ function storyWords(text: string) {
   return text.split(/\s+/).filter((w) => /[a-záéíóúñü]{2,}/i.test(w)).length;
 }
 
+/** Words that carry no story once the captured methods are masked: connectors and count words. */
+const ECHO_RESIDUE = new Set("once twice thrice plus all".split(" "));
+
+/**
+ * Oscar's rule (Nov 9 2026): the contraceptive method is structured data the moment it becomes
+ * bubbles, so a note sentence that says nothing else only repeats it — "Pull out and pill.",
+ * "(Twice) Condom plus pill." Whole sentences only, and only when every method they mention was
+ * actually captured (a "No condom." the reader did not turn into a bubble stays: nothing is
+ * lost). A sentence with any story word left over stays word for word.
+ */
+function dropMethodEchoes(note: string, rules: ReturnType<typeof buildRules>) {
+  if (!note) return note;
+  const methodRules = rules.bubble.filter((rule) => rule.kind === "method");
+  if (!methodRules.length) return note;
+  const onlyMethod = (segment: string) => {
+    const folded = fold(segment);
+    const captured = runRules(methodRules, folded, []).filter((hit) => !hit.negated);
+    if (!captured.length) return false;
+    const mask = folded.split("");
+    for (const hit of captured) for (let i = hit.start; i < hit.end; i += 1) mask[i] = " ";
+    const words = mask.join("").split(/[^a-z0-9']+/).filter((w) => w.length >= 2);
+    return words.every((w) => FILLER.has(w.replace(/'/g, "")) || FILLER.has(w) || ECHO_RESIDUE.has(w));
+  };
+  return sentences(note).filter((segment) => !onlyMethod(segment)).join(" ").replace(/\s{2,}/g, " ").trim();
+}
+
 /** From this many words on, an entry is a diary paragraph: its note keeps the whole text, word for word. */
 export const NARRATIVE_WORDS = 18;
 
@@ -999,7 +1025,7 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     place: placeHit?.rule.value ?? "",
     count: count.again ? Math.max(baseCount, 2) : baseCount,
     nextDay: rangeDays === 1 && (nextSpans.length > 0 || pastMidnight),
-    notes: noteFor(text, remainder(text, folded, claimed)),
+    notes: dropMethodEchoes(noteFor(text, remainder(text, folded, claimed)), rules),
     contraception,
     problems,
     partnerName: partner?.name ?? "",
