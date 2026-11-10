@@ -349,15 +349,19 @@ function findAnchors(folded: string, now: Date, state: YearState, blocked: Span[
   });
   rel(/\b(mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\.?(?=\s+(?:night|morning|afternoon|evening|am|pm|noche|manana|tarde)\b)/g, (m) => {
     const full: Record<string, number> = { mon: 1, tue: 2, tues: 2, wed: 3, thu: 4, thur: 4, thurs: 4, fri: 5, sat: 6, sun: 0 };
+    // A bare weekday named on its own day is that day ("Mon night", written Monday
+    // night, is tonight) — only an explicit earlier-week marker sends it back 7.
     let back = (now.getDay() - full[m[1]] + 7) % 7;
-    if (back === 0) back = 7;
+    if (back === 0 && /(?:last|past)\s+$/.test(folded.slice(Math.max(0, (m.index ?? 0) - 6), m.index ?? 0))) back = 7;
     return -back;
   });
   rel(/\b(?:a|one) week ago\b|\bhace una semana\b/g, () => -7);
   rel(new RegExp(`\\b(?:(?:last|this past|past|on|el|este)\\s+)?(${WEEKDAY_FULL})(?:\\s+pasado)?\\b`, "g"), (m) => {
     const target = WEEKDAYS[m[1]];
     let back = (now.getDay() - target + 7) % 7;
-    if (back === 0) back = 7;
+    // Same rule: "Monday" written on a Monday is today; "last Monday" / "el lunes
+    // pasado" names the earlier week on purpose and keeps the full step back.
+    if (back === 0 && /\b(?:last|past)\b|pasado/.test(m[0])) back = 7;
     return -back;
   });
   found.sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start));

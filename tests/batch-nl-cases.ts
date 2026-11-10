@@ -334,6 +334,23 @@ export const CASES: Case[] = [
     expect: [{ date: "2026-08-21", place: "Cabin", notesHas: ["by the river where the road ends"] }],
   },
   {
+    // A bare weekday named on its own day is that day (the suite's "now" is a Saturday):
+    // only an explicit earlier-week marker ("last", "pasado") steps back the full week.
+    name: "en weekday: bare saturday is today",
+    text: "Saturday with Ana at the hotel. Twice.",
+    expect: [{ date: "2026-10-31", partner: "Ana", place: "Hotel", count: 2 }],
+  },
+  {
+    name: "en weekday: last saturday is the earlier week",
+    text: "Last Saturday with Ana at the hotel. Twice.",
+    expect: [{ date: "2026-10-24", partner: "Ana", place: "Hotel", count: 2 }],
+  },
+  {
+    name: "es weekday: el sabado pasado is the earlier week",
+    text: "El sábado pasado con Ana. Dos veces.",
+    expect: [{ date: "2026-10-24", partner: "Ana", count: 2 }],
+  },
+  {
     // "On all fours" (and ES "a gatas") is the position named by its shape, the twin of the
     // already-known "en cuatro / a cuatro patas".
     name: "en position: on all fours",
