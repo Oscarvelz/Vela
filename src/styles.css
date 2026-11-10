@@ -47,8 +47,8 @@
   --ag-chip: #3a1e35;
   --ag-card: none;
   --ag-sheen: transparent;
-  --ag-wash: transparent;
-  --ag-wash-2: transparent;
+  --ag-wash: rgba(107, 31, 58, 0.42);
+  --ag-wash-2: rgba(201, 168, 106, 0.07);
   --ag-glow: none;
   --ag-pill: none;
   --ag-orb: none;
@@ -1894,3 +1894,29 @@ html[data-splash="on"] .vela-rise { animation-play-state: paused; }
   .vela-splash, .vs-sky { transition-duration: 200ms !important; }
 }
 /* /launch splash */
+
+/* ── Skin wave 2 · bloom (2026-11-10) ──────────────────────────────────────
+   Each theme's ambient washes were painted on <body>, where the app's own
+   opaque shell covered them whole — they only ever tinted the overscroll.
+   The same two gradients, in the same geometry the body rule always used,
+   now live on the shell itself, fixed to the viewport: every theme's own
+   light finally falls inside its rooms. And the hero's moon-glow breathes —
+   a nine-second swell, transform and opacity only, barely there. Every
+   theme and both modes share that glow layer, so every face of the app
+   blooms the same quiet way. Removable as a unit. */
+.ag-pager-host {
+  background-image:
+    radial-gradient(980px 520px at -8% -10%, var(--ag-wash), transparent 58%),
+    radial-gradient(760px 460px at 110% 0%, var(--ag-wash-2), transparent 52%);
+  background-attachment: fixed;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ag-hero-sky::after {
+    animation: ag-hero-breathe 9s ease-in-out infinite alternate;
+  }
+}
+@keyframes ag-hero-breathe {
+  from { opacity: 0.72; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1.05); }
+}
+/* /skin wave 2 */
