@@ -213,7 +213,7 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 }
 
 export const fieldClass =
-  "w-full rounded-control border border-border bg-surface-2 px-4 py-3 text-base outline-none focus:border-accent";
+  "ag-field w-full rounded-control border border-border px-4 py-3 text-base outline-none focus:border-accent";
 
 export const pinFieldProps = {
   type: "text" as const,
