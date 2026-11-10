@@ -334,6 +334,23 @@ export const CASES: Case[] = [
     expect: [{ date: "2026-08-21", place: "Cabin", notesHas: ["by the river where the road ends"] }],
   },
   {
+    // The difficulty frame's state family includes "impossible" (with its perception
+    // idioms guarded), and an erection that "kept fading" is the kept-declining shape.
+    name: "en frame: keeping an erection was nearly impossible",
+    text: "Oct 26 with Ana at the hotel. Keeping an erection was nearly impossible.",
+    expect: [{ date: "2026-10-26", partner: "Ana", place: "Hotel", problems: ["erection"] }],
+  },
+  {
+    name: "en frame: my erection kept fading",
+    text: "Oct 26 with Ana. My erection kept fading.",
+    expect: [{ date: "2026-10-26", partner: "Ana", problems: ["erection"] }],
+  },
+  {
+    name: "en guard: impossible to hide is not a problem",
+    text: "Oct 26 with Ana. The erection was impossible to hide under the towel. Twice.",
+    expect: [{ date: "2026-10-26", partner: "Ana", count: 2, problems: [] }],
+  },
+  {
     // An explicit total outranks an inferred round: "only once" caps the count even when a
     // second round is mentioned — mentioned to say it never happened.
     name: "en count: only once caps a mentioned second round",
