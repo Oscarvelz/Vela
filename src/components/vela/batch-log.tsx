@@ -525,43 +525,45 @@ function EntryEditor({ entry, onChange }: { entry: BatchEntry; onChange: (change
   };
 
   return (
-    <div className="mt-3 space-y-4 rounded-xl border border-fg/18 bg-bg/50 px-3 py-3">
+    <div className="mt-3 space-y-3 rounded-xl border border-fg/18 bg-bg/50 px-2.5 py-2.5">
       <div className="grid grid-cols-2 gap-2">
         <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-fg/70">{t("date")}</span>
+          <span className="mb-0.5 block text-[11px] font-semibold text-fg/70">{t("date")}</span>
           <input
             type="date"
-            className={cn(fieldClass, "px-3 py-2 text-sm")}
+            className={cn(fieldClass, "px-2.5 py-1.5 text-sm")}
             value={entry.date}
             onChange={(event) => event.target.value && onChange({ date: event.target.value, endDate: event.target.value, dateStated: true })}
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-fg/70">{t("time")}</span>
+          <span className="mb-0.5 block text-[11px] font-semibold text-fg/70">{t("time")}</span>
           <input
             type="time"
-            className={cn(fieldClass, "px-3 py-2 text-sm")}
+            className={cn(fieldClass, "px-2.5 py-1.5 text-sm")}
             value={entry.time}
             onChange={(event) => event.target.value && onChange({ time: event.target.value, timeStated: true, times: [] })}
           />
         </label>
       </div>
 
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold">{b("rounds2")}</span>
+      {/* Rounds and the overnight switch share one row: each used to eat a full row of the
+          editor, and together they made the adjust sheet feel endless (Oscar, Nov 9 2026). */}
+      <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <button type="button" aria-label="−" className="grid size-10 place-items-center rounded-full border border-border" onClick={() => onChange({ count: Math.max(1, entry.count - 1) })}>
+          <span className="text-[13px] font-semibold">{b("rounds2")}</span>
+          <button type="button" aria-label="−" className="grid size-8 place-items-center rounded-full border border-border" onClick={() => onChange({ count: Math.max(1, entry.count - 1) })}>
             <Minus className="size-4" />
           </button>
-          <span className="w-6 text-center font-semibold tabular-nums">{entry.count}</span>
-          <button type="button" aria-label="+" className="grid size-10 place-items-center rounded-full border border-border" onClick={() => onChange({ count: Math.min(12, entry.count + 1) })}>
+          <span className="w-5 text-center text-sm font-semibold tabular-nums">{entry.count}</span>
+          <button type="button" aria-label="+" className="grid size-8 place-items-center rounded-full border border-border" onClick={() => onChange({ count: Math.min(12, entry.count + 1) })}>
             <Plus className="size-4" />
           </button>
         </div>
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold">{b("nextDay")}</span>
-        <Switch checked={entry.nextDay} label={b("nextDay")} onChange={(nextDay) => onChange({ nextDay })} />
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-fg/80">{b("nextDay")}</span>
+          <Switch checked={entry.nextDay} label={b("nextDay")} onChange={(nextDay) => onChange({ nextDay })} />
+        </div>
       </div>
 
       <Group title={b("pickPartner")}>
@@ -630,28 +632,31 @@ function EntryEditor({ entry, onChange }: { entry: BatchEntry; onChange: (change
         ))}
       </Group>
 
-      <div className="space-y-3">
+      {/* One line per feeling: the name with the level's word under it, then the five flames.
+          Six stacked label-plus-row blocks were the tallest part of the old sheet; the word
+          rides in the name's column because the row has no room for a third column. */}
+      <div className="space-y-1.5">
         {RATING_KEYS.map((key) => (
-          <div key={key}>
-            <p className="mb-1.5 text-sm font-semibold">
-              {t(key)}
-              <span className="font-normal text-fg/70"> — {entry[key] ? ratingLabel(lang, key, entry[key]) : b("notStated")}</span>
-            </p>
+          <div key={key} className="flex items-center gap-2">
+            <span className="w-[6.2rem] shrink-0">
+              <span className="block truncate text-[13px] font-semibold leading-tight">{t(key)}</span>
+              <span className="block truncate text-[11px] leading-tight text-fg/70">{entry[key] ? ratingLabel(lang, key, entry[key]) : b("notStated")}</span>
+            </span>
             <LevelRow value={entry[key]} style={ratingStyle} label={t(key)} onPick={(level) => onChange({ [key]: entry[key] === level ? 0 : level } as Edit)} />
           </div>
         ))}
-        <div>
-          <p className="mb-1.5 text-sm font-semibold">
-            {t("overall")}
-            <span className="font-normal text-fg/70"> — {entry.overall ? `${entry.overall} ${t("of5")}` : b("notStated")}</span>
-          </p>
+        <div className="flex items-center gap-2">
+          <span className="w-[6.2rem] shrink-0">
+            <span className="block truncate text-[13px] font-semibold leading-tight">{t("overall")}</span>
+            <span className="block truncate text-[11px] leading-tight text-fg/70">{entry.overall ? `${entry.overall} ${t("of5")}` : b("notStated")}</span>
+          </span>
           <LevelRow value={entry.overall} style={ratingStyle} label={t("overallRatingAria")} onPick={(level) => onChange({ overall: entry.overall === level ? 0 : level })} />
         </div>
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-sm font-semibold">{b("note")}</span>
-        <textarea className={cn(fieldClass, "min-h-24 resize-y text-sm leading-relaxed")} value={entry.notes} onChange={(event) => onChange({ notes: event.target.value })} />
+        <span className="mb-1 block text-[13px] font-semibold">{b("note")}</span>
+        <textarea className={cn(fieldClass, "min-h-14 resize-y text-sm leading-relaxed")} value={entry.notes} onChange={(event) => onChange({ notes: event.target.value })} />
       </label>
     </div>
   );
@@ -660,8 +665,8 @@ function EntryEditor({ entry, onChange }: { entry: BatchEntry; onChange: (change
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div>
-      <p className="mb-2 text-sm font-semibold">{title}</p>
-      <div className="flex flex-wrap gap-2">{children}</div>
+      <p className="mb-1.5 text-[13px] font-semibold">{title}</p>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
     </div>
   );
 }
@@ -672,7 +677,7 @@ function Chip({ on, children, onClick }: { on: boolean; children: ReactNode; onC
       type="button"
       aria-pressed={on}
       onClick={onClick}
-      className={cn("min-h-[37px] rounded-full border px-[0.85rem] text-[0.8rem] font-semibold", on ? "ag-chip-on" : "ag-pill border-border text-fg")}
+      className={cn("min-h-[31px] rounded-full border px-2.5 text-xs font-semibold", on ? "ag-chip-on" : "ag-pill border-border text-fg")}
     >
       {children}
     </button>
@@ -691,7 +696,7 @@ function LevelRow({
   onPick: (level: number) => void;
 }) {
   return (
-    <div className="flex gap-1.5" role="radiogroup" aria-label={label}>
+    <div className="flex gap-1" role="radiogroup" aria-label={label}>
       {[1, 2, 3, 4, 5].map((level) => (
         <button
           key={level}
@@ -700,11 +705,11 @@ function LevelRow({
           aria-label={`${label} ${level}`}
           onClick={() => onPick(level)}
           className={cn(
-            "grid size-10 place-items-center rounded-xl border transition-colors duration-200",
+            "grid size-8 place-items-center rounded-lg border transition-colors duration-200",
             value >= level ? "ag-rate-on border-accent" : "border-border",
           )}
         >
-          <RatingIcon style={style} className="size-4" active={value >= level} />
+          <RatingIcon style={style} className="size-3.5" active={value >= level} />
         </button>
       ))}
     </div>
