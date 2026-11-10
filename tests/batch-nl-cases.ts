@@ -320,6 +320,20 @@ export const CASES: Case[] = [
     expect: [{ date: "2026-10-21", partner: "Ana", place: "Hotel", overall: 5, notesHas: ["No condom"] }],
   },
   {
+    // Oscar's echo rule extends to date and place (Nov 9 2026): the captured date and place are
+    // not restated in the note. (His card read "August 20th at Mi Tierra place."; the suite
+    // uses a stock custom place, never his real ones.)
+    name: "en echo: august 20th at the cabin place comes out",
+    text: "Aug 20th at the Cabin place. Squirt. Almost cough.",
+    expect: [{ date: "2026-08-20", place: "Cabin", notesHas: ["Squirt", "Almost cough"], notesNot: ["August 20th", "Cabin"] }],
+  },
+  {
+    // A description of the place beyond its name is story: the sentence stays, date words and all.
+    name: "en echo guard: a description of the place keeps its sentence",
+    text: "Aug 21 at the Cabin by the river where the road ends. Squirt.",
+    expect: [{ date: "2026-08-21", place: "Cabin", notesHas: ["by the river where the road ends"] }],
+  },
+  {
     name: "en frame: could not keep an erection",
     text: "Oct 12 with Ana. I could not keep an erection for long.",
     expect: [{ date: "2026-10-12", partner: "Ana", problems: ["erection"] }],

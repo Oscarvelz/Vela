@@ -31,6 +31,7 @@ type Want = Partial<{
   duration: number;
   noteIsWhole: boolean;
   noteHas: string[];
+  noteNot: string[];
   alts: string[];
 }>;
 
@@ -68,6 +69,7 @@ function check(name: string, text: string, want: Want, ctx: object = {}, index =
     if (want.minEnergy && e.energy < want.minEnergy) bad.push(`energy ${e.energy}<${want.minEnergy}`);
     if (want.noteIsWhole && e.notes !== e.source.replace(/\s+/g, " ").trim()) bad.push(`note not whole: ${JSON.stringify(e.notes.slice(0, 60))}`);
     for (const frag of want.noteHas ?? []) if (!e.notes.includes(frag)) bad.push(`note lacks ${JSON.stringify(frag)}`);
+    for (const frag of want.noteNot ?? []) if (e.notes.includes(frag)) bad.push(`note still has ${JSON.stringify(frag)}`);
   }
   if (bad.length) {
     fail += 1;
@@ -77,7 +79,9 @@ function check(name: string, text: string, want: Want, ctx: object = {}, index =
 
 const ITEM34 =
   "34. Sept 21. I met Ana 2 years ago. 9:16 de la noche, esperando por Lucia. Este ha sido quizás uno de los días más esperados, puesto que ella estuvo en su periodo menstrual y estuvimos intercambiando mensajes muy sugestivos en el chat. Twice, no difficulties to get an erection. The first time was full in intensity and full of a burning desire. The second time was more pleasurable to me, with the orgasm.";
-const item34 = { n: 1, date: "2026-09-21", time: "21:16", count: 2, partner: "Lucia", minIntensity: 4, minSatisfaction: 3, noteIsWhole: true, alts: ["Ana"] } as const;
+// The note is the whole diary text EXCEPT its bare opening date sentence: since Nov 9 2026 the
+// captured date is not restated in the note (Oscar's echo rule). Every story sentence survives.
+const item34 = { n: 1, date: "2026-09-21", time: "21:16", count: 2, partner: "Lucia", minIntensity: 4, minSatisfaction: 3, noteHas: ["I met Ana 2 years ago", "esperando por Lucia", "Este ha sido quizás", "The second time was more pleasurable"], noteNot: ["Sept 21"], alts: ["Ana"] } as const;
 
 // ---- the reported item, with and without saved partners
 check("item 34, nobody saved", ITEM34, { ...item34 });
@@ -172,7 +176,7 @@ check("only a met-remark → keep her, flag it", "Nov 1. I met Marta a year ago,
 // ---- long paragraph: details late, full note kept
 const LONG =
   "Oct 12. Después de un día larguísimo en el trabajo y de una cena tranquila con amigos, volvimos a casa caminando y hablando de todo un poco, riéndonos de tonterías, y ya en el cuarto con Lucia, como a las 11:45 pm, lo hicimos twice, first missionary then from behind, with a condom, y fue increíble.";
-check("long es/en paragraph", LONG, { n: 1, date: "2026-10-12", time: "23:45", partner: "Lucia", count: 2, place: "Bedroom", positions: ["Missionary", "Doggy"], contraception: ["condom"], overall: 5, noteIsWhole: true });
+check("long es/en paragraph", LONG, { n: 1, date: "2026-10-12", time: "23:45", partner: "Lucia", count: 2, place: "Bedroom", positions: ["Missionary", "Doggy"], contraception: ["condom"], overall: 5, noteHas: ["Después de un día larguísimo", "y fue increíble"], noteNot: ["Oct 12"] });
 check("short entry keeps a clean note", "Oct 5 con Ana en la cama, una vez, condón", { noteHas: [] });
 
 

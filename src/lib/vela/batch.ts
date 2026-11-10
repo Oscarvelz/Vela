@@ -880,30 +880,40 @@ function storyWords(text: string) {
   return text.split(/\s+/).filter((w) => /[a-záéíóúñü]{2,}/i.test(w)).length;
 }
 
-/** Words that carry no story once the captured methods are masked: connectors and count words. */
-const ECHO_RESIDUE = new Set("once twice thrice plus all".split(" "));
+/** Words that carry no story once the captured fields are masked: connectors and count words. */
+const ECHO_RESIDUE = new Set("once twice thrice plus all place lugar".split(" "));
 
 /**
- * Oscar's rule (Nov 9 2026): the contraceptive method is structured data the moment it becomes
- * bubbles, so a note sentence that says nothing else only repeats it — "Pull out and pill.",
- * "(Twice) Condom plus pill." Whole sentences only, and only when every method they mention was
- * actually captured (a "No condom." the reader did not turn into a bubble stays: nothing is
- * lost). A sentence with any story word left over stays word for word.
+ * Oscar's echo rule (Nov 9 2026): what the reader captured as structured data is not restated in
+ * the note. It began with the contraceptive method ("Pull out and pill.", "(Twice) Condom plus
+ * pill.") and extends to the date and the place ("August 20th at Mi Tierra place."): a note
+ * sentence that says nothing else comes out. Whole sentences only, and only the CAPTURED mention
+ * is masked — a different date, a different place, or a method the reader did not turn into a
+ * bubble keeps its sentence (that is the ambiguity he excepted, and nothing is lost). A sentence
+ * carrying any story word — above all a description of the place beyond its name — stays word
+ * for word.
  */
-function dropMethodEchoes(note: string, rules: ReturnType<typeof buildRules>) {
+function dropEchoes(note: string, rules: ReturnType<typeof buildRules>, entry: BatchEntry, now: Date, state: YearState) {
   if (!note) return note;
-  const methodRules = rules.bubble.filter((rule) => rule.kind === "method");
-  if (!methodRules.length) return note;
-  const onlyMethod = (segment: string) => {
+  const fieldRules = rules.bubble.filter((rule) => rule.kind === "method" || rule.kind === "place");
+  const onlyEcho = (segment: string) => {
     const folded = fold(segment);
-    const captured = runRules(methodRules, folded, []).filter((hit) => !hit.negated);
-    if (!captured.length) return false;
+    const spans: Span[] = [];
+    for (const anchor of findAnchors(folded, now, state, [])) {
+      if (anchor.date === entry.date) spans.push(anchor);
+    }
+    for (const hit of runRules(fieldRules, folded, [])) {
+      if (hit.negated) continue;
+      if (hit.rule.kind === "place" && hit.rule.value !== entry.place) continue;
+      spans.push(hit);
+    }
+    if (!spans.length) return false;
     const mask = folded.split("");
-    for (const hit of captured) for (let i = hit.start; i < hit.end; i += 1) mask[i] = " ";
+    for (const span of spans) for (let i = span.start; i < span.end; i += 1) mask[i] = " ";
     const words = mask.join("").split(/[^a-z0-9']+/).filter((w) => w.length >= 2);
     return words.every((w) => FILLER.has(w.replace(/'/g, "")) || FILLER.has(w) || ECHO_RESIDUE.has(w));
   };
-  return sentences(note).filter((segment) => !onlyMethod(segment)).join(" ").replace(/\s{2,}/g, " ").trim();
+  return sentences(note).filter((segment) => !onlyEcho(segment)).join(" ").replace(/\s{2,}/g, " ").trim();
 }
 
 /** From this many words on, an entry is a diary paragraph: its note keeps the whole text, word for word. */
@@ -995,10 +1005,13 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
 
   const pick = pickPartner(text, folded, ctx.partners ?? [], bubbleHits);
   const partner = pick.best;
+  // The note strips only what the entry actually captured: the FIRST anchor is the date and
+  // placeHit is the place. Any other date or place the text mentions is ambiguous — it was not
+  // turned into a field — so its words stay in the note (Oscar's exception, Nov 9 2026).
   const claimed: Span[] = [
-    ...taken,
-    ...bubbleHits.filter((h) => !h.negated && h.rule.kind !== "multi"),
-    ...fuzzy.filter((h) => !h.negated),
+    ...taken.filter((s) => !anchors.some((a) => a === s) || s === anchors[0]),
+    ...bubbleHits.filter((h) => !h.negated && h.rule.kind !== "multi" && (h.rule.kind !== "place" || h === placeHit)),
+    ...fuzzy.filter((h) => !h.negated && (h.rule.kind !== "place" || h === placeHit)),
     ...feelingHits.filter((h) => !h.negated && h.rule.kind !== "multi"),
   ];
   if (partner) claimed.push(partner);
@@ -1025,7 +1038,7 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     place: placeHit?.rule.value ?? "",
     count: count.again ? Math.max(baseCount, 2) : baseCount,
     nextDay: rangeDays === 1 && (nextSpans.length > 0 || pastMidnight),
-    notes: dropMethodEchoes(noteFor(text, remainder(text, folded, claimed)), rules),
+    notes: noteFor(text, remainder(text, folded, claimed)),
     contraception,
     problems,
     partnerName: partner?.name ?? "",
@@ -1306,6 +1319,7 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
       entry.endDate = draft.date;
       entry.dateStated = true;
     }
+    entry.notes = dropEchoes(entry.notes, rules, entry, now, state);
     return entry;
   });
 }
