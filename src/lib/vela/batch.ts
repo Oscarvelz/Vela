@@ -1011,7 +1011,10 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
 
 // ------------------------------------------------------------------ splitting
 
-const TITLE_RE = /^(?:(\d+)(?:st|nd|rd|th)\s+time|(\d+)\.?\s*(?:ª|º|a)?\s*vez|(primera|segunda|tercera|cuarta|quinta)\s+vez)\b\.?\s*/i;
+// A line's heading, in heading form only: "2nd time." (period, or the line is just the marker).
+// "2nd time, …" opening a line is narrative continuing an encounter, never a title — same rule
+// as the mid-line split above.
+const TITLE_RE = /^(?:(\d+)(?:st|nd|rd|th)\s+time(?:\.(?=\s|$)|\s*$)|(\d+)\.?\s*(?:ª|º|a)?\s*vez\b\.?\s*|(primera|segunda|tercera|cuarta|quinta)\s+vez\b\.?\s*)/i;
 const THROUGH = /\b(?:through|thru|until|till|to|hasta|al)\s*$/;
 
 /** Sentence-ish pieces of one line. Keeps "Oct." "a.m." decimals and (parentheses) together. */
@@ -1149,9 +1152,13 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
   const rules = buildRules(ctx);
   const state: YearState = { carried: null };
   const source = (text || "").normalize("NFC").replace(/\r\n?/g, "\n");
-  // lines, and old-style "2nd time." / "2.ª vez" markers mid-line
+  // lines, and old-style "2nd time." / "2.ª vez" markers mid-line. A marker only splits in its
+  // heading form — "2nd time." with its period, like the Spanish "segunda vez." below. The comma
+  // form is narrative, not a heading: "Mar 12. Twice. 2nd time, the erection was difficult…"
+  // is ONE encounter whose second round is being told, and cutting before "2nd" orphaned the
+  // story into a dateless entry dated today (Oscar, Nov 9 2026).
   const lines = source
-    .split(/\n+|(?=\b\d+(?:st|nd|rd|th)\s+time\b)|(?=\b\d+\.?\s*(?:ª|º)\s*vez\b)|(?=\b(?:primera|segunda|tercera|cuarta|quinta)\s+vez\b\.)/i)
+    .split(/\n+|(?=\b\d+(?:st|nd|rd|th)\s+time\b\s*\.)|(?=\b\d+\.?\s*(?:ª|º)\s*vez\b)|(?=\b(?:primera|segunda|tercera|cuarta|quinta)\s+vez\b\.)/i)
     .map((line) => line.trim())
     .filter(Boolean)
     .flatMap(splitLists)
@@ -1195,7 +1202,11 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
       const current = drafts[drafts.length - 1];
       const piecePartner = partnerOf(piece);
       const startNew = (date: string | null = anchor?.date ?? null) => {
-        drafts.push({ title: lineStarted ? "" : title, parts: [piece], date, dayFirst: Boolean(state.dayFirst), hint, partner: piecePartner, explicit: anchor?.stated === "explicit" });
+        // A fragment that carries no date of its own (a headed item, a numbered item) opens on
+        // the day the text was last on — the same rule as a partner split below — never on
+        // today: the day he is typing is the one date the story is almost never about. If its
+        // own pieces state a date, readEntry's stated date wins and this is ignored.
+        drafts.push({ title: lineStarted ? "" : title, parts: [piece], date: date ?? drafts[drafts.length - 1]?.date ?? null, dayFirst: Boolean(state.dayFirst), hint, partner: piecePartner, explicit: anchor?.stated === "explicit" });
         lineStarted = true;
       };
       const join = (draft: Draft) => {

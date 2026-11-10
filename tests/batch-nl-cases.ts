@@ -276,6 +276,25 @@ export const CASES: Case[] = [
     ],
   },
   {
+    // A numbered journal item whose story narrates its own second round ("2nd time, …" with a
+    // comma) is ONE encounter on its stated date — never a fragment dated today. (Oscar, Nov 9 2026.)
+    name: "multi: numbered items, narrative 2nd time keeps the date",
+    text: "17. Oct 12. Twice. 2nd time, the erection was difficult. We had to go to the cabin, since a van was parked in front of us. When doing it for the second time, we were interrupted by the lights of a car. Ana was pissed about this. She was feeling it.\n18. Oct 27. Twice. On top and dog style. My back was killing me after.",
+    expect: [
+      { date: "2026-10-12", count: 2, partner: "Ana", place: "Cabin", problems: ["erection", "interruption"], notesHas: ["the erection was difficult", "interrupted by the lights of a car"] },
+      { date: "2026-10-27", count: 2, positions: ["Cowgirl", "Doggy"], notesHas: ["My back was killing me"] },
+    ],
+  },
+  {
+    // A headed item that states no date opens on the day the text was last on, never on today.
+    name: "multi: headed item without a date inherits the previous day",
+    text: "1st time. Oct 12 at the hotel with Ana. Twice.\n\n2nd time. At the cabin, once, condom.",
+    expect: [
+      { date: "2026-10-12", count: 2, partner: "Ana", place: "Hotel" },
+      { date: "2026-10-12", count: 1, place: "Cabin", contraception: ["condom"] },
+    ],
+  },
+  {
     name: "multi: semicolons + explicit dates",
     text: "Oct 2 9pm doggy; Oct 4 around 1am cowgirl, no condom, pill; Oct 6 lunch break in the car",
     expect: [
