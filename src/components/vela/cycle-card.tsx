@@ -24,7 +24,8 @@ import { addDays, fmtShort, parseDate, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
-import { Button, Card, ConfirmDialog, fieldClass } from "./ui";
+import { Button, Card, ConfirmDialog, Switch, fieldClass } from "./ui";
+import { CycleReasonAsk } from "./cycle-reason";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { CycleSky } from "./cycle-sky";
 
@@ -367,6 +368,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
         </div>
       ) : null}
       {regInfo ? <RegularityInfo stats={stats} measured={lowChanceReady(cycle).measured} /> : null}
+      <CycleReasonAsk />
       {fold.enabled ? (
         <>
           <div className="cy-fold" data-open={folded} data-settled={fold.settled} onTransitionEnd={fold.onEnd} inert={!folded || undefined} aria-hidden={!folded || undefined}>
@@ -1441,6 +1443,10 @@ export function CycleTune({ id }: { id?: string } = {}) {
       <TuneRow label={t("cycleFertileDays")} value={cycle.fertileDays} min={3} max={7} suffix={t("cycleDaysWord")} onChange={(fertileDays) => setCycle({ fertileDays })} />
       <p className="text-xs leading-relaxed text-dim">{t("cycleFertileHint")}</p>
       <p className="text-xs leading-relaxed text-dim">{t("cycleAvgNote")}</p>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm">{t("cyAskMute")}</span>
+        <Switch checked={!!cycle.muteReasonAsks} label={t("cyAskMute")} onChange={(muteReasonAsks) => setCycle({ muteReasonAsks })} />
+      </div>
     </div>
   );
 }

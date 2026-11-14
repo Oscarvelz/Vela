@@ -4,6 +4,7 @@ import {
   defaultCycle,
   sessionsByPhase,
   type CyclePhase,
+  type CycleReason,
   type CycleSettings,
   type DayLog,
 } from "./cycle";
@@ -202,6 +203,7 @@ function entries(tracker: CycleSettings) {
   for (const start of tracker.starts) map.set(`s:${start}`, "1");
   for (const [start, end] of Object.entries(tracker.ends)) map.set(`e:${start}`, end);
   for (const [date, log] of Object.entries(tracker.days)) map.set(`d:${date}`, JSON.stringify(log));
+  for (const [start, reason] of Object.entries(tracker.reasons ?? {})) map.set(`r:${start}`, JSON.stringify(reason));
   return map;
 }
 
@@ -237,6 +239,7 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
   const starts: string[] = [];
   const ends: Record<string, string> = {};
   const days: Record<string, DayLog> = {};
+  const reasons: Record<string, CycleReason> = {};
   const stamps: Record<string, number> = {};
   for (const key of keys) {
     const sa = a.stamps[key] ?? 0;
@@ -249,7 +252,13 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
     const date = key.slice(2);
     if (key.startsWith("s:")) starts.push(date);
     else if (key.startsWith("e:")) ends[date] = value;
-    else {
+    else if (key.startsWith("r:")) {
+      try {
+        reasons[date] = JSON.parse(value) as CycleReason;
+      } catch {
+        /* skip */
+      }
+    } else {
       try {
         days[date] = JSON.parse(value) as DayLog;
       } catch {
@@ -258,7 +267,7 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
     }
   }
   const meta = b.metaAt > a.metaAt ? b : b.metaAt < a.metaAt ? a : newerSide;
-  const merged = cleanTracker({ ...meta, id: a.id, starts, ends, days, stamps });
+  const merged = cleanTracker({ ...meta, id: a.id, starts, ends, days, reasons, stamps });
   return { ...merged, updatedAt: Math.max(a.updatedAt, b.updatedAt), metaAt: Math.max(a.metaAt, b.metaAt) };
 }
 

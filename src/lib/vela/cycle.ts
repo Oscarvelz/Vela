@@ -47,7 +47,52 @@ export type CycleSettings = {
   ends: Record<string, string>;
   /** Light daily log: flow, symptoms, mood, note. */
   days: Record<string, DayLog>;
+  /** Reasons the user noted for cycles that escaped her own pattern (2.2.1),
+   *  keyed by the start that began the cycle. Testimony, never a variable:
+   *  nothing in the prediction math reads this map. "dismissed" is a
+   *  dismissal recorded as data — the question never returns for that cycle. */
+  reasons?: Record<string, CycleReason>;
+  /** The user asked Vela not to ask about cycle changes (2.2.1). */
+  muteReasonAsks?: boolean;
 };
+
+/** A reason a user may know for a cycle that escaped her pattern — things she
+ *  can know happened, never mechanisms the app proposes. "unknown" is an
+ *  honest answer and is recorded like any other. */
+export type CycleReasonId =
+  | "morningAfter"
+  | "contraceptionChange"
+  | "medication"
+  | "stress"
+  | "travel"
+  | "exercise"
+  | "illness"
+  | "weight"
+  | "postpartum"
+  | "pregnancyEnd"
+  | "perimenopause"
+  | "pregnant"
+  | "other"
+  | "unknown";
+
+export type CycleReason = { id: CycleReasonId | "dismissed"; note?: string; at: number };
+
+export const CYCLE_REASON_IDS: CycleReasonId[] = [
+  "morningAfter",
+  "contraceptionChange",
+  "medication",
+  "stress",
+  "travel",
+  "exercise",
+  "illness",
+  "weight",
+  "postpartum",
+  "pregnancyEnd",
+  "perimenopause",
+  "pregnant",
+  "other",
+  "unknown",
+];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_PERIOD = 14;
@@ -78,7 +123,28 @@ export function cleanCycle(raw: unknown): CycleSettings {
     starts,
     ends: cleanEnds(value.ends, starts),
     days: cleanDays(value.days),
+    // Threaded through the gate like every persisted field (the 2.1.27 rule):
+    // a field cleanCycle does not name would be stripped at every unlock.
+    ...(Object.keys(cleanReasons(value.reasons, starts)).length ? { reasons: cleanReasons(value.reasons, starts) } : {}),
+    ...(value.muteReasonAsks ? { muteReasonAsks: true } : {}),
   };
+}
+
+function cleanReasons(raw: unknown, starts: string[]): Record<string, CycleReason> {
+  if (!raw || typeof raw !== "object") return {};
+  const known = new Set(starts);
+  const out: Record<string, CycleReason> = {};
+  for (const [start, item] of Object.entries(raw as Record<string, unknown>)) {
+    if (!known.has(start) || !item || typeof item !== "object") continue;
+    const r = item as Partial<CycleReason>;
+    if (r.id !== "dismissed" && !CYCLE_REASON_IDS.includes(r.id as CycleReasonId)) continue;
+    out[start] = {
+      id: r.id as CycleReason["id"],
+      ...(typeof r.note === "string" && r.note.trim() ? { note: r.note.trim().slice(0, 80) } : {}),
+      at: typeof r.at === "number" ? r.at : 0,
+    };
+  }
+  return out;
 }
 
 function cleanEnds(raw: unknown, starts: string[]) {
@@ -218,6 +284,70 @@ export function pastCycles(cycle: CycleSettings, limit = 6) {
     });
   }
   return rows.slice(-limit);
+}
+
+/* ── The question (2.2.1) ───────────────────────────────────────────────────
+ * When a completed cycle escapes the woman's own pattern, Vela may ask —
+ * once, after the cycle has closed — whether she knows a reason. Detection
+ * states only measured facts: her recent cycles ran `low` to `high` days;
+ * this one ran `length`. With no personal history yet, the fixed clinical
+ * band (24–38 days) stands in. The question is never asked while a period is
+ * merely pending, never twice for one cycle (an answer OR a dismissal is
+ * recorded as data), never after a pregnancy was noted for the cycle before,
+ * and it stops after two consecutive asked outliers — past that, asking
+ * again would be nagging, not care. */
+
+export type CycleAsk = { cycleStart: string; length: number; low: number; high: number; longer: boolean };
+
+function outlierOf(length: number, priors: number[]): { low: number; high: number } | null {
+  if (!priors.length) return length < 24 || length > 38 ? { low: 24, high: 38 } : null;
+  const low = Math.min(...priors);
+  const high = Math.max(...priors);
+  // Her pattern is the spread of her own recent cycles; a new cycle counts
+  // as outside it when it stretches that spread past seven days (the same
+  // allowance cycleStats uses to call a history irregular).
+  if (length > high && length - low > 7) return { low, high };
+  if (length < low && high - length > 7) return { low, high };
+  return null;
+}
+
+export function cycleAsk(cycle: CycleSettings): CycleAsk | null {
+  if (!cycle.enabled || cycle.muteReasonAsks) return null;
+  const rows = pastCycles(cycle, 12);
+  if (!rows.length) return null;
+  const reasons = cycle.reasons ?? {};
+  const last = rows[rows.length - 1];
+  if (reasons[last.start]) return null;
+  // A pregnancy noted for the cycle before silences the questions: the
+  // pattern has been explained in the largest possible way.
+  const prev = rows[rows.length - 2];
+  if (prev && reasons[prev.start]?.id === "pregnant") return null;
+  const priors = rows.slice(0, -1).map((row) => row.length);
+  const band = outlierOf(last.length, priors);
+  if (!band) return null;
+  // The global cap: walk back over consecutive outliers that were already
+  // asked about; two in a row and the asking rests until a usual cycle.
+  let askedRun = 0;
+  for (let index = rows.length - 2; index >= 0; index -= 1) {
+    const row = rows[index];
+    const itsPriors = rows.slice(0, index).map((r) => r.length);
+    if (outlierOf(row.length, itsPriors) && reasons[row.start]) askedRun += 1;
+    else break;
+  }
+  if (askedRun >= 2) return null;
+  return { cycleStart: last.start, length: last.length, low: band.low, high: band.high, longer: last.length > band.high };
+}
+
+/** The same measurement for any completed cycle — the reason editor uses it
+ *  to speak about a cycle that was already answered. */
+export function cycleOutlier(cycle: CycleSettings, start: string): CycleAsk | null {
+  const rows = pastCycles(cycle, 12);
+  const index = rows.findIndex((row) => row.start === start);
+  if (index < 0) return null;
+  const priors = rows.slice(0, index).map((row) => row.length);
+  const band = outlierOf(rows[index].length, priors);
+  if (!band) return null;
+  return { cycleStart: start, length: rows[index].length, low: band.low, high: band.high, longer: rows[index].length > band.high };
 }
 
 /* ── Timeline ───────────────────────────────────────────────────────────── */
