@@ -24,6 +24,9 @@ import type { Session } from "@/lib/vela/types";
 import { voiceReading } from "@/lib/vela/voices";
 import { episodes, unnamedLongGaps, type QuietEpisode } from "@/lib/vela/quiet";
 import { quietWord } from "./quiet-sheet";
+import { cycleOutlier, pastCycles, CYCLE_REASON_IDS, type CycleReasonId } from "@/lib/vela/cycle";
+import { trackerName, type CycleTracker } from "@/lib/vela/cycle-trackers";
+import { REASON_KEY } from "./cycle-reason";
 import { Sparkle } from "./mark";
 import { CycleStats, EachCycleCard } from "./cycle-card";
 import { AdvisorCard } from "./advisor-card";
@@ -130,6 +133,96 @@ function QuietCard({ sessions }: { sessions: Session[] }) {
             {t("qdNameThem")}
           </Button>
         </div>
+      ) : null}
+    </Card>
+  );
+}
+
+/** Outside the pattern (2.2.6): the cycles that escaped her own pattern and
+ *  carry a note, counted per note — one card per person, never pooled. The
+ *  app counts her words; it does not learn causes. A pregnancy and the end
+ *  of a pregnancy are never meter rows or rankings: each is at most one
+ *  unadorned sentence. "I don't know" and dismissals are the absence of a
+ *  note and appear nowhere. */
+function CycleReasonsCards() {
+  const cycles = useJournal((s) => s.journal.settings.cycles);
+  const archivedPeople = useJournal((s) => s.journal.settings.archivedPeople);
+  const trackers = (cycles ?? []).filter(
+    (tr) =>
+      !(tr.partnerName && hiddenIn(archivedPeople, tr.partnerName, "stats")) &&
+      !(tr.partnerLink && hiddenIn(archivedPeople, tr.partnerLink, "stats")),
+  );
+  return (
+    <>
+      {trackers.map((tr) => (
+        <CycleReasonsCard key={tr.id} tracker={tr} />
+      ))}
+    </>
+  );
+}
+
+function CycleReasonsCard({ tracker }: { tracker: CycleTracker }) {
+  const t = useT();
+  const data = useMemo(() => {
+    const noted: { id: CycleReasonId; note?: string }[] = [];
+    for (const row of pastCycles(tracker, 12)) {
+      const reason = tracker.reasons?.[row.start];
+      if (!reason || reason.id === "dismissed" || reason.id === "unknown") continue;
+      if (!cycleOutlier(tracker, row.start)) continue;
+      noted.push({ id: reason.id as CycleReasonId, ...(reason.note ? { note: reason.note } : {}) });
+    }
+    const meters = new Map<string, { label: string; count: number; order: number }>();
+    let preg = 0;
+    let pregEnd = 0;
+    for (const n of noted) {
+      if (n.id === "pregnant") {
+        preg += 1;
+        continue;
+      }
+      if (n.id === "pregnancyEnd") {
+        pregEnd += 1;
+        continue;
+      }
+      const key = n.id === "other" ? `other:${(n.note ?? "").trim().toLowerCase()}` : n.id;
+      const cell = meters.get(key) ?? {
+        label: n.id === "other" ? (n.note ?? "") : t(REASON_KEY[n.id]),
+        count: 0,
+        order: CYCLE_REASON_IDS.indexOf(n.id),
+      };
+      cell.count += 1;
+      meters.set(key, cell);
+    }
+    const rows = [...meters.values()].sort((a, b) => b.count - a.count || a.order - b.order);
+    return { total: noted.length, rows, preg, pregEnd };
+  }, [tracker, t]);
+  if (!data.total) return null;
+  const self = tracker.perspective !== "partner";
+  const name = trackerName(tracker);
+  return (
+    <Card className="ag-glass min-w-0 overflow-hidden" data-testid="cycle-reasons-card">
+      <h2 className="font-display text-2xl">{t("cyPatTitle")}</h2>
+      {!self && name ? <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-dim">{name}</p> : null}
+      <p className="mt-2 text-sm text-dim">
+        {self
+          ? data.total === 1
+            ? t("cyPatLeadOne")
+            : fill(t("cyPatLead"), { n: data.total })
+          : data.total === 1
+            ? fill(t("cyPatLeadOneP"), { name })
+            : fill(t("cyPatLeadP"), { name, n: data.total })}
+      </p>
+      {data.rows.length ? (
+        <div className="mt-3">
+          {data.rows.map((row) => (
+            <Meter key={row.label} label={row.label} value={row.count} max={Math.max(1, ...data.rows.map((r) => r.count))} />
+          ))}
+        </div>
+      ) : null}
+      {data.pregEnd ? (
+        <p className="mt-3 text-sm text-dim">{data.pregEnd === 1 ? t("cySaidPregEndOne") : fill(t("cySaidPregEndMany"), { n: data.pregEnd })}</p>
+      ) : null}
+      {data.preg ? (
+        <p className="mt-3 text-sm text-dim">{data.preg === 1 ? t("cySaidPregOne") : fill(t("cySaidPregMany"), { n: data.preg })}</p>
       ) : null}
     </Card>
   );
@@ -305,6 +398,7 @@ export function InsightsView() {
       </div>
       <CycleStats />
       <EachCycleCard />
+      <CycleReasonsCards />
       <LoggedDaysCard />
       <Card className="ag-glass min-w-0 overflow-hidden">
         <h2 className="font-display text-2xl">{t("avgGlowLength")}</h2>

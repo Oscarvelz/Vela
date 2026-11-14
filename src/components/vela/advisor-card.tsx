@@ -13,6 +13,7 @@ import { readAdvisor, type AdvisorLine } from "@/lib/vela/advisor";
 import { hiddenIn, upcomingDates, type UpcomingDate } from "@/lib/vela/anniversaries";
 import { partnerPerson } from "@/lib/vela/people";
 import { QUIET_REASON_KEY } from "./quiet-sheet";
+import { REASON_KEY } from "./cycle-reason";
 import { useJournal } from "@/lib/vela/store";
 import { Sparkle } from "./mark";
 import { phaseKey } from "./cycle-card";
@@ -123,6 +124,19 @@ export function AdvisorCard() {
           n: line.days,
           cause: line.reason === "custom" ? (line.custom ?? "") : t(QUIET_REASON_KEY[line.reason]),
         });
+      case "cycleNote": {
+        const note = line.reasonId === "other" ? (line.noteText ?? "") : t(REASON_KEY[line.reasonId]);
+        if (line.self) {
+          return line.low < line.high
+            ? fill(t("advCyNoteRange"), { n: line.days, a: line.low, b: line.high, note })
+            : fill(t("advCyNoteOne"), { n: line.days, u: line.low, note });
+        }
+        return line.low < line.high
+          ? fill(t("advCyNoteRangeP"), { name: line.name, n: line.days, a: line.low, b: line.high, note })
+          : fill(t("advCyNoteOneP"), { name: line.name, n: line.days, u: line.low, note });
+      }
+      case "cycleProjected":
+        return t("advCyProjected");
       case "methodNote":
         return fill(t("advMethodNote"), { method: methodLabel(line.method), avg: line.avg.toFixed(1), n: line.n });
     }
@@ -298,7 +312,13 @@ export function AdvisorCard() {
                         n: shownFact.n,
                         cause: shownFact.reason === "custom" ? (shownFact.custom ?? "") : t(QUIET_REASON_KEY[shownFact.reason]),
                       })
-                    : fill(t("advFactFirmer"), { name: trackerLabel(shownFact.tracker, t), n: shownFact.missing })}
+                    : shownFact.kind === "cyclePattern"
+                      ? fill(t(shownFact.self ? "advCyPattern" : "advCyPatternP"), {
+                          n: shownFact.n,
+                          name: shownFact.name,
+                          note: shownFact.reasonId === "other" ? (shownFact.noteText ?? "") : t(REASON_KEY[shownFact.reasonId]),
+                        })
+                      : fill(t("advFactFirmer"), { name: trackerLabel(shownFact.tracker, t), n: shownFact.missing })}
             </span>
           </p>
         </>

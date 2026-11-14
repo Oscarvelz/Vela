@@ -15,7 +15,7 @@ import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { Button, fieldClass } from "./ui";
 import { cn } from "@/lib/cn";
 
-const REASON_KEY: Record<CycleReasonId, CopyKey> = {
+export const REASON_KEY: Record<CycleReasonId, CopyKey> = {
   morningAfter: "cyResMorningAfter",
   contraceptionChange: "cyResContraception",
   medication: "cyResMedication",

@@ -6,16 +6,20 @@
    speaks about bodies or medicine — it reads what was written down and says what it sees. */
 import { addDays, parseDate, todayStr } from "./dates";
 import {
+  cycleOutlier,
   cycleSnapshot,
   cycleStats,
   lowChanceDays,
   lowChanceReady,
+  pastCycles,
   phaseOn,
+  pregnancyNoted,
   type CyclePhase,
+  type CycleReasonId,
   type DayRange,
   type Regularity,
 } from "./cycle";
-import { trackerForPartner, visibleTrackers, type CycleTracker } from "./cycle-trackers";
+import { trackerForPartner, trackerName, visibleTrackers, type CycleTracker } from "./cycle-trackers";
 import { firstOccurrences, longestStreak, sessionsSorted, timeBuckets, topCounts } from "./stats";
 import type { QuietMark, QuietThemeId, RatingKey, Session } from "./types";
 import { episodes, explanationFor } from "./quiet";
@@ -43,12 +47,15 @@ export type AdvisorLine =
   | { kind: "phaseBest"; name: string; phase: CyclePhase; avg: number; n: number }
   | { kind: "rhythm"; since: number; usual: number }
   | { kind: "explained"; days: number; reason: QuietThemeId | "custom"; custom?: string }
+  | { kind: "cycleNote"; days: number; low: number; high: number; reasonId: CycleReasonId; noteText?: string; name: string; self: boolean }
+  | { kind: "cycleProjected" }
   | { kind: "methodNote"; method: string; avg: number; n: number };
 
 export type AdvisorFact =
   | { kind: "newPosition"; position: string; date: string; partner: string }
   | { kind: "streak"; days: number }
   | { kind: "pattern"; n: number; reason: QuietThemeId | "custom"; custom?: string }
+  | { kind: "cyclePattern"; n: number; reasonId: CycleReasonId; noteText?: string; name: string; self: boolean }
   | { kind: "firmer"; tracker: CycleTracker; missing: number };
 
 export type AdvisorReading = {
@@ -210,6 +217,89 @@ export function readAdvisor(
     }
   }
 
+  /* ── The cycle reasons, read back (2.2.6): the Advisor watches changes,
+     so it does not stay silent about the notes the changed cycles carry.
+     It counts and quotes notes — it never turns one into a cause, and a
+     dismissal or an "I don't know" is the absence of a note, never one. */
+  type NotedCycle = { start: string; closedAt: string; id: CycleReasonId; note?: string };
+  const notedOf = (tracker: CycleTracker): NotedCycle[] => {
+    const starts = [...tracker.starts].sort();
+    const out: NotedCycle[] = [];
+    for (const row of pastCycles(tracker, 12)) {
+      const reason = tracker.reasons?.[row.start];
+      if (!reason || reason.id === "dismissed" || reason.id === "unknown") continue;
+      if (!cycleOutlier(tracker, row.start)) continue;
+      const idx = starts.indexOf(row.start);
+      out.push({
+        start: row.start,
+        closedAt: starts[idx + 1] ?? row.start,
+        id: reason.id as CycleReasonId,
+        ...(reason.note ? { note: reason.note } : {}),
+      });
+    }
+    return out.sort((a, b) => a.closedAt.localeCompare(b.closedAt));
+  };
+
+  let cycleNote: Extract<AdvisorLine, { kind: "cycleNote" }> | null = null;
+  let cycleNoteClosedAt = "";
+  for (const tracker of live) {
+    const rows = pastCycles(tracker, 12);
+    const lastRow = rows[rows.length - 1];
+    if (!lastRow) continue;
+    const reason = tracker.reasons?.[lastRow.start];
+    if (!reason || reason.id === "dismissed" || reason.id === "unknown" || reason.id === "pregnant") continue;
+    const band = cycleOutlier(tracker, lastRow.start);
+    if (!band) continue;
+    const starts = [...tracker.starts].sort();
+    const closedAt = starts[starts.indexOf(lastRow.start) + 1] ?? lastRow.start;
+    if (cycleNote && closedAt <= cycleNoteClosedAt) continue;
+    cycleNoteClosedAt = closedAt;
+    cycleNote = {
+      kind: "cycleNote",
+      days: band.length,
+      low: band.low,
+      high: band.high,
+      reasonId: reason.id as CycleReasonId,
+      ...(reason.note ? { noteText: reason.note } : {}),
+      name: trackerName(tracker),
+      self: tracker.perspective !== "partner",
+    };
+  }
+  if (cycleNote) lines.push(cycleNote);
+  // The one Advisor sentence about a noted pregnancy (Oscar's no-silence
+  // word, 2026-11-14): it speaks of the journal and the calendar — the
+  // projection the note set in motion — never of the person herself.
+  if (live.some((tracker) => pregnancyNoted(tracker))) lines.push({ kind: "cycleProjected" });
+
+  const cyclePatternOf = (): Extract<AdvisorFact, { kind: "cyclePattern" }> | null => {
+    let best: Extract<AdvisorFact, { kind: "cyclePattern" }> | null = null;
+    let bestClosedAt = "";
+    for (const tracker of live) {
+      const noted = notedOf(tracker).filter((n) => n.id !== "pregnant" && n.id !== "pregnancyEnd");
+      if (noted.length < 2) continue;
+      const keyOf = (n: NotedCycle) => (n.id === "other" ? `other:${(n.note ?? "").trim().toLowerCase()}` : n.id);
+      const groups = new Map<string, NotedCycle[]>();
+      for (const n of noted) groups.set(keyOf(n), [...(groups.get(keyOf(n)) ?? []), n]);
+      for (const group of groups.values()) {
+        if (group.length < 2) continue;
+        if (!group.some((n) => n.start === noted[noted.length - 1].start)) continue;
+        const latest = group[group.length - 1];
+        if (dayDiff(latest.closedAt, today) > 183) continue;
+        if (best && latest.closedAt <= bestClosedAt) continue;
+        bestClosedAt = latest.closedAt;
+        best = {
+          kind: "cyclePattern",
+          n: group.length,
+          reasonId: latest.id,
+          ...(latest.note ? { noteText: latest.note } : {}),
+          name: trackerName(tracker),
+          self: tracker.perspective !== "partner",
+        };
+      }
+    }
+    return best;
+  };
+
   const methodGroups = new Map<string, { sum: number; n: number }>();
   for (const session of list) {
     if (session.overall <= 0) continue;
@@ -275,11 +365,21 @@ export function readAdvisor(
       if (pattern) {
         fact = pattern;
       } else {
-        const learning = live
-          .map((tracker) => ({ tracker, missing: lowChanceReady(tracker).missing }))
-          .filter((row) => row.missing > 0)
-          .sort((a, b) => a.missing - b.missing);
-        if (learning.length) fact = { kind: "firmer", tracker: learning[0].tracker, missing: learning[0].missing };
+        // The cycle-note pattern (2.2.6): changed cycles that keep carrying
+        // the same note. Two is the gate — cycles are monthly events, rarer
+        // than quiet stretches — and pregnancies and losses never group:
+        // a "pattern" of them would imply a significance the Advisor is
+        // forbidden to construct.
+        const cyclePattern = cyclePatternOf();
+        if (cyclePattern) {
+          fact = cyclePattern;
+        } else {
+          const learning = live
+            .map((tracker) => ({ tracker, missing: lowChanceReady(tracker).missing }))
+            .filter((row) => row.missing > 0)
+            .sort((a, b) => a.missing - b.missing);
+          if (learning.length) fact = { kind: "firmer", tracker: learning[0].tracker, missing: learning[0].missing };
+        }
       }
     }
   }
