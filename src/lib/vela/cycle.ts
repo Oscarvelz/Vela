@@ -376,13 +376,25 @@ function settingsNums(cycle: CycleSettings) {
   };
 }
 
+/** A pregnancy stands noted against the latest closed cycle (2.2.5, Oscar):
+ *  until a newer start is logged, the timeline ahead is a projection — the
+ *  cycles as they would have run — never a period "due" or "late". The
+ *  moment she logs a real start, the latest closed cycle changes and the
+ *  projection ends by itself; her corrections are the record from there. */
+export function pregnancyNoted(cycle: CycleSettings): boolean {
+  const starts = sortedStarts(cycle.starts);
+  if (starts.length < 2) return false;
+  return cycle.reasons?.[starts[starts.length - 2]]?.id === "pregnant";
+}
+
 function lateInfo(cycle: CycleSettings, today: string) {
   const starts = sortedStarts(cycle.starts);
   if (!starts.length) return { predictedNext: null as string | null, late: 0, due: false };
   const last = starts[starts.length - 1];
   const predictedNext = addDays(last, cycleStats(cycle).cycle);
   // "Due": the predicted day has arrived (or passed) and no new start is logged yet.
-  const due = last <= today && today >= predictedNext;
+  // A noted pregnancy suspends "due" entirely: the date ahead is a projection, not an expectation.
+  const due = !pregnancyNoted(cycle) && last <= today && today >= predictedNext;
   const late = due ? daysBetween(predictedNext, today) : 0;
   return { predictedNext, late, due };
 }
@@ -403,7 +415,9 @@ function anchors(cycle: CycleSettings, today: string): Anchor[] {
     list.push({ start, next, ovRef, logged: true, periodEnd: end < next ? end : addDays(next, -1) });
   }
   let cursor = due ? today : list[list.length - 1].next;
-  for (let step = 0; step < 9; step += 1) {
+  // A noted pregnancy projects further ahead, so the trace spans the whole pregnancy.
+  const steps = pregnancyNoted(cycle) ? 14 : 9;
+  for (let step = 0; step < steps; step += 1) {
     const next = addDays(cursor, stats.cycle);
     list.push({ start: cursor, next, ovRef: next, logged: false, periodEnd: addDays(cursor, stats.period - 1) });
     cursor = next;

@@ -42,8 +42,16 @@ function questionText(ask: CycleAsk, t: (key: CopyKey) => string): string {
 export function CycleReasonAsk() {
   const t = useT();
   const cycle = useJournal(selectActiveCycle);
+  const speakAs = useJournal((s) => s.journal.profile?.speakAs);
   const setCycle = useJournal((s) => s.setCycle);
   const showToast = useJournal((s) => s.showToast);
+  // The pregnancy reason speaks in first person only when the cycle is the
+  // keeper's own and the keeper is not a man (Oscar, 2026-11-14): on a
+  // partner's tracker — his account of her cycle — the plain noun is the
+  // honest word: "Pregnancy" / «Embarazo», never "I'm pregnant".
+  const firstPerson = cycle.perspective === "self" && speakAs !== "man";
+  const reasonLabel = (id: CycleReasonId): string =>
+    id === "pregnant" && !firstPerson ? t("cyResPregnancy") : t(REASON_KEY[id]);
   const [editing, setEditing] = useState<string | null>(null);
   const [sel, setSel] = useState<CycleReasonId | null>(null);
   const [note, setNote] = useState("");
@@ -61,7 +69,7 @@ export function CycleReasonAsk() {
     if (reason && reason.id !== "dismissed" && reason.id !== "unknown") {
       noted = {
         start: rows[i].start,
-        label: reason.id === "other" && reason.note ? reason.note : t(REASON_KEY[reason.id as CycleReasonId]),
+        label: reason.id === "other" && reason.note ? reason.note : reasonLabel(reason.id as CycleReasonId),
       };
       break;
     }
@@ -100,7 +108,7 @@ export function CycleReasonAsk() {
               )}
               onClick={() => setSel(sel === id ? null : id)}
             >
-              {t(REASON_KEY[id])}
+              {reasonLabel(id)}
             </button>
           ))}
         </div>

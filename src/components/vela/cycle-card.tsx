@@ -12,6 +12,7 @@ import {
   lowChanceReady,
   pastCycles,
   periodContaining,
+  pregnancyNoted,
   startsReplacedBy,
   type CyclePhase,
   type CycleStage,
@@ -215,7 +216,13 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
   const snap = cycleSnapshot(cycle, today);
   if (!snap.hasStarts) return <FirstStart />;
 
-  const keyLine = dialLine(snap, today, t);
+  // A noted pregnancy turns every prediction ahead into a projection (2.2.5):
+  // the dial speaks of the would-be cycle, never of a period due or late.
+  const projected = pregnancyNoted(cycle);
+  const keyLine =
+    projected && snap.nextPeriod
+      ? fill(t("cyProjLine"), { d: `${snap.regularity === "learning" ? "~" : ""}${fmtShort(snap.nextPeriod, lang)}` })
+      : dialLine(snap, today, t);
   const stats = cycleStats(cycle);
   const started: Act = {
     key: "start",
@@ -383,6 +390,11 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
       ) : (
         body
       )}
+      {projected ? (
+        <p className="mt-3 text-sm leading-relaxed text-dim" data-testid="cycle-projected">
+          {t("cyProjNote")}
+        </p>
+      ) : null}
       {tune ? <CycleTune /> : null}
     </div>
   );
@@ -550,7 +562,9 @@ function daysUntil(from: string, to: string) {
 function useForecast(snap: Snap, today: string): { lead: string; next: string; late: boolean } {
   const { t, partner } = useCycleWords();
   const lang = useLang();
-  const name = useJournal((s) => selectActiveCycle(s).partnerName).trim();
+  const activeCycle = useJournal(selectActiveCycle);
+  const name = activeCycle.partnerName.trim();
+  const projected = pregnancyNoted(activeCycle);
   const loc = lang === "es" ? "es" : "en";
   const weekday = (ds: string) => parseDate(ds).toLocaleDateString(loc, { weekday: "short" }).replace(/\.$/, "");
   const soon = (ds: string) => (daysUntil(today, ds) <= 6 ? weekday(ds) : fmtShort(ds, lang));
@@ -558,6 +572,7 @@ function useForecast(snap: Snap, today: string): { lead: string; next: string; l
   const nextDate = snap.nextPeriod ? `${guess}${fmtShort(snap.nextPeriod, lang)}` : "";
   const nextKey: CopyKey = partner ? (name && name.length <= 10 ? "cyFcNextN" : "cyFcNextP") : "cyFcNext";
   const next = nextDate ? fill(t(nextKey), { d: nextDate, name }) : "";
+  if (projected) return { lead: nextDate ? fill(t("cyProjLine"), { d: nextDate }) : "", next: "", late: false };
   if (snap.late > 0) return { lead: dialLine(snap, today, t), next: t("cyFcLate"), late: true };
   const fertileFrom = snap.fertileStart && snap.fertileStart > today ? `${guess}${soon(snap.fertileStart)}` : null;
   if (snap.stage === "period") {
