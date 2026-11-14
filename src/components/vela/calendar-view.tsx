@@ -1,10 +1,12 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { fmtDate, iso, monthHeading, todayStr } from "@/lib/vela/dates";
 import { cycleMarks } from "@/lib/vela/cycle";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { sessionsSorted } from "@/lib/vela/stats";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
+import { markedDays } from "@/lib/vela/quiet";
 import { MonthDays } from "./month-days";
+import { QuietDayBlock } from "./quiet-sheet";
 import { SessionCard } from "./session-card";
 import { CycleDayPanel, CycleLegend } from "./cycle-card";
 import { Button, Card } from "./ui";
@@ -39,6 +41,14 @@ export function CalendarView() {
   const [sliding, setSliding] = useState(false);
   const counts: Record<string, number> = {};
   for (const session of sessions) counts[session.date] = (counts[session.date] ?? 0) + 1;
+  // Quiet days (2.2.4): the ring shows only where a named day carries no
+  // session — a session day was not quiet, whatever the mark says.
+  const quietMarksList = useJournal((s) => s.journal.quietDays);
+  const quietDays = useMemo(() => {
+    const marked = markedDays(quietMarksList ?? []);
+    for (const ds of Object.keys(counts)) marked.delete(ds);
+    return marked;
+  }, [quietMarksList, sessions]);
   const active = Object.keys(counts).length;
   const daySessions = sessionsSorted(sessions).filter((session) => session.date === selected);
   const now = todayStr();
@@ -148,6 +158,7 @@ export function CalendarView() {
                   lang={lang}
                   selected={selected}
                   counts={counts}
+                  quiet={quietDays}
                   marks={cycle.enabled ? cycleMarks(cycle, iso(pane.year, pane.month, 1), iso(pane.year, pane.month, 31), now) : undefined}
                   marker={ratingStyle}
                   onPick={(ds) => {
@@ -175,6 +186,7 @@ export function CalendarView() {
       <div className="mt-5 lg:mt-0">
         <h2 className="mb-3 font-display text-3xl">{fmtDate(selected, lang)}</h2>
         <CycleDayPanel date={selected} />
+        <QuietDayBlock date={selected} />
         {daySessions.length === 0 ? (
           <Card className="py-8 text-center">
             <p className="font-display text-2xl">{t("noSessionsDay")}</p>

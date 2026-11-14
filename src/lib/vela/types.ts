@@ -209,6 +209,35 @@ export type Journal = {
    *  by both. A proposal the other partner declines or lets lapse is removed
    *  outright — it leaves no scar in the journal. */
   proposals?: Proposal[];
+  /** Quiet days with names (2.2.4): stretches without intimacy, closed with
+   *  a reason so the silence is explained wherever it is read. Journal-level
+   *  on purpose — a quiet stretch belongs to no cycle and no person. */
+  quietDays?: QuietMark[];
+};
+
+/** The reasons a quiet stretch can be named with, in the settled order. */
+export type QuietReasonId = "work" | "travel" | "kids" | "health" | "argued" | "distance" | "life";
+/** Themes the batch reader can hear in the user's own words; two of them
+ *  (communication, school) have no chip — they exist only as readings. */
+export type QuietThemeId = QuietReasonId | "communication" | "school";
+
+export type QuietMark = {
+  id: string;
+  /** Inclusive first day, YYYY-MM-DD. */
+  from: string;
+  /** Inclusive last day, >= from. A stretch is ONE record. */
+  to: string;
+  reason: QuietThemeId | "custom";
+  /** The user's own word, when reason is "custom". */
+  custom?: string;
+  note?: string;
+  source: "manual" | "read";
+  /** Reader-sourced only: the exact words the user wrote. Shown as evidence
+   *  in the batch preview to the person who wrote them — never resurfaced
+   *  anywhere else, never as a quotation against its author. */
+  themeText?: string;
+  createdAt: number;
+  updatedAt?: number;
 };
 
 /** A request to erase something shared. Consent comes from the OTHER

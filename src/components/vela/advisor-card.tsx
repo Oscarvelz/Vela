@@ -12,6 +12,7 @@ import { useLang, useT } from "@/lib/vela/i18n";
 import { readAdvisor, type AdvisorLine } from "@/lib/vela/advisor";
 import { hiddenIn, upcomingDates, type UpcomingDate } from "@/lib/vela/anniversaries";
 import { partnerPerson } from "@/lib/vela/people";
+import { QUIET_REASON_KEY } from "./quiet-sheet";
 import { useJournal } from "@/lib/vela/store";
 import { Sparkle } from "./mark";
 import { phaseKey } from "./cycle-card";
@@ -63,10 +64,11 @@ export function AdvisorCard() {
   );
   const coupleMode = useJournal((s) => s.journal.settings.coupleMode);
   const peopleList = useJournal((s) => s.journal.people);
+  const quietMarks = useJournal((s) => s.journal.quietDays);
   const partner = partnerPerson(peopleList);
   const reading = useMemo(
-    () => readAdvisor(sessions, cycles, todayStr(), upcoming, coupleMode && partner ? { partnerName: partner.name } : undefined),
-    [sessions, cycles, upcoming, coupleMode, partner],
+    () => readAdvisor(sessions, cycles, todayStr(), upcoming, coupleMode && partner ? { partnerName: partner.name } : undefined, quietMarks ?? []),
+    [sessions, cycles, upcoming, coupleMode, partner, quietMarks],
   );
 
   /* The Advisor's voice for the dates (2.1.25): it congratulates the time,
@@ -116,6 +118,11 @@ export function AdvisorCard() {
         return fill(t("advPhaseBest"), { name: line.name, phase: lc(t(phaseKey(line.phase))), avg: line.avg.toFixed(1), n: line.n });
       case "rhythm":
         return fill(t("advRhythm"), { n: line.since, m: line.usual });
+      case "explained":
+        return fill(t("advExplained"), {
+          n: line.days,
+          cause: line.reason === "custom" ? (line.custom ?? "") : t(QUIET_REASON_KEY[line.reason]),
+        });
       case "methodNote":
         return fill(t("advMethodNote"), { method: methodLabel(line.method), avg: line.avg.toFixed(1), n: line.n });
     }
@@ -286,7 +293,12 @@ export function AdvisorCard() {
                 ? fill(t("advFactNew"), { position: positionLabel(lang, shownFact.position), d: fmtDate(shownFact.date, lang) })
                 : shownFact.kind === "streak"
                   ? `${t("funStreakA")} ${shownFact.days} ${t("funStreakB")}`
-                  : fill(t("advFactFirmer"), { name: trackerLabel(shownFact.tracker, t), n: shownFact.missing })}
+                  : shownFact.kind === "pattern"
+                    ? fill(t("advPattern"), {
+                        n: shownFact.n,
+                        cause: shownFact.reason === "custom" ? (shownFact.custom ?? "") : t(QUIET_REASON_KEY[shownFact.reason]),
+                      })
+                    : fill(t("advFactFirmer"), { name: trackerLabel(shownFact.tracker, t), n: shownFact.missing })}
             </span>
           </p>
         </>

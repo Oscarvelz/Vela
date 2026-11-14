@@ -14,6 +14,7 @@ export function MonthDays({
   selected,
   counts,
   marks,
+  quiet,
   marker,
   onPick,
 }: {
@@ -24,6 +25,8 @@ export function MonthDays({
   selected?: string;
   counts?: Record<string, number>;
   marks?: Record<string, DayMark>;
+  /** Quiet days (2.2.4): named days with no session — a whisper, not a band. */
+  quiet?: Set<string>;
   marker: RatingStyle;
   onPick: (ds: string) => void;
 }) {
@@ -71,6 +74,9 @@ export function MonthDays({
                 {cell.day}
               </span>
               {mark?.start ? <span className="cy-bg-period absolute top-1 size-1.5 rounded-full" aria-hidden /> : null}
+              {quiet?.has(cell.ds) ? (
+                <span className="absolute left-1 top-1 size-[5px] rounded-full border border-[var(--ag-dim)] opacity-55" aria-hidden />
+              ) : null}
               {count > 0 ? (
                 <span className="absolute bottom-0 flex items-center text-accent">
                   <RatingIcon style={marker} className="size-2.5" />

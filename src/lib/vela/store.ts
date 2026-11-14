@@ -10,8 +10,9 @@ import { renumber, sessionsSorted, type CompareMode } from "./stats";
 import { cleanMuted } from "./stories";
 import { cleanAnniversaries, cleanArchived, cleanChildren } from "./anniversaries";
 import { cleanPeople, cleanProposals, mergePeople, newPersonId, newProposalId, PROPOSAL_TTL_MS, WIPE_COOLING_MS } from "./people";
+import { cleanQuietMarks, newQuietId } from "./quiet";
 import { runMigrations } from "./migrations";
-import type { Anniversary, ChildEntry, Draft, Encounter, Journal, JournalWipe, Person, Profile, Proposal, Session, Settings, SpeakAs, TabId } from "./types";
+import type { Anniversary, ChildEntry, Draft, Encounter, Journal, JournalWipe, Person, Profile, Proposal, QuietMark, Session, Settings, SpeakAs, TabId } from "./types";
 import { STR, type Lang } from "./copy";
 import { claimGrace, dropGrace, parkKey } from "./grace";
 import { appLockOn, clearSeen, gateAsking, gateReady, gateUnavailable, lockAfterMs, markSeen, migrateLock, pickerJustOpened, quietResume } from "./app-lock";
@@ -291,6 +292,7 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       migrations: Array.isArray(data.migrations) ? data.migrations.filter((m): m is string => typeof m === "string") : [],
       ...(cleanPeople(data.people).length ? { people: cleanPeople(data.people) } : {}),
       ...(cleanProposals(data.proposals).length ? { proposals: cleanProposals(data.proposals) } : {}),
+      ...(cleanQuietMarks(data.quietDays).length ? { quietDays: cleanQuietMarks(data.quietDays) } : {}),
     };
   } catch {
     return empty;
@@ -412,6 +414,17 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       }
       const merged = [...byId.values()].filter((p) => !(deleted[p.id] >= p.proposedAt));
       return merged.length ? { proposals: merged } : {};
+    })(),
+    // Quiet marks union by id (2.2.4): the later writing wins; a tombstoned
+    // mark — one that was removed — never resurfaces.
+    ...(() => {
+      const byId = new Map<string, QuietMark>();
+      for (const m of [...(local.quietDays ?? []), ...(remote.quietDays ?? [])]) {
+        const prev = byId.get(m.id);
+        if (!prev || (m.updatedAt ?? m.createdAt) >= (prev.updatedAt ?? prev.createdAt)) byId.set(m.id, m);
+      }
+      const merged = [...byId.values()].filter((m) => !(deleted[m.id] >= (m.updatedAt ?? m.createdAt)));
+      return merged.length ? { quietDays: merged } : {};
     })(),
     updatedAt: Math.max(local.updatedAt, remote.updatedAt),
   };
@@ -813,6 +826,11 @@ type Store = {
   decideProposal: (id: string, by: string, approve: boolean) => void;
   cancelProposal: (id: string) => void;
   executeWipe: (id: string) => void;
+  /** Quiet days (2.2.4): name a stretch, or take a name back. Saving over an
+   *  existing mark replaces the overlapped portion — the newest word wins
+   *  and the user never arbitrates geometry. */
+  saveQuietMark: (mark: Omit<QuietMark, "id" | "createdAt" | "updatedAt"> & { id?: string }) => void;
+  deleteQuietMark: (id: string) => void;
   archivePerson: (name: string) => void;
   unarchivePerson: (name: string) => void;
   setArchivedPref: (name: string, key: "showInHistory" | "countInStats" | "resurface", value: boolean) => void;
@@ -1738,6 +1756,46 @@ export const useJournal = create<Store>((set, get) => {
       if (Date.now() < proposal.decidedAt + WIPE_COOLING_MS) return;
       get().cancelProposal(id);
       get().eraseAll({ sessions: true, encounters: true, partners: true, places: true, positions: true, problems: true });
+    },
+    saveQuietMark: (input) => {
+      const journal = get().journal;
+      const now = Date.now();
+      const from = input.from <= input.to ? input.from : input.to;
+      const to = input.from <= input.to ? input.to : input.from;
+      const mark: QuietMark = {
+        id: input.id ?? newQuietId(),
+        from,
+        to,
+        reason: input.reason,
+        ...(input.reason === "custom" && input.custom?.trim() ? { custom: input.custom.trim().slice(0, 80) } : {}),
+        ...(input.note?.trim() ? { note: input.note.trim().slice(0, 160) } : {}),
+        source: input.source,
+        ...(input.themeText?.trim() ? { themeText: input.themeText.trim().slice(0, 160) } : {}),
+        createdAt: now,
+        updatedAt: now,
+      };
+      // One day, one name: the new mark replaces whatever it overlaps —
+      // covered marks are trimmed or split, never left to argue.
+      const kept: QuietMark[] = [];
+      for (const old of journal.quietDays ?? []) {
+        if (old.id === mark.id) continue;
+        if (old.to < from || old.from > to) {
+          kept.push(old);
+          continue;
+        }
+        if (old.from < from) kept.push({ ...old, to: addDays(from, -1), updatedAt: now });
+        if (old.to > to) kept.push({ ...old, id: newQuietId(), from: addDays(to, 1), createdAt: old.createdAt, updatedAt: now });
+      }
+      commit({ ...journal, quietDays: cleanQuietMarks([...kept, mark]) });
+    },
+    deleteQuietMark: (id) => {
+      const journal = get().journal;
+      if (!(journal.quietDays ?? []).some((m) => m.id === id)) return;
+      commit({
+        ...journal,
+        quietDays: (journal.quietDays ?? []).filter((m) => m.id !== id),
+        deleted: { ...journal.deleted, [id]: Date.now() },
+      });
     },
     archivePerson: (name) => {
       const settings = get().journal.settings;

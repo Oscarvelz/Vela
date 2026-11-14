@@ -17,7 +17,8 @@ import {
 } from "./cycle";
 import { trackerForPartner, visibleTrackers, type CycleTracker } from "./cycle-trackers";
 import { firstOccurrences, longestStreak, sessionsSorted, timeBuckets, topCounts } from "./stats";
-import type { RatingKey, Session } from "./types";
+import type { QuietMark, QuietThemeId, RatingKey, Session } from "./types";
+import { episodes, explanationFor } from "./quiet";
 import { voiceReading } from "./voices";
 import type { UpcomingDate } from "./anniversaries";
 
@@ -41,11 +42,13 @@ export type AdvisorLine =
   | { kind: "bestShare"; via: "position" | "place" | "bucket"; value: string; bucket: number; n: number; m: number }
   | { kind: "phaseBest"; name: string; phase: CyclePhase; avg: number; n: number }
   | { kind: "rhythm"; since: number; usual: number }
+  | { kind: "explained"; days: number; reason: QuietThemeId | "custom"; custom?: string }
   | { kind: "methodNote"; method: string; avg: number; n: number };
 
 export type AdvisorFact =
   | { kind: "newPosition"; position: string; date: string; partner: string }
   | { kind: "streak"; days: number }
+  | { kind: "pattern"; n: number; reason: QuietThemeId | "custom"; custom?: string }
   | { kind: "firmer"; tracker: CycleTracker; missing: number };
 
 export type AdvisorReading = {
@@ -79,6 +82,7 @@ export function readAdvisor(
   today = todayStr(),
   dates: UpcomingDate[] = [],
   couple?: { partnerName: string },
+  quiet: QuietMark[] = [],
 ): AdvisorReading {
   const list = sessionsSorted(sessions);
   const live = visibleTrackers(cycles).filter((tracker) => tracker.starts.length > 0);
@@ -174,11 +178,36 @@ export function readAdvisor(
 
   if (list.length >= 6) {
     const dates = Array.from(new Set(list.map((session) => session.date))).sort().reverse();
-    const gaps: number[] = [];
-    for (let i = 0; i + 1 < dates.length; i++) gaps.push(dayDiff(dates[i + 1], dates[i]));
-    gaps.sort((a, b) => a - b);
-    const usual = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 0;
-    if (usual > 0) lines.push({ kind: "rhythm", since: Math.max(0, dayDiff(dates[0], today)), usual });
+    const since = Math.max(0, dayDiff(dates[0], today));
+    // Explained silence (2.2.4): when the current stretch is mostly named
+    // and the naming reaches today, the rhythm line steps aside for the
+    // explanation — stated once, in the journal's own word, never as a
+    // lament and never as reassurance.
+    const explainedNow =
+      since >= 3
+        ? explanationFor(quiet, list, addDays(dates[0], 1), today)
+        : { cover: 0, mark: null as QuietMark | null };
+    if (explainedNow.mark && explainedNow.cover >= 0.5 && explainedNow.mark.to >= addDays(today, -1)) {
+      lines.push({
+        kind: "explained",
+        days: since,
+        reason: explainedNow.mark.reason,
+        ...(explainedNow.mark.reason === "custom" ? { custom: explainedNow.mark.custom ?? "" } : {}),
+      });
+    } else {
+      // The usual rhythm stops drinking from explained gaps, silently: a
+      // gap the journal has named is not evidence of the couple's rhythm.
+      const gaps: number[] = [];
+      for (let i = 0; i + 1 < dates.length; i++) {
+        const gap = dayDiff(dates[i + 1], dates[i]);
+        const span = explanationFor(quiet, list, addDays(dates[i + 1], 1), addDays(dates[i], -1));
+        if (gap >= 14 && span.cover >= 0.5) continue;
+        gaps.push(gap);
+      }
+      gaps.sort((a, b) => a - b);
+      const usual = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 0;
+      if (usual > 0) lines.push({ kind: "rhythm", since, usual });
+    }
   }
 
   const methodGroups = new Map<string, { sum: number; n: number }>();
@@ -212,11 +241,46 @@ export function readAdvisor(
     if (streak >= 7) {
       fact = { kind: "streak", days: streak };
     } else {
-      const learning = live
-        .map((tracker) => ({ tracker, missing: lowChanceReady(tracker).missing }))
-        .filter((row) => row.missing > 0)
-        .sort((a, b) => a.missing - b.missing);
-      if (learning.length) fact = { kind: "firmer", tracker: learning[0].tracker, missing: learning[0].missing };
+      // The pattern line (2.2.4): the recent quiet stretches keep naming the
+      // same cause. All four gates must hold — at least three EPISODES (one
+      // long trip is one voice, never three), the latest ended within six
+      // months, the most recent episode is one of them, and "we argued" is
+      // categorically excluded: no surface in Vela counts arguments. The
+      // template carries no consequence, no trend and no advice.
+      const recent = episodes(quiet, list, today)
+        .filter((ep) => ep.mark.reason !== "argued")
+        .sort((a, b) => b.mark.from.localeCompare(a.mark.from))
+        .slice(0, 6);
+      let pattern: Extract<AdvisorFact, { kind: "pattern" }> | null = null;
+      if (recent.length >= 3) {
+        const keyOf = (ep: (typeof recent)[number]) =>
+          ep.mark.reason === "custom" ? `custom:${(ep.mark.custom ?? "").trim().toLowerCase()}` : ep.mark.reason;
+        const groups = new Map<string, typeof recent>();
+        for (const ep of recent) groups.set(keyOf(ep), [...(groups.get(keyOf(ep)) ?? []), ep]);
+        for (const group of groups.values()) {
+          if (group.length < 3) continue;
+          if (!group.some((ep) => ep.mark.id === recent[0].mark.id)) continue;
+          const latestEnd = group.map((ep) => ep.mark.to).sort().reverse()[0];
+          if (dayDiff(latestEnd, today) > 183) continue;
+          const head = group[0].mark;
+          pattern = {
+            kind: "pattern",
+            n: group.length,
+            reason: head.reason,
+            ...(head.reason === "custom" ? { custom: head.custom ?? "" } : {}),
+          };
+          break;
+        }
+      }
+      if (pattern) {
+        fact = pattern;
+      } else {
+        const learning = live
+          .map((tracker) => ({ tracker, missing: lowChanceReady(tracker).missing }))
+          .filter((row) => row.missing > 0)
+          .sort((a, b) => a.missing - b.missing);
+        if (learning.length) fact = { kind: "firmer", tracker: learning[0].tracker, missing: learning[0].missing };
+      }
     }
   }
 

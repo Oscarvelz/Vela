@@ -22,10 +22,12 @@ import { hiddenIn } from "@/lib/vela/anniversaries";
 import { ownerPerson, partnerPerson } from "@/lib/vela/people";
 import type { Session } from "@/lib/vela/types";
 import { voiceReading } from "@/lib/vela/voices";
+import { episodes, unnamedLongGaps, type QuietEpisode } from "@/lib/vela/quiet";
+import { quietWord } from "./quiet-sheet";
 import { Sparkle } from "./mark";
 import { CycleStats, EachCycleCard } from "./cycle-card";
 import { AdvisorCard } from "./advisor-card";
-import { Card, RatingIcon } from "./ui";
+import { Button, Card, RatingIcon } from "./ui";
 import { cn } from "@/lib/cn";
 
 /** Both voices (2.2.2, couple mode): per dial, the two averages stand side by
@@ -70,6 +72,65 @@ function TwoVoicesCard({ sessions }: { sessions: Session[] }) {
           </div>
         ))}
       </div>
+    </Card>
+  );
+}
+
+/** Around the relationship (2.2.4): the quiet stretches, each with its name.
+ *  Meters count episodes and days per cause — "we argued" is categorically
+ *  absent here (it explains a current rhythm once, in the user's own words,
+ *  and is never counted anywhere). The only invitation this card may make is
+ *  the unnamed remainder, said once, never as a deficit. */
+function QuietCard({ sessions }: { sessions: Session[] }) {
+  const t = useT();
+  const marks = useJournal((s) => s.journal.quietDays);
+  const setTab = useJournal((s) => s.setTab);
+  const pickDay = useJournal((s) => s.pickDay);
+  const eps = useMemo(() => episodes(marks ?? [], sessions), [marks, sessions]);
+  const unnamed = useMemo(() => unnamedLongGaps(sessions, marks ?? []), [marks, sessions]);
+  if (!eps.length) return null;
+  const totalDays = eps.reduce((n, e) => n + e.days, 0);
+  const groups = new Map<string, { label: string; eps: QuietEpisode[]; days: number }>();
+  for (const ep of eps) {
+    if (ep.mark.reason === "argued") continue;
+    const key = ep.mark.reason === "custom" ? `custom:${(ep.mark.custom ?? "").trim().toLowerCase()}` : ep.mark.reason;
+    const g = groups.get(key) ?? { label: quietWord(ep.mark, t), eps: [], days: 0 };
+    g.eps.push(ep);
+    g.days += ep.days;
+    groups.set(key, g);
+  }
+  const rows = [...groups.values()].sort((a, b) => b.days - a.days);
+  return (
+    <Card className="ag-glass min-w-0 overflow-hidden" data-testid="quiet-card">
+      <h2 className="font-display text-2xl">{t("qdCardTitle")}</h2>
+      <p className="mt-2 text-sm text-dim">
+        {eps.length === 1 ? fill(t("qdLeadOne"), { d: totalDays }) : fill(t("qdLead"), { n: eps.length, d: totalDays })}
+      </p>
+      {rows.length ? (
+        <div className="mt-3">
+          {rows.map((g) => (
+            <Meter
+              key={g.label}
+              label={g.label}
+              value={g.days}
+              max={Math.max(1, ...rows.map((r) => r.days))}
+              aside={<span>{g.eps.length} · {g.days} {t("cycleDaysWord")}</span>}
+              onTap={() => {
+                setTab("calendar");
+                pickDay(g.eps[0].firstDay);
+              }}
+            />
+          ))}
+        </div>
+      ) : null}
+      {unnamed ? (
+        <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+          <p className="min-w-0 flex-1 text-sm text-dim">{fill(t("qdUnnamed"), { n: unnamed })}</p>
+          <Button variant="ghost" className="min-h-10 shrink-0 px-3 text-sm" onClick={() => setTab("calendar")}>
+            {t("qdNameThem")}
+          </Button>
+        </div>
+      ) : null}
     </Card>
   );
 }
@@ -466,6 +527,7 @@ export function InsightsView() {
             ) : null}
           </Card>
         ) : null}
+        <QuietCard sessions={sessions} />
         {methodRows.length ? (
           <Card className="ag-glass min-w-0 overflow-hidden">
             <h2 className="font-display text-2xl">{t("contraception")}</h2>

@@ -8,6 +8,9 @@ import { fmtDate, fmtDateShort, fmtDuration, fmtRange, fmtTime } from "@/lib/vel
 import { useLang, useT } from "@/lib/vela/i18n";
 import { ratingLabel } from "@/lib/vela/notes";
 import { useJournal } from "@/lib/vela/store";
+import { fill } from "@/lib/vela/cycle-words";
+import { readThemeProposals } from "@/lib/vela/quiet";
+import { QUIET_REASON_KEY } from "./quiet-sheet";
 import { RATING_KEYS } from "@/lib/vela/types";
 import { Button, RatingIcon, Switch, fieldClass, saveBurst } from "./ui";
 import { cn } from "@/lib/cn";
@@ -46,6 +49,7 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
   const b = useBatchT();
   const lang = useLang();
   const saveBatch = useJournal((s) => s.saveBatch);
+  const saveQuietMark = useJournal((s) => s.saveQuietMark);
   const setBatchDraft = useJournal((s) => s.setBatchDraft);
   const partners = useJournal((s) => s.journal.partners);
   const settings = useJournal((s) => s.journal.settings);
@@ -123,6 +127,16 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
     return { key, entry: { ...entry, ...edit } as BatchEntry, skip: Boolean(edit.skip), edited: Boolean(edits[key]) };
   });
   const batchPartner = typed.trim() || picked.trim();
+  // Relationship themes the reader heard in the words themselves (2.2.4):
+  // proposals, never writes — each rides the save only if it is still here
+  // when the user confirms, and each shows its evidence.
+  const [dismissedThemes, setDismissedThemes] = useState<ReadonlySet<string>>(new Set());
+  const themeProposals = useMemo(() => {
+    if (!parsed.length) return [];
+    const dates = parsed.map((e) => e.date).sort();
+    return readThemeProposals(text, { from: dates[0], to: dates[dates.length - 1] });
+  }, [text, parsed]);
+  const keptThemes = themeProposals.filter((p) => !dismissedThemes.has(`${p.theme}|${p.from}|${p.to}`));
   const kept = cards.filter((card) => !card.skip);
   const missingPartner = kept.some((card) => !card.entry.partnerName && !card.entry.solo && !batchPartner);
   const sessionTotal = kept.reduce((sum, card) => sum + card.entry.count, 0);
@@ -372,6 +386,28 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
         </section>
       ) : null}
 
+      {keptThemes.length ? (
+        <div className="mb-3 space-y-2" data-testid="theme-proposals">
+          {keptThemes.map((p) => (
+            <div key={`${p.theme}|${p.from}|${p.to}`} className="rounded-2xl border border-accent/35 bg-surface-2/45 px-3.5 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-dim">{t("qdPropTitle")}</p>
+              <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+                <span className="rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold">{t(QUIET_REASON_KEY[p.theme])}</span>
+                <span className="text-dim">{p.from === p.to ? fmtDate(p.from, lang) : fmtRange(p.from, p.to, lang)}</span>
+              </p>
+              <p className="mt-1.5 text-sm leading-relaxed text-dim">{fill(t("qdPropBody"), { text: p.evidence })}</p>
+              <button
+                type="button"
+                className="mt-2 min-h-[37px] text-sm font-semibold text-dim active:opacity-70"
+                onClick={() => setDismissedThemes((prev) => new Set(prev).add(`${p.theme}|${p.from}|${p.to}`))}
+              >
+                {t("qdPropSkip")}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <div className="vb-save-wrap">
         <Button
           variant="save"
@@ -386,6 +422,10 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
               kept.map((card) => card.entry),
               batchPartner,
             );
+            for (const p of keptThemes) {
+              saveQuietMark({ from: p.from, to: p.to, reason: p.theme, source: "read", themeText: p.evidence });
+            }
+            setDismissedThemes(new Set());
             setText("");
             setTyped("");
             setNaming(false);
