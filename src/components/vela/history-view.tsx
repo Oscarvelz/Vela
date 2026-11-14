@@ -10,6 +10,8 @@ import { trackerForPartner, type CycleTracker } from "@/lib/vela/cycle-trackers"
 import { fill } from "@/lib/vela/cycle-words";
 import type { Encounter, Session } from "@/lib/vela/types";
 import { GlanceCard } from "./glance-card";
+import { AnniversariesCard } from "./anniversaries-card";
+import { hiddenIn } from "@/lib/vela/anniversaries";
 import { cn } from "@/lib/cn";
 import { phaseOn } from "@/lib/vela/cycle";
 import { Sparkle } from "./mark";
@@ -35,6 +37,7 @@ export function HistoryView() {
   const to = useJournal((s) => s.histTo);
   const phase = useJournal((s) => s.histPhase);
   const cycles = useJournal((s) => s.journal.settings.cycles);
+  const archivedPeople = useJournal((s) => s.journal.settings.archivedPeople);
   const clearRange = useJournal((s) => s.clearHistRange);
   const [mode, setMode] = useState<"sessions" | "encounters">("sessions");
   // History renders in growing tranches (the audit, Nov 14 2026): a lifetime journal mounted every
@@ -53,9 +56,16 @@ export function HistoryView() {
   const list = sessionsSorted(sessions);
   const q = query.trim().toLowerCase();
   const filtered = list.filter(
-    (session) => inRange(session.date, from, to) && matchesPhase(session, phase, cycles) && matchesSession(session, partner, q, lang),
+    (session) =>
+      inRange(session.date, from, to) &&
+      matchesPhase(session, phase, cycles) &&
+      matchesSession(session, partner, q, lang) &&
+      // The Archive law: a resting person's moments stay out of History only
+      // where the user decided so — the record itself is untouched.
+      !hiddenIn(archivedPeople, session.partnerName, "history"),
   );
   const filteredEncounters = encounters
+    .filter((encounter) => !hiddenIn(archivedPeople, encounter.partnerName, "history"))
     .slice()
     .sort((a, b) => b.endDate.localeCompare(a.endDate) || b.createdAt - a.createdAt)
     .filter((encounter) => {
@@ -75,6 +85,7 @@ export function HistoryView() {
   return (
     <div className="space-y-4">
       <GlanceCard />
+      <AnniversariesCard />
       <input
         type="search"
         className={fieldClass}

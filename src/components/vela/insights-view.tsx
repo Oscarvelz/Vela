@@ -18,6 +18,7 @@ import {
   yearCount,
 } from "@/lib/vela/stats";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
+import { hiddenIn } from "@/lib/vela/anniversaries";
 import { Sparkle } from "./mark";
 import { CycleStats, EachCycleCard } from "./cycle-card";
 import { AdvisorCard } from "./advisor-card";
@@ -27,7 +28,11 @@ import { cn } from "@/lib/cn";
 export function InsightsView() {
   const t = useT();
   const lang = useLang();
-  const sessions = useJournal((s) => s.journal.sessions);
+  const allSessions = useJournal((s) => s.journal.sessions);
+  const archivedPeople = useJournal((s) => s.journal.settings.archivedPeople);
+  // The Archive law: a resting person counts in the statistics only where the
+  // user decided so. The record itself is never touched.
+  const sessions = allSessions.filter((s) => !hiddenIn(archivedPeople, s.partnerName, "stats"));
   const encounters = useJournal((s) => s.journal.encounters);
   const weekStart = useJournal((s) => s.journal.settings.weekStart);
   const ratingStyle = useJournal((s) => s.journal.settings.ratingStyle);

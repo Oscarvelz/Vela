@@ -27,6 +27,51 @@ export type StoryMuted = {
   days: string[];
 };
 
+/** How Vela should speak about the user (2.1.24) — a grammar fact, nothing
+ *  more: it exists so Spanish can say "casado" or "casada" correctly and the
+ *  Advisor can address its reader. Neutral is the default and always valid. */
+export type SpeakAs = "man" | "woman" | "neutral";
+
+export type AnniversaryKind = "met" | "married" | "first" | "custom";
+
+/** A date the user chose never to forget (2.1.24). It recurs every year on
+ *  monthDay; `year` is the year it began, when known — without it the date
+ *  still recurs, it simply carries no counter. */
+export type Anniversary = {
+  id: string;
+  label: string;
+  monthDay: string;
+  year?: number;
+  personName?: string;
+  kind: AnniversaryKind;
+  /** The sacred ones. The user marks them; the app never guesses. */
+  milestone: boolean;
+  note?: string;
+  createdAt: number;
+};
+
+export type ChildRef = "son" | "daughter" | "child";
+
+/** A child in the People's roster (2.1.24) — name and birthdate only: that is
+ *  all a birthday and an age counter need, and all the vault should hold. */
+export type ChildEntry = {
+  id: string;
+  name: string;
+  birthdate: string;
+  refAs: ChildRef;
+  createdAt: number;
+};
+
+/** A person at rest (2.1.24, the Archive law): archived, never erased, and
+ *  the user — only the user — decides where their traces still appear. */
+export type ArchivedPerson = {
+  name: string;
+  archivedAt: number;
+  showInHistory: boolean;
+  countInStats: boolean;
+  resurface: boolean;
+};
+
 export type Settings = {
   theme: ThemeId;
   mode: Mode;
@@ -52,11 +97,20 @@ export type Settings = {
   /** Stories the user has put away: people who never resurface, and single days
    *  (source dates) hidden for good. Revived only by the user, in Settings. */
   storiesMuted?: StoryMuted;
+  /** Dates the user chose never to forget (2.1.24), shown in History. */
+  anniversaries?: Anniversary[];
+  /** The children of the house (2.1.24): their birthdays join the dates. */
+  children?: ChildEntry[];
+  /** People at rest in the Archive (2.1.24): honored, kept, and quiet where
+   *  the user decided they should be quiet. */
+  archivedPeople?: ArchivedPerson[];
 };
 
 export type Profile = {
   displayName: string;
   createdAt: number;
+  /** How Vela speaks about the user (2.1.24). Absent = neutral. */
+  speakAs?: SpeakAs;
 };
 
 export type Session = {

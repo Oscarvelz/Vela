@@ -9,6 +9,7 @@ import { fill } from "@/lib/vela/cycle-words";
 import { fmtDate, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { findStories, type Story } from "@/lib/vela/stories";
+import { hiddenIn, upcomingDates } from "@/lib/vela/anniversaries";
 import { useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
 import { Sparkle } from "./mark";
@@ -22,7 +23,8 @@ function distanceLabel(t: ReturnType<typeof useT>, story: Story) {
 export function StoriesRail() {
   const t = useT();
   const lang = useLang();
-  const sessions = useJournal((s) => s.journal.sessions);
+  const allSessions = useJournal((s) => s.journal.sessions);
+  const settings = useJournal((s) => s.journal.settings);
   const muted = useJournal((s) => s.journal.settings.storiesMuted);
   const style = useJournal((s) => s.journal.settings.ratingStyle);
   const openHistRange = useJournal((s) => s.openHistRange);
@@ -31,8 +33,17 @@ export function StoriesRail() {
   const showToast = useJournal((s) => s.showToast);
   const [menuDate, setMenuDate] = useState<string | null>(null);
 
+  // The Archive law: a resting person's moments resurface only where the user
+  // decided so — their sessions simply do not feed the rail.
+  const sessions = allSessions.filter((s) => !hiddenIn(settings.archivedPeople, s.partnerName, "resurface"));
   const stories = useMemo(() => findStories(sessions, todayStr(), muted), [sessions, muted]);
-  if (stories.length === 0) return null;
+  // Anniversary and birthday days bloom here too (2.1.24): management lives in
+  // History, but the day itself is a memory surfacing on Home.
+  const celebrations = useMemo(
+    () => upcomingDates(settings, todayStr()).filter((u) => u.daysUntil === 0),
+    [settings],
+  );
+  if (stories.length === 0 && celebrations.length === 0) return null;
   const menuStory = stories.find((s) => s.date === menuDate) ?? null;
 
   return (
@@ -42,6 +53,39 @@ export function StoriesRail() {
         <h2 className="font-display text-lg leading-none">{t("storiesTitle")}</h2>
       </div>
       <div className="ag-stories flex gap-3 overflow-x-auto pb-1">
+        {celebrations.map((u) => {
+          const kindLabel =
+            u.source === "birthday"
+              ? t("annKindBirthday")
+              : t(u.kind === "married" ? "annKindMarried" : u.kind === "met" ? "annKindMet" : u.kind === "first" ? "annKindFirst" : "annKindCustom");
+          const line =
+            u.source === "birthday"
+              ? fill(t("annTurnsToday"), { age: u.turning ?? "" })
+              : u.turning && u.turning >= 1 && u.kind === "married"
+                ? fill(t("annMarriedDay"), { n: u.turning })
+                : u.turning && u.turning >= 1 && u.kind === "met"
+                  ? fill(t("annMetDay"), { n: u.turning })
+                  : u.turning && u.turning >= 1 && u.kind === "first"
+                    ? fill(t("annFirstDay"), { n: u.turning })
+                    : u.turning && u.turning >= 1
+                      ? fill(t("annYearsToday"), { n: u.turning })
+                      : t("annTodayPlain");
+          const tapDate = u.origin ?? u.date;
+          return (
+            <div
+              key={u.key}
+              className={cn("ag-story-card ag-glass", u.milestone && "ag-aurora ag-ann-today")}
+              data-testid="story-celebration"
+              data-milestone={u.milestone || undefined}
+            >
+              <button type="button" className="ag-story-main" onClick={() => openHistRange(tapDate, tapDate)}>
+                <span className="ag-story-distance">{kindLabel}</span>
+                <span className="ag-story-who">{u.personName ? `${u.label} · ${u.personName}` : u.label}</span>
+                <span className="ag-story-date">{line}</span>
+              </button>
+            </div>
+          );
+        })}
         {stories.map((story, i) => {
           const who =
             story.partners.length === 1 ? story.partners[0] || t("solo") : fill(t("storiesMoments"), { n: story.count });

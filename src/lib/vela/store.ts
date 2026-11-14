@@ -8,8 +8,9 @@ import type { BatchEntry } from "./batch";
 import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
 import { cleanMuted } from "./stories";
+import { cleanAnniversaries, cleanArchived, cleanChildren } from "./anniversaries";
 import { runMigrations } from "./migrations";
-import type { Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings, TabId } from "./types";
+import type { Anniversary, ChildEntry, Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings, SpeakAs, TabId } from "./types";
 import { STR, type Lang } from "./copy";
 import { claimGrace, dropGrace, parkKey } from "./grace";
 import { appLockOn, clearSeen, gateAsking, gateReady, gateUnavailable, lockAfterMs, markSeen, migrateLock, pickerJustOpened, quietResume } from "./app-lock";
@@ -22,6 +23,7 @@ import {
   cleanTracker,
   cleanTrackers,
   defaultTracker,
+  followsPartner,
   mergeTrackerLists,
   newTrackerId,
   restamp,
@@ -732,6 +734,15 @@ type Store = {
   muteStoryDay: (date: string) => void;
   muteStoryPerson: (name: string) => void;
   unmuteStory: (kind: "person" | "day", value: string) => void;
+  saveAnniversary: (a: Anniversary) => void;
+  deleteAnniversary: (id: string) => void;
+  saveChild: (c: ChildEntry) => void;
+  deleteChild: (id: string) => void;
+  setSpeakAs: (v: SpeakAs) => void;
+  archivePerson: (name: string) => void;
+  unarchivePerson: (name: string) => void;
+  setArchivedPref: (name: string, key: "showInHistory" | "countInStats" | "resurface", value: boolean) => void;
+  deletePersonForever: (name: string) => void;
   setWeekStart: (weekStart: WeekStart) => void;
   setDiscreet: (discreet: boolean) => void;
   setAutoLock: (mins: number) => void;
@@ -1485,6 +1496,86 @@ export const useJournal = create<Store>((set, get) => {
           kind === "person"
             ? { ...m, people: m.people.filter((p) => p.toLowerCase() !== value.toLowerCase()) }
             : { ...m, days: m.days.filter((d) => d !== value) },
+      });
+    },
+    saveAnniversary: (a) => {
+      const list = cleanAnniversaries(get().journal.settings.anniversaries);
+      patchSettings({ anniversaries: [...list.filter((x) => x.id !== a.id), a] });
+    },
+    deleteAnniversary: (id) => {
+      const list = cleanAnniversaries(get().journal.settings.anniversaries);
+      patchSettings({ anniversaries: list.filter((x) => x.id !== id) });
+    },
+    saveChild: (c) => {
+      const list = cleanChildren(get().journal.settings.children);
+      patchSettings({ children: [...list.filter((x) => x.id !== c.id), c] });
+    },
+    deleteChild: (id) => {
+      const list = cleanChildren(get().journal.settings.children);
+      patchSettings({ children: list.filter((x) => x.id !== id) });
+    },
+    setSpeakAs: (speakAs) => {
+      const journal = get().journal;
+      if (!journal.profile) return;
+      commit({ ...journal, profile: { ...journal.profile, speakAs } });
+    },
+    archivePerson: (name) => {
+      const settings = get().journal.settings;
+      const list = cleanArchived(settings.archivedPeople);
+      if (list.some((p) => p.name.toLowerCase() === name.trim().toLowerCase())) return;
+      patchSettings({
+        archivedPeople: [...list, { name: name.trim(), archivedAt: Date.now(), showInHistory: false, countInStats: false, resurface: false }],
+      });
+    },
+    unarchivePerson: (name) => {
+      const list = cleanArchived(get().journal.settings.archivedPeople);
+      patchSettings({ archivedPeople: list.filter((p) => p.name.toLowerCase() !== name.trim().toLowerCase()) });
+    },
+    setArchivedPref: (name, key, value) => {
+      const list = cleanArchived(get().journal.settings.archivedPeople);
+      patchSettings({
+        archivedPeople: list.map((p) => (p.name.toLowerCase() === name.trim().toLowerCase() ? { ...p, [key]: value } : p)),
+      });
+    },
+    /* The Deletion Law: a person deleted is deleted whole — every session,
+       encounter, cycle, anniversary and trace that names them, without return.
+       The typed-name door in Settings is what stands before this action. */
+    deletePersonForever: (name) => {
+      const journal = get().journal;
+      const key = name.trim().toLowerCase();
+      if (!key) return;
+      const match = (n: string) => n.trim().toLowerCase() === key;
+      const goneEncounters = journal.encounters.filter((e) => match(e.partnerName));
+      const goneEncIds = new Set(goneEncounters.map((e) => e.id));
+      const sessions = journal.sessions.filter((s) => !match(s.partnerName) && !goneEncIds.has(s.encounterId));
+      const removedSessionIds = journal.sessions.filter((s) => !sessions.includes(s)).map((s) => s.id);
+      const settings = journal.settings;
+      const removedTrackers = settings.cycles.filter(
+        (tr) => followsPartner(tr, name) || (tr.partnerName ?? "").trim().toLowerCase() === key,
+      );
+      const keptCycles = settings.cycles.filter((tr) => !removedTrackers.includes(tr));
+      const cycles = keptCycles.length ? keptCycles : [defaultTracker()];
+      const muted = cleanMuted(settings.storiesMuted);
+      commit({
+        ...journal,
+        sessions: renumber(sessions),
+        encounters: journal.encounters.filter((e) => !goneEncIds.has(e.id)),
+        partners: journal.partners.filter((p) => !match(p)),
+        settings: {
+          ...settings,
+          cycles,
+          cycle: asLegacyCycle(cycles[0]),
+          cycleSelected: selectedId(cycles, settings.cycleSelected),
+          defaultPartner: match(settings.defaultPartner) ? "" : settings.defaultPartner,
+          anniversaries: cleanAnniversaries(settings.anniversaries).filter((a) => !(a.personName && match(a.personName))),
+          archivedPeople: cleanArchived(settings.archivedPeople).filter((p) => !match(p.name)),
+          storiesMuted: { ...muted, people: muted.people.filter((p) => !match(p)) },
+        },
+        deleted: tombstone(journal, [
+          ...removedSessionIds,
+          ...goneEncounters.map((e) => e.id),
+          ...removedTrackers.map((tr) => trackerTombstone(tr.id)),
+        ]),
       });
     },
     setWeekStart: (weekStart) => patchSettings({ weekStart }),

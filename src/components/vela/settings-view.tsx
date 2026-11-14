@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import {
+  Archive,
   Check,
   ChevronDown,
   Download,
@@ -23,6 +24,8 @@ import {
 import { THEMES } from "@/lib/vela/catalog";
 import { fmtDate, fmtShort } from "@/lib/vela/dates";
 import { cleanMuted } from "@/lib/vela/stories";
+import { cleanArchived } from "@/lib/vela/anniversaries";
+import type { ArchivedPerson } from "@/lib/vela/types";
 import { AppLockSettings, PassphraseNote, useLockBadge } from "./bio";
 import { LockDiagnostics } from "./lock-diag";
 import { notePicker } from "@/lib/vela/app-lock";
@@ -67,6 +70,7 @@ export function SettingsView() {
     const m = cleanMuted(s.journal.settings.storiesMuted);
     return m.people.length + m.days.length;
   });
+  const archivedCount = useJournal((s) => cleanArchived(s.journal.settings.archivedPeople).length);
 
   return (
     <div className="space-y-3">
@@ -132,6 +136,16 @@ export function SettingsView() {
         onToggle={toggle}
       >
         <MemoriesSection />
+      </Accordion>
+      <Accordion
+        id="archive"
+        icon={<Archive className="size-5" />}
+        title={t("arcTitle")}
+        badge={archivedCount > 0 ? String(archivedCount) : undefined}
+        open={open.archive}
+        onToggle={toggle}
+      >
+        <ArchiveSection />
       </Accordion>
       <Accordion
         id="cycle"
@@ -235,6 +249,114 @@ function MemoriesSection() {
   );
 }
 
+/* The Archive (2.1.24) — people at rest. Nothing here is erased: each person
+   keeps their whole history, and three switches in the user's own hand decide
+   where their traces still appear. The only way out forever is the typed-name
+   door, and it deletes everything that names them, without return. */
+function ArchiveSection() {
+  const t = useT();
+  const archivedRaw = useJournal((s) => s.journal.settings.archivedPeople);
+  const sessions = useJournal((s) => s.journal.sessions);
+  const archived = cleanArchived(archivedRaw);
+  const unarchivePerson = useJournal((s) => s.unarchivePerson);
+  const setArchivedPref = useJournal((s) => s.setArchivedPref);
+  const deletePersonForever = useJournal((s) => s.deletePersonForever);
+  const showToast = useJournal((s) => s.showToast);
+  const [deleteAsk, setDeleteAsk] = useState<ArchivedPerson | null>(null);
+  const [typed, setTyped] = useState("");
+  if (archived.length === 0) {
+    return <p className="text-sm leading-relaxed text-dim">{t("arcEmpty")}</p>;
+  }
+  return (
+    <div className="space-y-4">
+      {archived.map((person) => {
+        const kept = sessions.filter((s) => s.partnerName.toLowerCase() === person.name.toLowerCase()).length;
+        return (
+          <div key={person.name} className="space-y-2 border-b border-border pb-3" data-testid="archived-row">
+            <div className="flex items-center gap-3">
+              <span className="min-w-0 flex-1 truncate font-medium">{person.name}</span>
+              <span className="text-xs text-dim">{fill(t("arcMomentsKept"), { n: kept })}</span>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  unarchivePerson(person.name);
+                  showToast(fill(t("arcRestoredToast"), { name: person.name }));
+                }}
+              >
+                {t("arcRestore")}
+              </Button>
+            </div>
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>{t("arcShowHistory")}</span>
+              <Switch
+                checked={person.showInHistory}
+                label={t("arcShowHistory")}
+                onChange={(v) => setArchivedPref(person.name, "showInHistory", v)}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>{t("arcCountStats")}</span>
+              <Switch
+                checked={person.countInStats}
+                label={t("arcCountStats")}
+                onChange={(v) => setArchivedPref(person.name, "countInStats", v)}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>{t("arcResurface")}</span>
+              <Switch
+                checked={person.resurface}
+                label={t("arcResurface")}
+                onChange={(v) => setArchivedPref(person.name, "resurface", v)}
+              />
+            </label>
+            <button
+              type="button"
+              className="text-sm font-medium text-danger"
+              data-testid="arc-delete"
+              onClick={() => {
+                setTyped("");
+                setDeleteAsk(person);
+              }}
+            >
+              {fill(t("arcDeleteForever"), { name: person.name })}
+            </button>
+          </div>
+        );
+      })}
+      <ConfirmDialog
+        open={Boolean(deleteAsk)}
+        title={deleteAsk ? fill(t("arcDeleteTitle"), { name: deleteAsk.name }) : ""}
+        confirmLabel={t("arcDeleteConfirm")}
+        cancelLabel={t("cancelBtn")}
+        confirmDisabled={!deleteAsk || typed.trim() !== deleteAsk.name}
+        onConfirm={() => {
+          if (deleteAsk) {
+            deletePersonForever(deleteAsk.name);
+            showToast(fill(t("arcDeletedToast"), { name: deleteAsk.name }));
+          }
+          setDeleteAsk(null);
+          setTyped("");
+        }}
+        onCancel={() => {
+          setDeleteAsk(null);
+          setTyped("");
+        }}
+      >
+        <p className="text-sm leading-relaxed text-dim">{deleteAsk ? fill(t("arcDeleteBody"), { name: deleteAsk.name }) : ""}</p>
+        <input
+          className={fieldClass}
+          value={typed}
+          onChange={(event) => setTyped(event.target.value)}
+          placeholder={t("arcNamePh")}
+          aria-label={t("arcNamePh")}
+          data-testid="arc-delete-input"
+        />
+      </ConfirmDialog>
+    </div>
+  );
+}
+
 function LanguageSection() {
   const t = useT();
   const language = useJournal((s) => s.journal.settings.language);
@@ -258,6 +380,8 @@ function ProfileSection() {
   const t = useT();
   const name = useJournal((s) => s.journal.profile?.displayName ?? "");
   const save = useJournal((s) => s.saveDisplayName);
+  const speakAs = useJournal((s) => s.journal.profile?.speakAs ?? "neutral");
+  const setSpeakAs = useJournal((s) => s.setSpeakAs);
   const lock = useJournal((s) => s.lock);
   const [value, setValue] = useState(name);
   return (
@@ -270,6 +394,21 @@ function ProfileSection() {
         {t("save")}
       </Button>
       <p className="text-sm leading-relaxed text-dim">{t("localProfileNote")}</p>
+      <div className="border-t border-border pt-3">
+        <p className="text-sm font-semibold">{t("profSpeakTitle")}</p>
+        <p className="mt-1 text-sm leading-relaxed text-dim">{t("profSpeakBody")}</p>
+        <div className="mt-2 grid grid-cols-3 gap-2" data-testid="speak-as">
+          <Button variant={speakAs === "man" ? "primary" : "ghost"} onClick={() => setSpeakAs("man")}>
+            {t("profSpeakMan")}
+          </Button>
+          <Button variant={speakAs === "woman" ? "primary" : "ghost"} onClick={() => setSpeakAs("woman")}>
+            {t("profSpeakWoman")}
+          </Button>
+          <Button variant={speakAs === "neutral" ? "primary" : "ghost"} onClick={() => setSpeakAs("neutral")}>
+            {t("profSpeakNeutral")}
+          </Button>
+        </div>
+      </div>
       <Button variant="ghost" onClick={lock}>
         <Lock className="size-4" /> {t("lockNow")}
       </Button>
@@ -338,8 +477,13 @@ function PartnersSection() {
   const setDefaultPartner = useJournal((s) => s.setDefaultPartner);
   const add = useJournal((s) => s.addPartner);
   const remove = useJournal((s) => s.removePartner);
+  const archivedRaw = useJournal((s) => s.journal.settings.archivedPeople);
+  const archivedNames = new Set(cleanArchived(archivedRaw).map((p) => p.name.toLowerCase()));
+  const archivePerson = useJournal((s) => s.archivePerson);
+  const showToast = useJournal((s) => s.showToast);
   const [value, setValue] = useState("");
   const [drop, setDrop] = useState<string | null>(null);
+  const [archiveAsk, setArchiveAsk] = useState<string | null>(null);
   return (
     <div>
       <p className="mb-2 text-sm font-semibold">{t("defaultPartner")}</p>
@@ -376,6 +520,19 @@ function PartnersSection() {
       {partners.map((partner) => (
         <div key={partner} className="flex items-center gap-3 border-b border-border py-2">
           <span className="min-w-0 flex-1 truncate font-medium">{partner}</span>
+          {archivedNames.has(partner.toLowerCase()) ? (
+            <span className="text-xs text-dim">{t("arcTitle")}</span>
+          ) : (
+            <button
+              type="button"
+              className="grid size-9 place-items-center rounded-control text-dim"
+              aria-label={`${t("arcAction")} ${partner}`}
+              data-testid="partner-archive"
+              onClick={() => setArchiveAsk(partner)}
+            >
+              <Archive className="size-4" />
+            </button>
+          )}
           <button
             type="button"
             className="grid size-9 place-items-center rounded-control text-danger"
@@ -386,6 +543,21 @@ function PartnersSection() {
           </button>
         </div>
       ))}
+      <ConfirmDialog
+        open={Boolean(archiveAsk)}
+        title={archiveAsk ? fill(t("arcQ"), { name: archiveAsk }) : ""}
+        confirmLabel={t("arcAction")}
+        cancelLabel={t("cancelBtn")}
+        confirmTone="primary"
+        onConfirm={() => {
+          if (archiveAsk) {
+            archivePerson(archiveAsk);
+            showToast(fill(t("arcArchivedToast"), { name: archiveAsk }));
+          }
+          setArchiveAsk(null);
+        }}
+        onCancel={() => setArchiveAsk(null)}
+      />
       <div className="mt-3 flex gap-2">
         <input
           className={fieldClass}

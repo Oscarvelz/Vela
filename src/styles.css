@@ -2174,3 +2174,17 @@ html[data-splash="on"] .vela-rise { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
   .ag-story-card { animation: none; }
 }
+
+/* Anniversaries (2.1.24): a milestone on its day breathes once with the
+   hero's slow gold bloom — on arrival only, never a loop that competes. */
+.ag-ann-today {
+  animation: ag-ann-bloom 2.8s cubic-bezier(.22,.8,.32,1) 1 both;
+}
+@keyframes ag-ann-bloom {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ag-accent) 0%, transparent); }
+  35% { box-shadow: 0 0 34px 2px color-mix(in srgb, var(--ag-accent) 38%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ag-accent) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ag-ann-today { animation: none; }
+}

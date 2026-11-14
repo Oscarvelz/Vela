@@ -10,6 +10,7 @@ import { fill, trackerLabel } from "@/lib/vela/cycle-words";
 import { fmtDate, fmtDuration, fmtShort, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { readAdvisor, type AdvisorLine } from "@/lib/vela/advisor";
+import { hiddenIn } from "@/lib/vela/anniversaries";
 import { useJournal } from "@/lib/vela/store";
 import { Sparkle } from "./mark";
 import { phaseKey } from "./cycle-card";
@@ -39,12 +40,20 @@ function DialRow({ label, value, style }: { label: string; value: number; style:
 export function AdvisorCard() {
   const t = useT();
   const lang = useLang();
-  const sessions = useJournal((s) => s.journal.sessions);
-  const cycles = useJournal((s) => s.journal.settings.cycles);
+  const allSessions = useJournal((s) => s.journal.sessions);
+  const allCycles = useJournal((s) => s.journal.settings.cycles);
+  const archivedPeople = useJournal((s) => s.journal.settings.archivedPeople);
   const ratingStyle = useJournal((s) => s.journal.settings.ratingStyle);
   const openRange = useJournal((s) => s.openHistRange);
   const selectCycle = useJournal((s) => s.selectCycle);
   const setCycleSheet = useJournal((s) => s.setCycleSheet);
+  // The Archive law: the Advisor reads only what the user lets it count.
+  const sessions = allSessions.filter((s) => !hiddenIn(archivedPeople, s.partnerName, "stats"));
+  const cycles = allCycles.filter(
+    (tr) =>
+      !(tr.partnerName && hiddenIn(archivedPeople, tr.partnerName, "stats")) &&
+      !(tr.partnerLink && hiddenIn(archivedPeople, tr.partnerLink, "stats")),
+  );
   const reading = useMemo(() => readAdvisor(sessions, cycles, todayStr()), [sessions, cycles]);
 
   const problemLabel = (id: string) => {
