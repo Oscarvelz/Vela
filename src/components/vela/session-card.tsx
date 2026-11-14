@@ -245,6 +245,7 @@ export function SessionCard({ session, density = "list" }: { session: Session; d
             variant="ghost"
             className="min-h-10 self-start px-3 text-sm"
             data-testid="voice-add"
+            data-spot="voice-door"
             onClick={(event) => {
               event.stopPropagation();
               setVoiceOpen(true);
@@ -274,6 +275,7 @@ export function SessionCard({ session, density = "list" }: { session: Session; d
           <Button
             variant="ghost"
             className="ml-auto min-h-10 px-3"
+            data-spot="round-add"
             onClick={() => {
               setConfirm(null);
               setAskRound(true);

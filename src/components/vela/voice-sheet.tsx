@@ -16,6 +16,7 @@ import type { RatingKey, Session } from "@/lib/vela/types";
 import { RATING_KEYS } from "@/lib/vela/types";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { Button, ConfirmDialog, RatingIcon, fieldClass } from "./ui";
+import { Hint } from "./hint";
 import { cn } from "@/lib/cn";
 
 const DIAL_LABEL: Record<RatingKey, "intensity" | "connection" | "satisfaction" | "energy"> = {
@@ -109,7 +110,7 @@ export function VoiceSheet({ session, onClose }: { session: Session; onClose: ()
         onClick={(event) => event.stopPropagation()}
       >
         <h2 className="border-b border-accent/25 pb-3 font-display text-2xl leading-tight">
-          {fill(t("vcVoiceOf"), { name: partner.name })}
+          {fill(t("vcVoiceOf"), { name: partner.name })} <Hint topic="su-voz" compact />
         </h2>
         <p className="mt-3 text-sm text-dim">
           {fmtDate(session.date, lang)}

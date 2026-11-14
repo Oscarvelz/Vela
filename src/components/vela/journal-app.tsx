@@ -18,6 +18,8 @@ import { InsightsView } from "./insights-view";
 import { Mark } from "./mark";
 import { SessionForm } from "./session-form";
 import { SettingsView } from "./settings-view";
+import { ManualView } from "./manual-view";
+import { SpotFocus } from "./spot-focus";
 import { Button, ConfirmDialog, IconButton } from "./ui";
 import { useScrollBars } from "./use-scroll-bars";
 import { CyclePill } from "./cycle-card";
@@ -158,6 +160,7 @@ function Shell() {
   const t = useT();
   const tab = useJournal((s) => s.tab);
   const settingsOpen = useJournal((s) => s.settingsOpen);
+  const manualTopic = useJournal((s) => s.manualTopic);
   const editingId = useJournal((s) => s.editingId);
   const mode = useJournal((s) => s.journal.settings.mode);
   const discreet = useJournal((s) => s.journal.settings.discreet);
@@ -301,6 +304,8 @@ function Shell() {
         dockRef={setDockEl}
         onSelect={(id) => goTab(id, TABS.findIndex((tabItem) => tabItem.id === id) - TABS.findIndex((tabItem) => tabItem.id === tab))}
       />
+      {manualTopic !== null ? <ManualView /> : null}
+      <SpotFocus />
       {toast ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-28 z-50 flex justify-center px-4">
           {toastAction ? (

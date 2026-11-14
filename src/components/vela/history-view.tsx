@@ -19,6 +19,7 @@ import { Sparkle } from "./mark";
 import { phaseKey } from "./cycle-card";
 import { SessionCard } from "./session-card";
 import { Card, ConfirmDialog, MenuSelect, RatingIcon, fieldClass } from "./ui";
+import { Hint } from "./hint";
 import { useBackLayer } from "@/lib/vela/back-stack";
 
 export function HistoryView() {
@@ -87,14 +88,18 @@ export function HistoryView() {
     <div className="space-y-4">
       <GlanceCard />
       <AnniversariesCard />
-      <input
-        type="search"
-        className={fieldClass}
-        value={query}
-        placeholder={t("searchPh")}
-        aria-label={t("searchPh")}
-        onChange={(event) => setQuery(event.target.value)}
-      />
+      <div className="flex items-center gap-2">
+        <input
+          type="search"
+          className={cn(fieldClass, "flex-1")}
+          value={query}
+          placeholder={t("searchPh")}
+          aria-label={t("searchPh")}
+          data-spot="hist-search"
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <Hint topic="buscar" compact />
+      </div>
       <div className="flex gap-2" role="group">
         <button
           type="button"

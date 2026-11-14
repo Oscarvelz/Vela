@@ -12,6 +12,7 @@ import { useJournal } from "@/lib/vela/store";
 import { signOut } from "@/lib/vela/sync";
 import type { Proposal } from "@/lib/vela/types";
 import { Button, ConfirmDialog, fieldClass } from "./ui";
+import { Hint } from "./hint";
 import { cn } from "@/lib/cn";
 
 const pinOk = (pin: string) => /^\d{4,6}$/.test(pin);
@@ -46,9 +47,10 @@ export function CoupleSection() {
     const owner = ownerPerson(people);
     const partner = partnerPerson(people);
     return (
-      <div className="space-y-3" data-testid="couple-on">
-        <p className="text-sm leading-relaxed">
-          {fill(t("cpOnBody"), { a: owner?.name ?? profileName, b: partner?.name ?? "", date: fmtDate(coupleMode.sharedFrom, lang) })}
+      <div className="space-y-3" data-testid="couple-on" data-spot="couple-section">
+        <p className="flex items-start gap-2 text-sm leading-relaxed">
+          <span className="flex-1">{fill(t("cpOnBody"), { a: owner?.name ?? profileName, b: partner?.name ?? "", date: fmtDate(coupleMode.sharedFrom, lang) })}</span>
+          <Hint topic="activar-pareja" compact />
         </p>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-dim">{t("cpLedgerTitle")}</p>
@@ -64,7 +66,7 @@ export function CoupleSection() {
           <Button variant="ghost" className="min-h-10 px-3 text-sm" onClick={() => setAskOff(true)}>
             {t("cpTurnOff")}
           </Button>
-          <Button variant="ghost" className="min-h-10 px-3 text-sm" data-testid="couple-leave" onClick={() => setAskLeave(true)}>
+          <Button variant="ghost" className="min-h-10 px-3 text-sm" data-testid="couple-leave" data-spot="couple-leave" onClick={() => setAskLeave(true)}>
             {t("gvLeave")}
           </Button>
         </div>
@@ -146,10 +148,10 @@ export function CoupleSection() {
   };
 
   return (
-    <div className="space-y-3" data-testid="couple-off">
+    <div className="space-y-3" data-testid="couple-off" data-spot="couple-section">
       {step === 0 ? (
         <>
-          <p className="text-sm leading-relaxed text-dim">{t("cpOffBody")}</p>
+          <p className="flex items-start gap-2 text-sm leading-relaxed text-dim"><span className="flex-1">{t("cpOffBody")}</span><Hint topic="activar-pareja" compact /></p>
           <Button className="min-h-11 px-4" onClick={() => setStep(1)}>
             {t("cpBegin")}
           </Button>
@@ -279,8 +281,8 @@ function ProposalsInbox({ proposals }: { proposals: Proposal[] }) {
         });
 
   return (
-    <div data-testid="proposals-inbox">
-      <p className="text-xs font-semibold uppercase tracking-wide text-dim">{t("gvInbox")}</p>
+    <div data-testid="proposals-inbox" data-spot="proposals-inbox">
+      <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-dim">{t("gvInbox")} <Hint topic="bandeja-decisiones" compact /></p>
       {proposals.length === 0 ? (
         <p className="mt-1.5 text-sm leading-relaxed text-dim">{t("gvEmpty")}</p>
       ) : (

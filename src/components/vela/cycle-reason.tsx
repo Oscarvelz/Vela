@@ -13,6 +13,7 @@ import { fill } from "@/lib/vela/cycle-words";
 import { useT } from "@/lib/vela/i18n";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { Button, fieldClass } from "./ui";
+import { Hint } from "./hint";
 import { cn } from "@/lib/cn";
 
 export const REASON_KEY: Record<CycleReasonId, CopyKey> = {
@@ -93,7 +94,7 @@ export function CycleReasonAsk() {
     const isAsk = !reasons[target];
     return (
       <div className="mt-3 rounded-2xl border border-accent/35 bg-surface-2/45 px-3.5 py-3" data-testid="cycle-ask">
-        <p className="text-sm leading-relaxed">{questionText(targetInfo, t)}</p>
+        <p className="flex items-start gap-2 text-sm leading-relaxed"><span className="flex-1">{questionText(targetInfo, t)}</span><Hint topic="el-ciclo-pregunta" compact /></p>
         <p className="mt-1 text-sm leading-relaxed text-dim">{t("cyAskBody")}</p>
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           {CYCLE_REASON_IDS.map((id) => (

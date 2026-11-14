@@ -6,6 +6,7 @@ import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
 import { adoptRemotePassphrase, resolveConflictKeepMine, resolveConflictUseCloud, signOut, syncNow, useCloud } from "@/lib/vela/sync";
 import { Button, ConfirmDialog, fieldClass, PassphraseInput, PasswordInput } from "./ui";
+import { Hint } from "./hint";
 import { useBioT } from "@/lib/vela/bio-copy";
 import { inAndroidApp } from "@/lib/vela/native";
 
@@ -69,8 +70,8 @@ export function AccountPanel() {
                   ? t("synced")
                   : "";
     return (
-      <div className="space-y-3">
-        <p className="text-sm leading-relaxed text-dim">{t("cloudBody")}</p>
+      <div className="space-y-3" data-spot="sync-section">
+        <p className="flex items-start gap-2 text-sm leading-relaxed text-dim"><span className="flex-1">{t("cloudBody")}</span><Hint topic="sincronizacion" compact /></p>
         <p className="text-sm">
           {t("signedInAs")} <b>{user.email}</b>
         </p>
@@ -152,6 +153,7 @@ export function AccountPanel() {
           <Button
             variant="ghost"
             data-testid="sign-out"
+            data-spot="account-door"
             onClick={() => {
               setForget(false);
               setAskOut(true);
@@ -257,7 +259,7 @@ export function AccountPanel() {
   const again = sessionGone && mode === "in";
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-spot="sync-section">
       {sessionGone ? (
         <div className="vela-relogin" data-testid="relogin" role="status">
           <span className="vela-relogin-icon" aria-hidden="true">
@@ -269,7 +271,7 @@ export function AccountPanel() {
           </div>
         </div>
       ) : (
-        <p className="text-sm leading-relaxed text-dim">{t("cloudBody")}</p>
+        <p className="flex items-start gap-2 text-sm leading-relaxed text-dim"><span className="flex-1">{t("cloudBody")}</span><Hint topic="sincronizacion" compact /></p>
       )}
       <div className="grid grid-cols-2 gap-2">
         <Button variant={mode === "in" ? "primary" : "ghost"} onClick={() => setMode("in")}>

@@ -14,6 +14,7 @@ import { useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
 import { Sparkle } from "./mark";
 import { RatingIcon } from "./ui";
+import { Hint } from "./hint";
 
 function distanceLabel(t: ReturnType<typeof useT>, story: Story) {
   if (story.kind === "months") return story.n === 1 ? t("storiesAMonth") : fill(t("storiesMonths"), { n: story.n });
@@ -48,10 +49,11 @@ export function StoriesRail() {
   const menuStory = stories.find((s) => s.date === menuDate) ?? null;
 
   return (
-    <section data-testid="stories-rail" aria-label={t("storiesTitle")}>
+    <section data-testid="stories-rail" data-spot="stories-rail" aria-label={t("storiesTitle")}>
       <div className="mb-2.5 flex items-center gap-2 px-1">
         <Sparkle className="size-4 text-accent" />
         <h2 className="font-display text-lg leading-none">{t("storiesTitle")}</h2>
+        <Hint topic="historias" compact />
       </div>
       <div className="ag-stories flex gap-3 overflow-x-auto pb-1">
         {celebrations.map((u) => {

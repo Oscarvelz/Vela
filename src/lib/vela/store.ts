@@ -734,6 +734,10 @@ type Store = {
   unlocked: boolean;
   tab: TabId;
   settingsOpen: boolean;
+  /** The user manual layer: null = closed, "" = cover, a topic id = that entry. UI only — never persisted. */
+  manualTopic: string | null;
+  /** Where the manual was opened from ("settings" or a TabId), for its back chip. */
+  manualFrom: string;
   showForm: boolean;
   editingId: string | null;
   confirmDeleteId: string | null;
@@ -792,6 +796,7 @@ type Store = {
   forgetDevice: () => Promise<void>;
   setTab: (tab: TabId) => void;
   setSettingsOpen: (open: boolean) => void;
+  openManual: (id: string | null) => void;
   toggleSection: (id: string) => void;
   setShowForm: (open: boolean) => void;
   beginSession: (encounterId: string) => void;
@@ -1019,6 +1024,8 @@ export const useJournal = create<Store>((set, get) => {
     legacy: null,
     tab: "home",
     settingsOpen: false,
+    manualTopic: null,
+    manualFrom: "",
     showForm: true,
     editingId: null,
     confirmDeleteId: null,
@@ -1322,6 +1329,8 @@ export const useJournal = create<Store>((set, get) => {
     },
     setTab: (tab) => set({ tab }),
     setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+    openManual: (id) =>
+      set((st) => (id === null ? { manualTopic: null } : { manualTopic: id, manualFrom: st.settingsOpen ? "settings" : st.tab })),
     toggleSection: (id) => {
       const current = get().sections;
       const next = !current[id];

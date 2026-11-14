@@ -32,6 +32,7 @@ import { Sparkle } from "./mark";
 import { CycleStats, EachCycleCard } from "./cycle-card";
 import { AdvisorCard } from "./advisor-card";
 import { Button, Card, RatingIcon } from "./ui";
+import { Hint } from "./hint";
 import { cn } from "@/lib/cn";
 
 /** Both voices (2.2.2, couple mode): per dial, the two averages stand side by
@@ -49,8 +50,8 @@ function TwoVoicesCard({ sessions }: { sessions: Session[] }) {
   const rows = reading.rows.filter((row) => row.both > 0);
   if (!rows.length) return null;
   return (
-    <Card className="ag-glass min-w-0 overflow-hidden" data-testid="two-voices-card">
-      <h2 className="font-display text-2xl">{t("tvTitle")}</h2>
+    <Card className="ag-glass min-w-0 overflow-hidden" data-testid="two-voices-card" data-spot="two-voices">
+      <h2 className="font-display text-2xl">{t("tvTitle")} <Hint topic="las-dos-voces" compact /></h2>
       <p className="mt-1 text-sm leading-relaxed text-dim">
         {fill(t("tvLead"), { n: reading.paired })} {fill(t("tvSame"), { k: reading.sameOverall, n: rows[0].both })}
       </p>
@@ -200,8 +201,8 @@ function CycleReasonsCard({ tracker }: { tracker: CycleTracker }) {
   const self = tracker.perspective !== "partner";
   const name = trackerName(tracker);
   return (
-    <Card className="ag-glass min-w-0 overflow-hidden" data-testid="cycle-reasons-card">
-      <h2 className="font-display text-2xl">{t("cyPatTitle")}</h2>
+    <Card className="ag-glass min-w-0 overflow-hidden" data-testid="cycle-reasons-card" data-spot="cycle-reasons-card">
+      <h2 className="font-display text-2xl">{t("cyPatTitle")} <Hint topic="fuera-del-patron" compact /></h2>
       {!self && name ? <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-dim">{name}</p> : null}
       <p className="mt-2 text-sm text-dim">
         {self
@@ -243,8 +244,8 @@ function CycleTestsCard() {
   const last = tests[tests.length - 1];
   const resultWord = (r: "positive" | "negative") => t(r === "positive" ? "pgResultPositive" : "pgResultNegative");
   return (
-    <Card className="ag-glass min-w-0 overflow-hidden" data-testid="cycle-tests-card">
-      <h2 className="font-display text-2xl">{t("pgTestsTitle")}</h2>
+    <Card className="ag-glass min-w-0 overflow-hidden" data-testid="cycle-tests-card" data-spot="cycle-tests-card">
+      <h2 className="font-display text-2xl">{t("pgTestsTitle")} <Hint topic="pruebas" compact /></h2>
       <p className="mt-2 text-sm text-dim">
         {total === 1 ? fill(t("pgTestsLeadOne"), { r: resultWord(last.result) }) : fill(t("pgTestsLead"), { n: total, p: pos, q: total - pos })}
       </p>
@@ -388,7 +389,7 @@ export function InsightsView() {
   const fellProblems = useMemo(() => topCounts(fellShort.flatMap((session) => session.problems)), [fellShort]);
 
   return (
-    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
+    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden" data-spot="insights-top">
       <div className="grid grid-cols-3 gap-2">
         <Stat value={String(total)} label={t(total === 1 ? "sessionWord" : "sessionsWord")} />
         <Stat value={String(encounters.length)} label={t(encounters.length === 1 ? "encounterWord" : "encountersWord")} />

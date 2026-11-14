@@ -18,6 +18,7 @@ import { useJournal } from "@/lib/vela/store";
 import { Sparkle } from "./mark";
 import { phaseKey } from "./cycle-card";
 import { Card, RatingIcon } from "./ui";
+import { Hint } from "./hint";
 
 const BUCKET_KEYS: CopyKey[] = ["bucketShortLateNight", "bucketShortMorning", "bucketShortAfternoon", "bucketShortEvening"];
 const lc = (text: string) => (text ? text.charAt(0).toLowerCase() + text.slice(1) : text);
@@ -149,10 +150,11 @@ export function AdvisorCard() {
   const lastSession = last?.session;
 
   return (
-    <Card className="ag-aurora min-w-0 overflow-hidden" data-testid="advisor-card">
+    <Card className="ag-aurora min-w-0 overflow-hidden" data-testid="advisor-card" data-spot="advisor-card">
       <div className="flex items-center gap-2">
         <Sparkle className="size-5 shrink-0 text-accent" />
         <h2 className="min-w-0 flex-1 truncate font-display text-2xl">{t("advTitle")}</h2>
+        <Hint topic="el-asesor" compact />
       </div>
       <p className="mt-1 text-xs text-dim">{basis.cycles === 1 ? fill(t("advBasisOne"), { n: basis.sessions }) : fill(t("advBasis"), { n: basis.sessions, m: basis.cycles })}</p>
 

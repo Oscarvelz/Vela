@@ -27,6 +27,7 @@ import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
 import { Button, Card, ConfirmDialog, Switch, fieldClass } from "./ui";
 import { CycleReasonAsk } from "./cycle-reason";
+import { Hint } from "./hint";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { CycleSky } from "./cycle-sky";
 
@@ -75,6 +76,7 @@ export function TrackerSwitch({ className }: { className?: string }) {
       role="group"
       aria-label={t("cyWhoseAria")}
       data-testid="cycle-switch"
+      data-spot="tracker-switch"
       data-noswipe
     >
       {live.map((tracker) => {
@@ -316,6 +318,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
       className={cn(!inSheet && "ag-panel ag-glass rounded-card border border-border px-4 py-4", fold.enabled && "cy-foldcard")}
       id={inSheet ? undefined : "cycle-card"}
       data-testid="cycle-card"
+      data-spot="cycle-card"
       data-folded={fold.enabled ? String(folded) : undefined}
     >
       <TrackerSwitch className="mb-3" />
@@ -328,6 +331,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
         ) : (
           <p className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.16em] text-dim uppercase">{cardTitle}</p>
         )}
+        <Hint topic="el-ciclo" compact />
         <RegularityBadge regularity={stats.regularity} open={regInfo} onToggle={() => setRegInfo((open) => !open)} />
         {!inSheet && trackerCount < MAX_TRACKERS ? (
           <button
@@ -391,8 +395,9 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
         body
       )}
       {projected ? (
-        <p className="mt-3 text-sm leading-relaxed text-dim" data-testid="cycle-projected">
-          {t("cyProjNote")}
+        <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed text-dim" data-testid="cycle-projected" data-spot="cycle-projected">
+          <span className="flex-1">{t("cyProjNote")}</span>
+          <Hint topic="proyeccion" compact />
         </p>
       ) : null}
       {tune ? <CycleTune /> : null}
@@ -1459,7 +1464,7 @@ export function CycleTune({ id }: { id?: string } = {}) {
       <p className="text-xs leading-relaxed text-dim">{t("cycleFertileHint")}</p>
       <p className="text-xs leading-relaxed text-dim">{t("cycleAvgNote")}</p>
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm">{t("cyAskMute")}</span>
+        <span className="flex items-center gap-2 text-sm">{t("cyAskMute")} <Hint topic="no-preguntar" compact /></span>
         <Switch checked={!!cycle.muteReasonAsks} label={t("cyAskMute")} onChange={(muteReasonAsks) => setCycle({ muteReasonAsks })} />
       </div>
     </div>

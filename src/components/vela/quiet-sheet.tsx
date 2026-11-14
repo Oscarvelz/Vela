@@ -15,6 +15,7 @@ import { useJournal } from "@/lib/vela/store";
 import type { QuietMark, QuietThemeId } from "@/lib/vela/types";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { Button, ConfirmDialog, fieldClass } from "./ui";
+import { Hint } from "./hint";
 import { cn } from "@/lib/cn";
 
 export const QUIET_REASON_KEY: Record<QuietThemeId, CopyKey> = {
@@ -48,6 +49,7 @@ export function QuietDayBlock({ date }: { date: string }) {
         <button
           type="button"
           data-testid="quiet-mark-card"
+          data-spot="quiet-block"
           className="mb-3 block w-full rounded-2xl border border-border px-3.5 py-3 text-left active:opacity-80"
           onClick={() => setOpen(true)}
         >
@@ -63,6 +65,7 @@ export function QuietDayBlock({ date }: { date: string }) {
         <button
           type="button"
           data-testid="quiet-name-action"
+          data-spot="quiet-block"
           className={cn("mb-3 min-h-[37px] px-1 text-left text-sm font-semibold text-dim active:opacity-70", dayCount > 0 && "text-xs")}
           onClick={() => setOpen(true)}
         >
@@ -98,7 +101,7 @@ function QuietMarkSheet({ date, mark, onClose }: { date: string; mark: QuietMark
         data-testid="quiet-sheet"
         onClick={(event) => event.stopPropagation()}
       >
-        <h2 className="border-b border-accent/25 pb-3 font-display text-2xl leading-tight">{t("qdTitle")}</h2>
+        <h2 className="border-b border-accent/25 pb-3 font-display text-2xl leading-tight">{t("qdTitle")} <Hint topic="dias-quietos" compact /></h2>
         <div className="mt-4 grid grid-cols-2 gap-2">
           <label className="block">
             <span className="text-xs font-semibold uppercase tracking-wide text-dim">{t("qdFrom")}</span>

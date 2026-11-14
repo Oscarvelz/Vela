@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import {
   Archive,
+  BookOpen,
   Check,
   ChevronDown,
   Download,
@@ -46,6 +47,8 @@ import { CycleTune, useCycleUndo } from "./cycle-card";
 import { CoupleSection } from "./couple-section";
 import { AddTracker } from "./cycle-add";
 import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PassphraseInput } from "./ui";
+import { MANUAL_CHAPTERS, MANUAL_TOPICS } from "@/lib/vela/manual";
+import { Hint } from "./hint";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { APK_URL, androidBrowser } from "@/lib/vela/native";
 import { APP_VERSION } from "@/lib/vela/version";
@@ -169,6 +172,9 @@ export function SettingsView() {
       >
         <CycleSection />
       </Accordion>
+      <Accordion id="manual" icon={<BookOpen className="size-5" />} title={t("mnTitle")} open={open.manual} onToggle={toggle}>
+        <ManualSection />
+      </Accordion>
       <Accordion id="data" icon={<Download className="size-5" />} title={t("dataSync")} badge={sessionGone && cloudPhase === "signed-out" ? t("signInAgain") : cloudPhase === "saved" || cloudPhase === "saving" || cloudPhase === "offline" ? t("cloudBadge") : t("localBadge")} open={open.data} onToggle={toggle}>
         <DataSection />
       </Accordion>
@@ -230,6 +236,24 @@ function Accordion({
   );
 }
 
+function ManualSection() {
+  const t = useT();
+  const openManual = useJournal((s) => s.openManual);
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm leading-relaxed text-dim">
+          {fill(t("mnCounts"), { c: MANUAL_CHAPTERS.length, n: MANUAL_TOPICS.length })}
+        </p>
+        <Hint topic="el-manual" compact />
+      </div>
+      <Button className="w-full" onClick={() => openManual("")}>
+        {t("mnOpen")}
+      </Button>
+    </div>
+  );
+}
+
 function MemoriesSection() {
   const t = useT();
   const lang = useLang();
@@ -280,10 +304,11 @@ function ArchiveSection() {
   const [deleteAsk, setDeleteAsk] = useState<ArchivedPerson | null>(null);
   const [typed, setTyped] = useState("");
   if (archived.length === 0) {
-    return <p className="text-sm leading-relaxed text-dim">{t("arcEmpty")}</p>;
+    return <p className="flex items-start gap-2 text-sm leading-relaxed text-dim" data-spot="archive-section"><span className="flex-1">{t("arcEmpty")}</span><Hint topic="archivar" compact /></p>;
   }
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-spot="archive-section">
+      <div className="flex justify-end"><Hint topic="archivar" compact /></div>
       {archived.map((person) => {
         const kept = sessions.filter((s) => s.partnerName.toLowerCase() === person.name.toLowerCase()).length;
         return (
@@ -434,7 +459,7 @@ function ProfileSection() {
           </Button>
         </div>
       </div>
-      <Button variant="ghost" onClick={lock}>
+      <Button variant="ghost" onClick={lock} data-spot="lock-now">
         <Lock className="size-4" /> {t("lockNow")}
       </Button>
     </div>
@@ -722,7 +747,7 @@ function PrivacySection() {
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <p className="font-semibold">{t("discreetMode")}</p>
+          <p className="flex items-center gap-2 font-semibold">{t("discreetMode")} <Hint topic="bloqueo" compact /></p>
           <p className="mt-1 text-sm text-dim">{t("discreetDesc")}</p>
         </div>
         <Switch checked={settings.discreet} label={t("discreetMode")} onChange={setDiscreet} />
@@ -730,7 +755,7 @@ function PrivacySection() {
       <AppLockSettings />
       <PassphraseNote />
       <LockDiagnostics />
-      <p className="font-semibold">{t("changePin")}</p>
+      <p className="font-semibold" data-spot="change-passphrase">{t("changePin")}</p>
       <PassphraseInput id="change-current" className={fieldClass} value={current} placeholder={t("currentPinPh")} onChange={(event) => setCurrent(event.target.value)} />
       <PassphraseInput id="change-next" className={fieldClass} value={next} placeholder={t("newPinPh")} onChange={(event) => setNext(event.target.value)} />
       <p className="text-xs leading-relaxed text-dim">{t("passWarn")}</p>
@@ -982,7 +1007,7 @@ function DataSection() {
         <b>{t("localDataA")}</b>
       </p>
       <p className="text-sm leading-relaxed text-dim">{t("localDataBody")}</p>
-      <Button variant="ghost" className="w-full" onClick={() => void exportJSON()}>
+      <Button variant="ghost" className="w-full" onClick={() => void exportJSON()} data-spot="backup-section">
         <Download className="size-4" /> {t("exportJson")}
       </Button>
       <Button variant="ghost" className="w-full" onClick={exportCSV}>
@@ -1025,9 +1050,11 @@ function DataSection() {
           reader.readAsText(file);
         }}
       />
-      <p className="text-sm text-dim">{t("backupTip")}</p>
+      <p className="flex items-start gap-2 text-sm text-dim"><span className="flex-1">{t("backupTip")}</span><Hint topic="respaldo-rapido" compact /></p>
+      <div className="flex items-center gap-2">
       <Button
         variant="danger"
+        data-spot="erase-all"
         onClick={() => {
           setWipe({
             sessions: true,
@@ -1042,6 +1069,8 @@ function DataSection() {
       >
         {t("eraseAll")}
       </Button>
+      <Hint topic="borrar-todo" compact />
+      </div>
       <ConfirmDialog
         open={confirm}
         title={t("eraseAll")}

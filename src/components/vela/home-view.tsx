@@ -190,7 +190,7 @@ export function HomeView() {
         </Card>
         <StoriesRail />
         <CycleCard />
-        <Card className={showForm ? "" : "hidden"}>
+        <Card className={showForm ? "" : "hidden"} data-spot="log-form">
           <div className="relative mb-4 flex items-start justify-between gap-3">
             <h2 className="font-display text-2xl">{preset ? t("heroRepeatTitle") : t("logMoment")}</h2>
             <button
@@ -226,7 +226,7 @@ export function HomeView() {
             }}
           />
         </Card>
-        <Card className={cn("vb-card-shell relative isolate overflow-hidden px-5 pb-5 pt-6", showBatch ? "" : "hidden")} aria-label={t("batchTitle")}>
+        <Card className={cn("vb-card-shell relative isolate overflow-hidden px-5 pb-5 pt-6", showBatch ? "" : "hidden")} aria-label={t("batchTitle")} data-spot="batch-card">
           <BatchLog
             live={showBatch}
             onSaved={() => {

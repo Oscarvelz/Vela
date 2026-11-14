@@ -10,6 +10,7 @@ import { ratingLabel } from "@/lib/vela/notes";
 import { useJournal } from "@/lib/vela/store";
 import { fill } from "@/lib/vela/cycle-words";
 import { readThemeProposals } from "@/lib/vela/quiet";
+import { Hint } from "./hint";
 import { readPregnancy } from "@/lib/vela/pregnancy";
 import { trackerForPartner } from "@/lib/vela/cycle-trackers";
 import { QUIET_REASON_KEY } from "./quiet-sheet";
@@ -206,7 +207,7 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
           <Feather className="size-3.5" strokeWidth={2} aria-hidden />
           {b("eyebrow")}
         </p>
-        <h2 className="vb-title font-display">{b("title")}</h2>
+        <h2 className="vb-title font-display">{b("title")} <Hint topic="lector-lotes" compact /></h2>
         <p className="vb-sub">{b("sub")}</p>
       </header>
 
@@ -415,7 +416,7 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
       {showPreg ? (
         <div className="mb-3 space-y-2" data-testid="preg-proposals">
           <div className="rounded-2xl border border-accent/35 bg-surface-2/45 px-3.5 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-dim">{pregTarget ? t("pgPropTitle") : t("pgTestsTitle")}</p>
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-dim">{pregTarget ? t("pgPropTitle") : t("pgTestsTitle")} <Hint topic="propuestas-lector" compact /></p>
             <p className="mt-1.5 text-sm leading-relaxed text-dim">
               {pregTarget
                 ? fill(t("pgPropBody"), { text: pregReading.reason?.evidence ?? "" })
@@ -439,7 +440,7 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
         <div className="mb-3 space-y-2" data-testid="theme-proposals">
           {keptThemes.map((p) => (
             <div key={`${p.theme}|${p.from}|${p.to}`} className="rounded-2xl border border-accent/35 bg-surface-2/45 px-3.5 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-dim">{t("qdPropTitle")}</p>
+              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-dim">{t("qdPropTitle")} <Hint topic="propuestas-lector" compact /></p>
               <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
                 <span className="rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold">{t(QUIET_REASON_KEY[p.theme])}</span>
                 <span className="text-dim">{p.from === p.to ? fmtDate(p.from, lang) : fmtRange(p.from, p.to, lang)}</span>
@@ -462,6 +463,7 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
           variant="save"
           className="vb-save w-full rounded-control text-base"
           data-testid="batch-save"
+          data-spot="batch-save"
           disabled={blocked}
           aria-describedby={saveHint ? "vb-save-hint" : undefined}
           onClick={(event) => {

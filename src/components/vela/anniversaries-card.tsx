@@ -22,6 +22,7 @@ import { useJournal } from "@/lib/vela/store";
 import type { Anniversary, AnniversaryKind, ChildEntry, ChildRef } from "@/lib/vela/types";
 import { Sparkle } from "./mark";
 import { Button, Card, ConfirmDialog, Switch, fieldClass } from "./ui";
+import { Hint } from "./hint";
 import { cn } from "@/lib/cn";
 
 const KINDS: { id: AnniversaryKind; key: CopyKey }[] = [
@@ -139,12 +140,13 @@ export function AnniversariesCard() {
   };
 
   return (
-    <Card className="ag-glass p-4" data-testid="anniversaries-card">
+    <Card className="ag-glass p-4" data-testid="anniversaries-card" data-spot="anniv-card">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 font-display text-base font-semibold">
             <Sparkle className="h-4 w-4 text-[var(--ag-accent)]" />
             {t("annTitle")}
+            <Hint topic="fechas" compact />
           </h3>
           <p className="mt-0.5 text-xs text-[var(--ag-dim)]">{t("annSectionHint")}</p>
         </div>
