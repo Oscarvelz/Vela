@@ -20,6 +20,13 @@ export type BatchDraft = {
   at: number;
 };
 
+/** What Stories must never show again (2.1.23): partner names that stop
+ *  resurfacing entirely, and single source dates hidden one by one. */
+export type StoryMuted = {
+  people: string[];
+  days: string[];
+};
+
 export type Settings = {
   theme: ThemeId;
   mode: Mode;
@@ -42,6 +49,9 @@ export type Settings = {
   themeVersion?: number;
   /** The batch sheet's unsaved work, so an interruption never costs an import in progress. */
   batchDraft?: BatchDraft;
+  /** Stories the user has put away: people who never resurface, and single days
+   *  (source dates) hidden for good. Revived only by the user, in Settings. */
+  storiesMuted?: StoryMuted;
 };
 
 export type Profile = {

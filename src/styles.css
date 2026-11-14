@@ -2078,3 +2078,99 @@ html[data-splash="on"] .vela-rise { animation-play-state: paused; }
   .ag-glass, #cycle-card.ag-glass { background-color: var(--ag-surface); }
 }
 /* /Crystal */
+
+/* Stories (2.1.23) — Home's memory rail. Cards arrive once, staggered, then rest:
+   no perpetual motion competes with the hero's breathing above them. */
+.ag-stories { scrollbar-width: none; }
+.ag-stories::-webkit-scrollbar { display: none; }
+.ag-story-card {
+  position: relative;
+  flex: 0 0 auto;
+  width: 10.75rem;
+  border-radius: 1rem;
+  animation: ag-story-in .55s cubic-bezier(.22,.8,.32,1) both;
+}
+.ag-story-main {
+  display: block;
+  width: 100%;
+  padding: .8rem 2rem .8rem .9rem;
+  text-align: left;
+}
+.ag-story-distance {
+  display: block;
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--ag-accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ag-story-who {
+  display: block;
+  margin-top: .3rem;
+  font-size: .95rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ag-story-date {
+  display: block;
+  margin-top: .15rem;
+  font-size: .78rem;
+  color: var(--ag-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ag-story-glow { display: flex; gap: .15rem; margin-top: .45rem; }
+.ag-story-menu-btn {
+  position: absolute;
+  top: .35rem;
+  right: .35rem;
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  color: var(--ag-dim);
+}
+.ag-story-menu-btn.is-open { color: var(--ag-accent); }
+.ag-story-menu {
+  position: relative;
+  margin-top: .5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  align-items: center;
+  padding: .6rem .7rem;
+  border-radius: .9rem;
+  border: 1px solid color-mix(in srgb, var(--ag-accent) 30%, transparent);
+  background: var(--ag-surface);
+}
+.ag-story-menu-item {
+  padding: .45rem .8rem;
+  border-radius: 999px;
+  border: 1px solid var(--ag-border);
+  font-size: .82rem;
+  white-space: nowrap;
+}
+.ag-story-menu-close {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  color: var(--ag-dim);
+}
+@keyframes ag-story-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ag-story-card { animation: none; }
+}

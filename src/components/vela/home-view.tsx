@@ -11,6 +11,7 @@ import { SessionCard } from "./session-card";
 import { SessionForm } from "./session-form";
 import { BatchLog } from "./batch-log";
 import { CycleCard } from "./cycle-card";
+import { StoriesRail } from "./stories-rail";
 import { Button, Card } from "./ui";
 import { useBackLayer } from "@/lib/vela/back-stack";
 
@@ -187,6 +188,7 @@ export function HomeView() {
             </button>
           </div>
         </Card>
+        <StoriesRail />
         <CycleCard />
         <Card className={showForm ? "" : "hidden"}>
           <div className="relative mb-4 flex items-start justify-between gap-3">

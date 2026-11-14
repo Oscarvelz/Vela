@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   Fingerprint,
   Droplets,
+  EyeOff,
   Heart,
   Lock,
   MapPin,
@@ -20,7 +21,8 @@ import {
   X,
 } from "lucide-react";
 import { THEMES } from "@/lib/vela/catalog";
-import { fmtShort } from "@/lib/vela/dates";
+import { fmtDate, fmtShort } from "@/lib/vela/dates";
+import { cleanMuted } from "@/lib/vela/stories";
 import { AppLockSettings, PassphraseNote, useLockBadge } from "./bio";
 import { LockDiagnostics } from "./lock-diag";
 import { notePicker } from "@/lib/vela/app-lock";
@@ -61,6 +63,10 @@ export function SettingsView() {
   const language = useJournal((s) => s.journal.settings.language);
   const theme = useJournal((s) => s.journal.settings.theme);
   const cycleOn = useJournal((s) => visibleTrackers(s.journal.settings.cycles).length > 0);
+  const mutedCount = useJournal((s) => {
+    const m = cleanMuted(s.journal.settings.storiesMuted);
+    return m.people.length + m.days.length;
+  });
 
   return (
     <div className="space-y-3">
@@ -116,6 +122,16 @@ export function SettingsView() {
       </Accordion>
       <Accordion id="privacy" icon={<Lock className="size-5" />} title={t("privacy")} badge={lockBadge} open={open.privacy} onToggle={toggle}>
         <PrivacySection />
+      </Accordion>
+      <Accordion
+        id="memories"
+        icon={<EyeOff className="size-5" />}
+        title={t("storiesMutedTitle")}
+        badge={mutedCount > 0 ? String(mutedCount) : undefined}
+        open={open.memories}
+        onToggle={toggle}
+      >
+        <MemoriesSection />
       </Accordion>
       <Accordion
         id="cycle"
@@ -185,6 +201,37 @@ function Accordion({
       </button>
       {open ? <div className="border-t border-border px-4 py-4">{children}</div> : null}
     </section>
+  );
+}
+
+function MemoriesSection() {
+  const t = useT();
+  const lang = useLang();
+  const mutedRaw = useJournal((s) => s.journal.settings.storiesMuted);
+  const muted = cleanMuted(mutedRaw);
+  const unmuteStory = useJournal((s) => s.unmuteStory);
+  return (
+    <div className="space-y-3">
+      <p className="text-sm leading-relaxed text-dim">{t("storiesMutedBody")}</p>
+      {muted.people.map((name) => (
+        <div key={`p-${name}`} className="flex items-center gap-3" data-testid="muted-person-row">
+          <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
+          <Button variant="ghost" onClick={() => unmuteStory("person", name)}>
+            {t("storiesRestore")}
+          </Button>
+        </div>
+      ))}
+      {muted.days.map((day) => (
+        <div key={`d-${day}`} className="flex items-center gap-3" data-testid="muted-day-row">
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {fmtDate(day, lang)} <span className="text-sm font-normal text-dim">· {t("storiesMutedDay")}</span>
+          </span>
+          <Button variant="ghost" onClick={() => unmuteStory("day", day)}>
+            {t("storiesRestore")}
+          </Button>
+        </div>
+      ))}
+    </div>
   );
 }
 

@@ -7,6 +7,7 @@ import { addDays, nowTime, pad, todayStr } from "./dates";
 import type { BatchEntry } from "./batch";
 import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
+import { cleanMuted } from "./stories";
 import { runMigrations } from "./migrations";
 import type { Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings, TabId } from "./types";
 import { STR, type Lang } from "./copy";
@@ -728,6 +729,9 @@ type Store = {
   setTheme: (theme: ThemeId) => void;
   toggleMode: () => void;
   setRatingStyle: (style: RatingStyle) => void;
+  muteStoryDay: (date: string) => void;
+  muteStoryPerson: (name: string) => void;
+  unmuteStory: (kind: "person" | "day", value: string) => void;
   setWeekStart: (weekStart: WeekStart) => void;
   setDiscreet: (discreet: boolean) => void;
   setAutoLock: (mins: number) => void;
@@ -1466,6 +1470,23 @@ export const useJournal = create<Store>((set, get) => {
     setTheme: (theme) => patchSettings({ theme }),
     toggleMode: () => patchSettings({ mode: get().journal.settings.mode === "night" ? "day" : "night" }),
     setRatingStyle: (ratingStyle) => patchSettings({ ratingStyle }),
+    muteStoryDay: (date) => {
+      const m = cleanMuted(get().journal.settings.storiesMuted);
+      if (!m.days.includes(date)) patchSettings({ storiesMuted: { ...m, days: [...m.days, date] } });
+    },
+    muteStoryPerson: (name) => {
+      const m = cleanMuted(get().journal.settings.storiesMuted);
+      if (!m.people.some((p) => p.toLowerCase() === name.toLowerCase())) patchSettings({ storiesMuted: { ...m, people: [...m.people, name] } });
+    },
+    unmuteStory: (kind, value) => {
+      const m = cleanMuted(get().journal.settings.storiesMuted);
+      patchSettings({
+        storiesMuted:
+          kind === "person"
+            ? { ...m, people: m.people.filter((p) => p.toLowerCase() !== value.toLowerCase()) }
+            : { ...m, days: m.days.filter((d) => d !== value) },
+      });
+    },
     setWeekStart: (weekStart) => patchSettings({ weekStart }),
     setDiscreet: (discreet) => patchSettings({ discreet }),
     setAutoLock: (autoLockMins) => patchSettings({ autoLockMins }),
