@@ -18,6 +18,7 @@ import {
 import { trackerForPartner, visibleTrackers, type CycleTracker } from "./cycle-trackers";
 import { firstOccurrences, longestStreak, sessionsSorted, timeBuckets, topCounts } from "./stats";
 import type { Session } from "./types";
+import type { UpcomingDate } from "./anniversaries";
 
 export type AdvisorPerson = {
   tracker: CycleTracker;
@@ -52,13 +53,22 @@ export type AdvisorReading = {
   last: { session: Session; phase: CyclePhase | null } | null;
   lines: AdvisorLine[];
   fact: AdvisorFact | null;
+  /** The dates the user chose never to forget (2.1.25): today's outrank the
+   *  rotating fact; the week's get a warm warning among the next-time lines.
+   *  The Advisor congratulates the time — never the quality of the years. */
+  dates: { today: UpcomingDate[]; soon: UpcomingDate[] };
 };
 
 function dayDiff(from: string, to: string) {
   return Math.round((parseDate(to).getTime() - parseDate(from).getTime()) / 86400000);
 }
 
-export function readAdvisor(sessions: Session[], cycles: CycleTracker[], today = todayStr()): AdvisorReading {
+export function readAdvisor(
+  sessions: Session[],
+  cycles: CycleTracker[],
+  today = todayStr(),
+  dates: UpcomingDate[] = [],
+): AdvisorReading {
   const list = sessionsSorted(sessions);
   const live = visibleTrackers(cycles).filter((tracker) => tracker.starts.length > 0);
 
@@ -199,5 +209,15 @@ export function readAdvisor(sessions: Session[], cycles: CycleTracker[], today =
     }
   }
 
-  return { basis: { sessions: list.length, cycles: live.length }, people, last, lines, fact };
+  return {
+    basis: { sessions: list.length, cycles: live.length },
+    people,
+    last,
+    lines,
+    fact,
+    dates: {
+      today: dates.filter((d) => d.daysUntil === 0),
+      soon: dates.filter((d) => d.daysUntil >= 1 && d.daysUntil <= 7),
+    },
+  };
 }

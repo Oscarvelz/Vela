@@ -142,7 +142,10 @@ export type UpcomingDate = {
   elapsed?: Elapsed | null;
 };
 
-export function upcomingDates(settings: Settings, today: string): UpcomingDate[] {
+export function upcomingDates(
+  settings: Pick<Settings, "anniversaries" | "children" | "archivedPeople">,
+  today: string,
+): UpcomingDate[] {
   const archived = cleanArchived(settings.archivedPeople);
   const hidden = (name?: string) =>
     Boolean(name) && archived.some((p) => p.name.toLowerCase() === (name as string).toLowerCase() && !p.resurface);

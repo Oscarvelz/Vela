@@ -10,7 +10,7 @@ import { fill, trackerLabel } from "@/lib/vela/cycle-words";
 import { fmtDate, fmtDuration, fmtShort, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { readAdvisor, type AdvisorLine } from "@/lib/vela/advisor";
-import { hiddenIn } from "@/lib/vela/anniversaries";
+import { hiddenIn, upcomingDates, type UpcomingDate } from "@/lib/vela/anniversaries";
 import { useJournal } from "@/lib/vela/store";
 import { Sparkle } from "./mark";
 import { phaseKey } from "./cycle-card";
@@ -54,7 +54,39 @@ export function AdvisorCard() {
       !(tr.partnerName && hiddenIn(archivedPeople, tr.partnerName, "stats")) &&
       !(tr.partnerLink && hiddenIn(archivedPeople, tr.partnerLink, "stats")),
   );
-  const reading = useMemo(() => readAdvisor(sessions, cycles, todayStr()), [sessions, cycles]);
+  const anniversariesRaw = useJournal((s) => s.journal.settings.anniversaries);
+  const childrenRaw = useJournal((s) => s.journal.settings.children);
+  const upcoming = useMemo(
+    () => upcomingDates({ anniversaries: anniversariesRaw, children: childrenRaw, archivedPeople }, todayStr()),
+    [anniversariesRaw, childrenRaw, archivedPeople],
+  );
+  const reading = useMemo(() => readAdvisor(sessions, cycles, todayStr(), upcoming), [sessions, cycles, upcoming]);
+
+  /* The Advisor's voice for the dates (2.1.25): it congratulates the time,
+     never the quality of the years, and it always uses the person's name —
+     never a word that presumes the relationship. */
+  const dateText = (u: UpcomingDate): string => {
+    if (u.source === "birthday") {
+      if (u.daysUntil === 0) return fill(t("advBdayToday"), { name: u.label, age: u.turning ?? "" });
+      if (u.daysUntil === 1) return fill(t("advBdayTomorrow"), { name: u.label, age: u.turning ?? "" });
+      return fill(t("advBdaySoon"), { name: u.label, age: u.turning ?? "", n: u.daysUntil });
+    }
+    const withName = (base: string) => (u.personName && !u.label.includes(u.personName) ? `${base} · ${u.personName}` : base);
+    if (u.daysUntil === 0) {
+      let base: string;
+      if (u.turning && u.turning >= 1) {
+        if (u.kind === "married") base = u.personName ? fill(t("advAnnMarried"), { n: u.turning, name: u.personName }) : fill(t("advAnnMarriedSolo"), { n: u.turning });
+        else if (u.kind === "met") base = u.personName ? fill(t("advAnnMet"), { n: u.turning, name: u.personName }) : fill(t("advAnnMetSolo"), { n: u.turning });
+        else if (u.kind === "first") base = u.personName ? fill(t("advAnnFirst"), { n: u.turning, name: u.personName }) : fill(t("advAnnFirstSolo"), { n: u.turning });
+        else base = fill(t("advAnnCustomYears"), { label: u.label, n: u.turning });
+      } else {
+        base = withName(fill(t("advDateToday"), { label: u.label }));
+      }
+      return u.milestone ? `${base} ${t("advCongrats")}` : base;
+    }
+    if (u.daysUntil === 1) return withName(fill(t("advDateTomorrow"), { label: u.label }));
+    return withName(fill(t("advDateSoon"), { label: u.label, n: u.daysUntil }));
+  };
 
   const problemLabel = (id: string) => {
     const known = knownProblem(id);
@@ -82,8 +114,10 @@ export function AdvisorCard() {
     }
   };
 
-  const { people, last, lines, fact, basis } = reading;
-  if (!people.length && !last && !lines.length && !fact) return null;
+  const { people, last, lines, fact, basis, dates } = reading;
+  if (!people.length && !last && !lines.length && !fact && !dates.today.length && !dates.soon.length) return null;
+  // A date that is today is the day's news: the rotating fact stands down.
+  const shownFact = dates.today.length ? null : fact;
   const lastSession = last?.session;
 
   return (
@@ -93,6 +127,20 @@ export function AdvisorCard() {
         <h2 className="min-w-0 flex-1 truncate font-display text-2xl">{t("advTitle")}</h2>
       </div>
       <p className="mt-1 text-xs text-dim">{basis.cycles === 1 ? fill(t("advBasisOne"), { n: basis.sessions }) : fill(t("advBasis"), { n: basis.sessions, m: basis.cycles })}</p>
+
+      {dates.today.length ? (
+        <>
+          <Subhead>{t("todayBtn")}</Subhead>
+          <div className="mt-2 space-y-2" data-testid="advisor-dates-today">
+            {dates.today.map((u) => (
+              <p key={u.key} className="flex gap-2 text-sm font-medium leading-relaxed">
+                <Sparkle className="mt-0.5 size-3.5 shrink-0 text-accent" />
+                <span className="min-w-0">{dateText(u)}</span>
+              </p>
+            ))}
+          </div>
+        </>
+      ) : null}
 
       {people.length ? (
         <>
@@ -182,7 +230,7 @@ export function AdvisorCard() {
         </>
       ) : null}
 
-      {lines.length ? (
+      {lines.length || dates.soon.length ? (
         <>
           <Subhead>{t("advNext")}</Subhead>
           <div className="mt-2 space-y-2">
@@ -192,21 +240,27 @@ export function AdvisorCard() {
                 <span className="min-w-0">{lineText(line)}</span>
               </p>
             ))}
+            {dates.soon.map((u) => (
+              <p key={u.key} className="flex gap-2 text-sm leading-relaxed" data-testid="advisor-date-soon">
+                <Sparkle className="mt-0.5 size-3.5 shrink-0 text-accent" />
+                <span className="min-w-0">{dateText(u)}</span>
+              </p>
+            ))}
           </div>
         </>
       ) : null}
 
-      {fact ? (
+      {shownFact ? (
         <>
           <Subhead>{t("advKnow")}</Subhead>
           <p className="mt-2 flex gap-2 text-sm leading-relaxed">
             <Sparkle className="mt-0.5 size-3.5 shrink-0 text-accent" />
             <span className="min-w-0">
-              {fact.kind === "newPosition"
-                ? fill(t("advFactNew"), { position: positionLabel(lang, fact.position), d: fmtDate(fact.date, lang) })
-                : fact.kind === "streak"
-                  ? `${t("funStreakA")} ${fact.days} ${t("funStreakB")}`
-                  : fill(t("advFactFirmer"), { name: trackerLabel(fact.tracker, t), n: fact.missing })}
+              {shownFact.kind === "newPosition"
+                ? fill(t("advFactNew"), { position: positionLabel(lang, shownFact.position), d: fmtDate(shownFact.date, lang) })
+                : shownFact.kind === "streak"
+                  ? `${t("funStreakA")} ${shownFact.days} ${t("funStreakB")}`
+                  : fill(t("advFactFirmer"), { name: trackerLabel(shownFact.tracker, t), n: shownFact.missing })}
             </span>
           </p>
         </>
