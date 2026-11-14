@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { LayoutGrid, List, Plus } from "lucide-react";
 import { knownProblem, placeLabel, positionLabel } from "@/lib/vela/catalog";
 import { fmtDate, fmtDuration, fmtShort, fmtTime } from "@/lib/vela/dates";
@@ -7,6 +7,7 @@ import { useLang, useT } from "@/lib/vela/i18n";
 import { sessionsSorted } from "@/lib/vela/stats";
 import { useJournal } from "@/lib/vela/store";
 import { trackerForPartner, type CycleTracker } from "@/lib/vela/cycle-trackers";
+import { fill } from "@/lib/vela/cycle-words";
 import type { Encounter, Session } from "@/lib/vela/types";
 import { GlanceCard } from "./glance-card";
 import { cn } from "@/lib/cn";
@@ -36,6 +37,12 @@ export function HistoryView() {
   const cycles = useJournal((s) => s.journal.settings.cycles);
   const clearRange = useJournal((s) => s.clearHistRange);
   const [mode, setMode] = useState<"sessions" | "encounters">("sessions");
+  // History renders in growing tranches (the audit, Nov 14 2026): a lifetime journal mounted every
+  // card at once — 1,200 sessions were 52k DOM nodes. The window restarts whenever the view changes.
+  const [limit, setLimit] = useState(80);
+  useEffect(() => {
+    setLimit(80);
+  }, [from, to, phase, partner, query, mode]);
   // Back / gesture inside History: a search or partner filter clears first, then Encounters returns to
   // Sessions (the tab's root); from there back goes Home.
   useBackLayer(mode === "encounters", () => setMode("sessions"), { tier: 1, name: "history-encounters" });
@@ -166,7 +173,7 @@ export function HistoryView() {
             <Empty title={t("noSessionsShow")} body={t("historyFilterEmpty")} />
           ) : (
             <div className={layout === "list" ? "space-y-3" : cn("grid gap-2", layout === 2 ? "grid-cols-2" : layout === 3 ? "grid-cols-3 gap-1.5" : "grid-cols-4 gap-1")}>
-              {groupByYear(filtered, (session) => session.date.slice(0, 4) || "—").map((group) => (
+              {groupByYear(filtered.slice(0, limit), (session) => session.date.slice(0, 4) || "—").map((group) => (
                 <Fragment key={group.year}>
                   <YearMark year={group.year} />
                   {group.items.map((session) => (
@@ -181,7 +188,7 @@ export function HistoryView() {
         <Empty title={t("noEncounters")} body={t("noEncountersBody")} />
       ) : (
         <div className={layout === "list" ? "space-y-3" : cn("grid gap-2", layout === 2 ? "grid-cols-2" : layout === 3 ? "grid-cols-3 gap-1.5" : "grid-cols-4 gap-1")}>
-          {groupEncounters(filteredEncounters).map((group) => (
+          {groupEncounters(filteredEncounters.slice(0, limit)).map((group) => (
             <Fragment key={group.year}>
               <YearMark year={group.year} />
               {group.items.map((encounter) => (
@@ -191,6 +198,15 @@ export function HistoryView() {
           ))}
         </div>
       )}
+      {(mode === "sessions" ? filtered.length : filteredEncounters.length) > limit ? (
+        <button
+          type="button"
+          className="mx-auto block min-h-[37px] rounded-full border border-border px-5 text-sm font-semibold text-accent active:opacity-70"
+          onClick={() => setLimit(limit + 80)}
+        >
+          {fill(t("histShowMore"), { n: (mode === "sessions" ? filtered.length : filteredEncounters.length) - limit })}
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -130,7 +130,9 @@ export function comparisonBars(
   )
     .filter(Boolean)
     .sort();
-  return years.map((year) => ({
+  // A lifetime of bars becomes unreadable slivers (the audit, Nov 14 2026): the years view keeps
+  // the most recent 14, and Insights says so under the bars.
+  return years.slice(-14).map((year) => ({
     label: year,
     n: sessions.filter((s) => s.date.slice(0, 4) === year).length,
     encounters: spansIn(encounters, `${year}-01-01`, `${year}-12-31`),

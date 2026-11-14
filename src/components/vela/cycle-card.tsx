@@ -1791,6 +1791,7 @@ export function PartnerCycleDoor({ name }: { name: string }) {
   const setCycleSheet = useJournal((s) => s.setCycleSheet);
   const addTracker = useJournal((s) => s.addTracker);
   const setCycle = useJournal((s) => s.setCycle);
+  const showToast = useJournal((s) => s.showToast);
   const [ask, setAsk] = useState(false);
   const trimmed = name.trim();
   if (!trimmed) return null;
@@ -1803,7 +1804,20 @@ export function PartnerCycleDoor({ name }: { name: string }) {
     const saved = partners.find((partner) => partner.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
     const id = addTracker({ perspective: "partner", partnerName: saved ?? trimmed, partnerLink: saved ?? "" });
     setAsk(false);
-    if (id) surface(id);
+    if (id) {
+      surface(id);
+      return;
+    }
+    // At the cap the door must never answer with silence (Oscar's audit, Nov 14 2026): first revive a
+    // dormant slot — a paused tracker holding no dates and no day-logs carries nothing to lose — and
+    // only when every slot genuinely works, say so out loud.
+    const dormant = cycles.find((item) => !item.enabled && item.starts.length === 0 && Object.keys(item.days).length === 0);
+    if (dormant) {
+      setCycle({ perspective: "partner", partnerName: saved ?? trimmed, partnerLink: saved ?? "", enabled: true }, dormant.id);
+      surface(dormant.id);
+      return;
+    }
+    showToast(fill(t("cyFullToast"), { name: trimmed }));
   };
   return (
     <>

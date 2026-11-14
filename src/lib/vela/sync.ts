@@ -14,7 +14,8 @@
 import { create } from "zustand";
 import { forgetUser, getClient, lastUser, pullVault, pushVault, rememberUser, userFromSession, type CloudUser, type RemoteVault } from "./cloud";
 import { cloudConfigured } from "./supabase-config";
-import { BACKUP_KIND, currentKey, journalFromUnknown, mergeJournals, useJournal, type CloudPhase } from "./store";
+import { BACKUP_KIND, currentKey, journalFromUnknown, mergeDroppedCycles, mergeJournals, useJournal, type CloudPhase } from "./store";
+import { STR } from "./copy";
 import type { Journal } from "./types";
 import { open, openWithCandidates, seal } from "./vault-crypto";
 import { readSync, writeSync, type SyncMeta } from "./vault-db";
@@ -378,8 +379,10 @@ export async function adoptRemotePassphrase(passphrase: string): Promise<boolean
   try {
     const { vk, data, used } = await openWithCandidates(passphrase, remote.envelope);
     const mine = useJournal.getState().journal;
-    const merged = mergeJournals(mine, journalFromUnknown(data, mine.settings.language));
+    const remoteJournal = journalFromUnknown(data, mine.settings.language);
+    const merged = mergeJournals(mine, remoteJournal);
     merged.settings = { ...merged.settings, language: mine.settings.language };
+    const droppedCycles = mergeDroppedCycles(mine, remoteJournal, merged);
     hold = true;
     try {
       await useJournal.getState().rekey(vk, used);
@@ -387,6 +390,7 @@ export async function adoptRemotePassphrase(passphrase: string): Promise<boolean
     } finally {
       hold = false;
     }
+    if (droppedCycles > 0) useJournal.getState().showToast(STR[mine.settings.language].cyMergeFull);
     meta.baseRevision = remote.revision;
     meta.dirty = true;
     saveMeta();

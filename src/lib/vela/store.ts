@@ -9,7 +9,7 @@ import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
 import { runMigrations } from "./migrations";
 import type { Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings, TabId } from "./types";
-import type { Lang } from "./copy";
+import { STR, type Lang } from "./copy";
 import { claimGrace, dropGrace, parkKey } from "./grace";
 import { appLockOn, clearSeen, gateAsking, gateReady, gateUnavailable, lockAfterMs, markSeen, migrateLock, pickerJustOpened, quietResume } from "./app-lock";
 import { lastUser } from "./cloud";
@@ -280,6 +280,20 @@ export function partnerRemoved(name: string, deleted: Record<string, number> | u
   const key = partnerKey(name);
   const off = deleted?.[PARTNER_OFF + key] ?? 0;
   return off > 0 && off > (deleted?.[PARTNER_ON + key] ?? 0);
+}
+
+/** Trackers the cap left behind in a merge: ids present on either side but absent from the result.
+    A merge that drops a followed cycle must say so (the audit's silence rule, Nov 14 2026). */
+export function mergeDroppedCycles(a: Journal, b: Journal, merged: Journal): number {
+  const kept = new Set(merged.settings.cycles.map((tracker) => tracker.id));
+  const seen = new Set<string>();
+  let dropped = 0;
+  for (const tracker of [...a.settings.cycles, ...b.settings.cycles]) {
+    if (seen.has(tracker.id)) continue;
+    seen.add(tracker.id);
+    if (!kept.has(tracker.id)) dropped += 1;
+  }
+  return dropped;
 }
 
 export function mergeJournals(local: Journal, remote: Journal): Journal {
@@ -1160,8 +1174,11 @@ export const useJournal = create<Store>((set, get) => {
       const legacy = get().legacy;
       if (!legacy || !get().unlocked) return 0;
       const before = new Set(get().journal.sessions.map((s) => s.id));
-      const merged = mergeJournals(get().journal, { ...legacy, profile: get().journal.profile });
+      const mine = get().journal;
+      const merged = mergeJournals(mine, { ...legacy, profile: get().journal.profile });
+      const droppedCycles = mergeDroppedCycles(mine, legacy, merged);
       commit({ ...merged, profile: get().journal.profile });
+      if (droppedCycles > 0) get().showToast(STR[get().journal.settings.language].cyMergeFull);
       await flushSaves();
       removeLegacyJournal();
       set({ legacy: null });

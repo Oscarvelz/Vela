@@ -23,27 +23,34 @@ export function AddTracker({ onAdded, startOpen = false, onClose, bare = false }
   useBackLayer(open && !onClose, () => setOpen(false), { name: "cycle-add" });
   const [kind, setKind] = useState<"self" | "partner">("partner");
   const [name, setName] = useState("");
-  if (cycles.length >= MAX_TRACKERS) return null;
   const hasSelf = cycles.some((tracker) => tracker.perspective === "self" && (tracker.enabled || tracker.starts.length > 0));
   const free = partners.filter((partner) => !cycles.some((tracker) => followsPartner(tracker, partner)));
+  // A dormant slot — paused, holding no dates and no day-logs — can be revived for the new person
+  // instead of pretending the cap is a wall; only a cap of genuinely working trackers says no,
+  // and it says it out loud (the audit's silence rule, Nov 14 2026).
+  const dormant = cycles.find((tracker) => !tracker.enabled && tracker.starts.length === 0 && Object.keys(tracker.days).length === 0);
+  const atCap = cycles.length >= MAX_TRACKERS && !dormant;
   const add = (perspective: "self" | "partner", partnerName = "", partnerLink = "") => {
-    const only = cycles.length === 1 ? cycles[0] : null;
     let id: string;
-    if (only && !only.enabled && only.starts.length === 0) {
-      // An unused, switched-off first cycle is simply reused instead of leaving an empty one behind.
-      setCycle({ enabled: true, perspective, partnerName, partnerLink }, only.id);
-      useJournal.getState().selectCycle(only.id);
-      id = only.id;
+    if (dormant) {
+      // An unused, switched-off cycle is simply reused instead of leaving an empty one behind.
+      setCycle({ enabled: true, perspective, partnerName, partnerLink }, dormant.id);
+      useJournal.getState().selectCycle(dormant.id);
+      id = dormant.id;
     } else {
       id = addTracker({ perspective, partnerName, partnerLink });
     }
-    if (id) onAdded(id);
+    if (!id) {
+      useJournal.getState().showToast(t("cyFullPlain"));
+      return;
+    }
+    onAdded(id);
     setOpen(false);
     setName("");
   };
   if (!open) {
     return (
-      <Button variant="ghost" className="w-full" onClick={() => { setKind(hasSelf ? "partner" : kind); setOpen(true); }} data-testid="cycle-add-tracker">
+      <Button variant="ghost" className="w-full" onClick={() => { if (atCap) { useJournal.getState().showToast(t("cyFullPlain")); return; } setKind(hasSelf ? "partner" : kind); setOpen(true); }} data-testid="cycle-add-tracker">
         + {t("cyAddPerson")}
       </Button>
     );

@@ -51,6 +51,7 @@ export function InsightsView() {
   const avgDur = Math.round(list.reduce((sum, session) => sum + (session.durationMins || 0), 0) / total);
   const activeDays = new Set(list.map((session) => session.date)).size;
   const bars = comparisonBars(list, compare, weekStart, lang, encounters);
+  const totalYears = new Set([...list.map((session) => session.date.slice(0, 4)), ...encounters.map((encounter) => encounter.startDate.slice(0, 4))]).size;
   const weekStartDay = startOfWeek(todayStr(), weekStart);
   const monthStart = `${todayStr().slice(0, 7)}-01`;
   const yearStart = `${todayStr().slice(0, 4)}-01-01`;
@@ -95,6 +96,26 @@ export function InsightsView() {
     const key = knownMethod(id);
     return key ? t(key as CopyKey) : id;
   };
+  // One pass over the sessions builds every row's carrier set; the meters below read from these
+  // maps instead of re-filtering the whole journal inside each row (the audit, Nov 14 2026).
+  const groups = useMemo(() => {
+    const byPartner = new Map<string, typeof list>();
+    const byPosition = new Map<string, typeof list>();
+    const byProblem = new Map<string, typeof list>();
+    const byMethod = new Map<string, typeof list>();
+    const push = (map: Map<string, typeof list>, key: string, session: (typeof list)[number]) => {
+      const rows = map.get(key);
+      if (rows) rows.push(session);
+      else map.set(key, [session]);
+    };
+    for (const session of list) {
+      push(byPartner, session.partnerName || "—solo—", session);
+      for (const id of session.positions) push(byPosition, id, session);
+      for (const id of session.problems) push(byProblem, id, session);
+      for (const id of session.contraception) push(byMethod, id, session);
+    }
+    return { byPartner, byPosition, byProblem, byMethod };
+  }, [list]);
   // A row is a window onto the history: tapping it opens History across the dates that carry it.
   const spanOf = (rows: typeof list) => {
     const dates = rows.map((row) => row.date).sort();
@@ -218,6 +239,9 @@ export function InsightsView() {
             </button>
           ))}
         </div>
+        {compare === "years" && bars.length > 0 && totalYears > bars.length ? (
+          <p className="mt-2 text-[11px] text-dim">{fill(t("insYearsWindow"), { n: bars.length })}</p>
+        ) : null}
         {bars.length > 0 ? (
           <button
             type="button"
@@ -285,7 +309,7 @@ export function InsightsView() {
             {partners.map(([name, count]) => {
               const solo = name === "—solo—";
               const label = solo ? t("soloMoment") : name;
-              const rows = list.filter((session) => (session.partnerName || "—solo—") === name);
+              const rows = groups.byPartner.get(name) ?? [];
               const avg = rows.reduce((sum, session) => sum + (session.overall || 0), 0) / rows.length;
               return (
                 <Meter
@@ -319,7 +343,7 @@ export function InsightsView() {
               <p className="text-sm text-dim">{t("noPositionsYet")}</p>
             ) : (
               positions.map(([name, count]) => {
-                const rows = list.filter((session) => session.positions.includes(name));
+                const rows = groups.byPosition.get(name) ?? [];
                 const avg = rows.reduce((sum, session) => sum + (session.overall || 0), 0) / (rows.length || 1);
                 return (
                   <Meter
@@ -345,7 +369,7 @@ export function InsightsView() {
             <p className="mt-2 text-sm text-dim">{fill(t("probShare"), { n: problemSessions, total })}</p>
             <div className="mt-3">
               {problemRows.map(([id, count]) => {
-                const rows = list.filter((session) => session.problems.includes(id));
+                const rows = groups.byProblem.get(id) ?? [];
                 const span = spanOf(rows);
                 return (
                   <Meter
@@ -390,7 +414,7 @@ export function InsightsView() {
             <h2 className="font-display text-2xl">{t("contraception")}</h2>
             <div className="mt-3">
               {methodRows.map(([id, count]) => {
-                const rows = list.filter((session) => session.contraception.includes(id));
+                const rows = groups.byMethod.get(id) ?? [];
                 const avg = rows.reduce((sum, session) => sum + (session.overall || 0), 0) / (rows.length || 1);
                 const span = spanOf(rows);
                 return (
