@@ -17,7 +17,8 @@ import {
 } from "./cycle";
 import { trackerForPartner, visibleTrackers, type CycleTracker } from "./cycle-trackers";
 import { firstOccurrences, longestStreak, sessionsSorted, timeBuckets, topCounts } from "./stats";
-import type { Session } from "./types";
+import type { RatingKey, Session } from "./types";
+import { voiceReading } from "./voices";
 import type { UpcomingDate } from "./anniversaries";
 
 export type AdvisorPerson = {
@@ -57,6 +58,15 @@ export type AdvisorReading = {
    *  rotating fact; the week's get a warm warning among the next-time lines.
    *  The Advisor congratulates the time — never the quality of the years. */
   dates: { today: UpcomingDate[]; soon: UpcomingDate[] };
+  /** The two voices (2.2.2, couple mode only): how the two readings of the
+   *  same moments compare — a distribution, never a grade. The Advisor never
+   *  arbitrates between them and never reports on a person's behavior. */
+  voices: {
+    paired: number;
+    sameOverall: number;
+    partnerName: string;
+    gap: { dial: RatingKey | "overall"; his: number; hers: number } | null;
+  } | null;
 };
 
 function dayDiff(from: string, to: string) {
@@ -68,6 +78,7 @@ export function readAdvisor(
   cycles: CycleTracker[],
   today = todayStr(),
   dates: UpcomingDate[] = [],
+  couple?: { partnerName: string },
 ): AdvisorReading {
   const list = sessionsSorted(sessions);
   const live = visibleTrackers(cycles).filter((tracker) => tracker.starts.length > 0);
@@ -209,6 +220,20 @@ export function readAdvisor(
     }
   }
 
+  /* ── The two voices: only in couple mode, only above real evidence ────── */
+  let voices: AdvisorReading["voices"] = null;
+  if (couple) {
+    const reading = voiceReading(list);
+    if (reading && reading.paired >= 4) {
+      voices = {
+        paired: reading.paired,
+        sameOverall: reading.sameOverall,
+        partnerName: couple.partnerName,
+        gap: reading.gap ? { dial: reading.gap.dial, his: reading.gap.his, hers: reading.gap.hers } : null,
+      };
+    }
+  }
+
   return {
     basis: { sessions: list.length, cycles: live.length },
     people,
@@ -219,5 +244,6 @@ export function readAdvisor(
       today: dates.filter((d) => d.daysUntil === 0),
       soon: dates.filter((d) => d.daysUntil >= 1 && d.daysUntil <= 7),
     },
+    voices,
   };
 }

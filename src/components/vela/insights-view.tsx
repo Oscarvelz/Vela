@@ -19,11 +19,60 @@ import {
 } from "@/lib/vela/stats";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { hiddenIn } from "@/lib/vela/anniversaries";
+import { ownerPerson, partnerPerson } from "@/lib/vela/people";
+import type { Session } from "@/lib/vela/types";
+import { voiceReading } from "@/lib/vela/voices";
 import { Sparkle } from "./mark";
 import { CycleStats, EachCycleCard } from "./cycle-card";
 import { AdvisorCard } from "./advisor-card";
 import { Card, RatingIcon } from "./ui";
 import { cn } from "@/lib/cn";
+
+/** Both voices (2.2.2, couple mode): per dial, the two averages stand side by
+ *  side — his bar, her bar, and how often the two readings were the same
+ *  number. A distribution, never a compatibility grade. */
+function TwoVoicesCard({ sessions }: { sessions: Session[] }) {
+  const t = useT();
+  const coupleMode = useJournal((s) => s.journal.settings.coupleMode);
+  const people = useJournal((s) => s.journal.people);
+  const profileName = useJournal((s) => s.journal.profile?.displayName ?? "");
+  const reading = useMemo(() => voiceReading(sessions), [sessions]);
+  if (!coupleMode || !reading) return null;
+  const hisName = ownerPerson(people)?.name ?? profileName;
+  const herName = partnerPerson(people)?.name ?? "";
+  const rows = reading.rows.filter((row) => row.both > 0);
+  if (!rows.length) return null;
+  return (
+    <Card className="ag-glass min-w-0 overflow-hidden" data-testid="two-voices-card">
+      <h2 className="font-display text-2xl">{t("tvTitle")}</h2>
+      <p className="mt-1 text-sm leading-relaxed text-dim">
+        {fill(t("tvLead"), { n: reading.paired })} {fill(t("tvSame"), { k: reading.sameOverall, n: rows[0].both })}
+      </p>
+      <div className="mt-3 space-y-3.5">
+        {rows.map((row) => (
+          <div key={row.dial}>
+            <div className="flex items-baseline justify-between gap-2 text-sm">
+              <span>{t(row.dial)}</span>
+              <span className="text-xs text-dim">{fill(t("tvRowSame"), { k: row.same, n: row.both })}</span>
+            </div>
+            {[
+              { name: hisName, value: row.his, cls: "bg-[var(--ag-accent)]" },
+              { name: herName, value: row.hers, cls: "bg-dim/50" },
+            ].map((bar, i) => (
+              <div key={i} className="mt-1 flex items-center gap-2">
+                <span className="w-16 shrink-0 truncate text-xs text-dim">{bar.name}</span>
+                <div className="h-1.5 min-w-0 flex-1 rounded-full bg-surface-2">
+                  <div className={cn("h-full rounded-full", bar.cls)} style={{ width: `${(bar.value / 5) * 100}%` }} />
+                </div>
+                <span className="w-7 shrink-0 text-right text-xs font-semibold">{bar.value.toFixed(1)}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 export function InsightsView() {
   const t = useT();
@@ -285,6 +334,7 @@ export function InsightsView() {
             </div>
           </Card>
         ) : null}
+        <TwoVoicesCard sessions={sessions} />
         <Card className="ag-glass min-w-0 overflow-hidden">
           <h2 className="font-display text-2xl leading-tight break-words">
             {t("busiestDay")}: <span className="text-accent">{wdName}</span>

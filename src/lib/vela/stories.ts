@@ -114,7 +114,9 @@ export function findStories(sessions: Session[], today: string, mutedRaw?: Parti
       n: target.n,
       count: visible.length,
       partners,
-      bestOverall: Math.max(0, ...visible.map((s) => s.overall)),
+      // A memory's glow is the highest reading anyone gave it (2.2.2): in
+      // couple mode her voice can carry a moment his read lower.
+      bestOverall: Math.max(0, ...visible.map((s) => Math.max(s.overall, s.partnerVoice?.overall ?? 0))),
     });
   }
   return stories;

@@ -11,6 +11,7 @@ import { fmtDate, fmtDuration, fmtShort, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { readAdvisor, type AdvisorLine } from "@/lib/vela/advisor";
 import { hiddenIn, upcomingDates, type UpcomingDate } from "@/lib/vela/anniversaries";
+import { partnerPerson } from "@/lib/vela/people";
 import { useJournal } from "@/lib/vela/store";
 import { Sparkle } from "./mark";
 import { phaseKey } from "./cycle-card";
@@ -60,7 +61,13 @@ export function AdvisorCard() {
     () => upcomingDates({ anniversaries: anniversariesRaw, children: childrenRaw, archivedPeople }, todayStr()),
     [anniversariesRaw, childrenRaw, archivedPeople],
   );
-  const reading = useMemo(() => readAdvisor(sessions, cycles, todayStr(), upcoming), [sessions, cycles, upcoming]);
+  const coupleMode = useJournal((s) => s.journal.settings.coupleMode);
+  const peopleList = useJournal((s) => s.journal.people);
+  const partner = partnerPerson(peopleList);
+  const reading = useMemo(
+    () => readAdvisor(sessions, cycles, todayStr(), upcoming, coupleMode && partner ? { partnerName: partner.name } : undefined),
+    [sessions, cycles, upcoming, coupleMode, partner],
+  );
 
   /* The Advisor's voice for the dates (2.1.25): it congratulates the time,
      never the quality of the years, and it always uses the person's name —
@@ -114,8 +121,8 @@ export function AdvisorCard() {
     }
   };
 
-  const { people, last, lines, fact, basis, dates } = reading;
-  if (!people.length && !last && !lines.length && !fact && !dates.today.length && !dates.soon.length) return null;
+  const { people, last, lines, fact, basis, dates, voices } = reading;
+  if (!people.length && !last && !lines.length && !fact && !dates.today.length && !dates.soon.length && !voices) return null;
   // A date that is today is the day's news: the rotating fact stands down.
   const shownFact = dates.today.length ? null : fact;
   const lastSession = last?.session;
@@ -247,6 +254,25 @@ export function AdvisorCard() {
               </p>
             ))}
           </div>
+        </>
+      ) : null}
+
+      {voices ? (
+        <>
+          <Subhead>{t("tvTitle")}</Subhead>
+          <p className="mt-2 flex gap-2 text-sm leading-relaxed" data-testid="advisor-voices">
+            <Sparkle className="mt-0.5 size-3.5 shrink-0 text-accent" />
+            <span className="min-w-0">
+              {voices.gap
+                ? fill(t("advVoicesGap"), {
+                    dial: lc(t(voices.gap.dial === "overall" ? "overall" : voices.gap.dial)),
+                    a: voices.gap.his.toFixed(1),
+                    name: voices.partnerName,
+                    b: voices.gap.hers.toFixed(1),
+                  })
+                : fill(t("advVoicesSame"), { k: voices.sameOverall, n: voices.paired })}
+            </span>
+          </p>
         </>
       ) : null}
 

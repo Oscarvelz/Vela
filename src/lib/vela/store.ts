@@ -1615,9 +1615,12 @@ export const useJournal = create<Store>((set, get) => {
     disableCoupleMode: () => {
       // The people and their voices stay — history is not unwritten. Only the
       // mode turns off: no new voices are asked for until it is on again.
-      const settings = { ...get().journal.settings };
+      // The whole settings object is committed: patchSettings merges, and a
+      // merge can never delete a key.
+      const journal = get().journal;
+      const settings = { ...journal.settings };
       delete settings.coupleMode;
-      patchSettings(settings);
+      commit({ ...journal, settings });
     },
     savePartnerVoice: (sessionId, voice) => {
       const journal = get().journal;
