@@ -57,6 +57,15 @@ export function longestStreak(sessions: Session[]) {
   return best;
 }
 
+/** The session that first introduced each position into the whole history. */
+export function firstOccurrences(sessions: Session[]) {
+  const first = new Map<string, Session>();
+  for (const session of sessionsSorted(sessions).reverse()) {
+    for (const position of session.positions) if (!first.has(position)) first.set(position, session);
+  }
+  return first;
+}
+
 export function topCounts(values: string[], n = 99): [string, number][] {
   const map = new Map<string, number>();
   for (const value of values) {

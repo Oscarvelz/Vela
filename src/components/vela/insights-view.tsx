@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
-import { placeLabel, positionLabel } from "@/lib/vela/catalog";
+import { knownMethod, knownProblem, placeLabel, positionLabel } from "@/lib/vela/catalog";
+import type { CopyKey } from "@/lib/vela/copy";
+import { fill } from "@/lib/vela/cycle-words";
 import { fmtDate, fmtDuration, localeOf, addDays, startOfWeek, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import {
   comparisonBars,
+  firstOccurrences,
   longestStreak,
   monthCount,
   sessionsSorted,
@@ -80,6 +83,27 @@ export function InsightsView() {
   const partners = topCounts(list.map((session) => session.partnerName || "—solo—"));
   const places = topCounts(list.map((session) => session.place));
   const positions = topCounts(list.flatMap((session) => session.positions));
+  // Problems and contraception are recorded on every session; the statistics now read them too (Oscar, Nov 14 2026).
+  const problemRows = topCounts(list.flatMap((session) => session.problems));
+  const problemSessions = list.filter((session) => session.problems.length).length;
+  const methodRows = topCounts(list.flatMap((session) => session.contraception));
+  const problemLabel = (id: string) => {
+    const key = knownProblem(id);
+    return key ? t(key as CopyKey) : id;
+  };
+  const methodLabel = (id: string) => {
+    const key = knownMethod(id);
+    return key ? t(key as CopyKey) : id;
+  };
+  // A row is a window onto the history: tapping it opens History across the dates that carry it.
+  const spanOf = (rows: typeof list) => {
+    const dates = rows.map((row) => row.date).sort();
+    return dates.length ? ([dates[0], dates[dates.length - 1]] as const) : null;
+  };
+  // Positions whose first appearance in the whole history is recent — the journal's new territory.
+  const newPositions = Array.from(firstOccurrences(list).entries())
+    .filter(([, session]) => session.date >= addDays(todayStr(), -30))
+    .sort((a, b) => b[1].date.localeCompare(a[1].date));
 
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
@@ -268,6 +292,79 @@ export function InsightsView() {
             )}
           </div>
         </Card>
+        {problemRows.length ? (
+          <Card className="ag-glass min-w-0 overflow-hidden">
+            <h2 className="font-display text-2xl">{t("problemsTitle")}</h2>
+            <p className="mt-2 text-sm text-dim">{fill(t("probShare"), { n: problemSessions, total })}</p>
+            <div className="mt-3">
+              {problemRows.map(([id, count]) => {
+                const rows = list.filter((session) => session.problems.includes(id));
+                const span = spanOf(rows);
+                return (
+                  <Meter
+                    key={id}
+                    label={problemLabel(id)}
+                    value={count}
+                    max={Math.max(1, ...problemRows.map((row) => row[1]))}
+                    sub={`${t("last")}: ${rows[0] ? fmtDate(rows[0].date, lang) : ""}`}
+                    onTap={span ? () => openRange(span[0], span[1]) : undefined}
+                  />
+                );
+              })}
+            </div>
+          </Card>
+        ) : null}
+        {methodRows.length ? (
+          <Card className="ag-glass min-w-0 overflow-hidden">
+            <h2 className="font-display text-2xl">{t("contraception")}</h2>
+            <div className="mt-3">
+              {methodRows.map(([id, count]) => {
+                const rows = list.filter((session) => session.contraception.includes(id));
+                const avg = rows.reduce((sum, session) => sum + (session.overall || 0), 0) / (rows.length || 1);
+                const span = spanOf(rows);
+                return (
+                  <Meter
+                    key={id}
+                    label={methodLabel(id)}
+                    value={count}
+                    max={Math.max(1, ...methodRows.map((row) => row[1]))}
+                    aside={
+                      <span className="inline-flex items-center gap-1">
+                        {count} · {t("avg")} {avg.toFixed(1)}
+                        <RatingIcon style={ratingStyle} className="size-3.5" />
+                      </span>
+                    }
+                    onTap={span ? () => openRange(span[0], span[1]) : undefined}
+                  />
+                );
+              })}
+            </div>
+          </Card>
+        ) : null}
+        {newPositions.length ? (
+          <Card className="ag-glass min-w-0 overflow-hidden">
+            <h2 className="font-display text-2xl">{t("insNewPositions")}</h2>
+            <div className="mt-3 space-y-3">
+              {newPositions.map(([name, session]) => (
+                <button
+                  key={name}
+                  type="button"
+                  className="block w-full text-left active:opacity-70"
+                  onClick={() => openRange(session.date, session.date)}
+                >
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate text-base font-semibold">{positionLabel(lang, name)}</span>
+                    <span className="shrink-0 text-sm font-medium text-accent">{t("insFirstTime")}</span>
+                  </span>
+                  <span className="mt-0.5 block text-xs text-dim">
+                    {fmtDate(session.date, lang)}
+                    {session.partnerName ? ` · ${session.partnerName}` : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </Card>
+        ) : null}
         <Card className="ag-glass ag-aurora min-w-0 overflow-hidden">
           <h2 className="flex items-center gap-2 font-display text-2xl">
             <Sparkle className="size-4 text-accent" />
@@ -294,6 +391,15 @@ export function InsightsView() {
             <StoryLine>
               {t("funAvgA")} <b>{avgGlow.toFixed(1)}</b> {t("funAvgB")}
             </StoryLine>
+            {problemSessions ? (
+              <StoryLine>
+                {fill(t("storyProblem"), {
+                  n: problemSessions,
+                  total,
+                  top: problemLabel(problemRows[0][0]).replace(/^./, (c) => c.toLowerCase()),
+                })}
+              </StoryLine>
+            ) : null}
           </div>
         </Card>
       </div>
@@ -353,16 +459,18 @@ function Meter({
   max,
   sub,
   aside,
+  onTap,
 }: {
   label: string;
   value: number;
   max: number;
   sub?: string;
   aside?: ReactNode;
+  onTap?: () => void;
 }) {
   const width = Math.max(value > 0 ? 8 : 0, Math.round((value / max) * 100));
-  return (
-    <div className="mb-4 min-w-0 max-w-full">
+  const inner = (
+    <>
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
         <span className="min-w-0 truncate text-base font-semibold">{label}</span>
         <span className="shrink-0 text-sm text-dim tabular-nums">{aside ?? value}</span>
@@ -371,6 +479,14 @@ function Meter({
         <div className="ag-liquid h-full max-w-full rounded-full" style={{ width: `${width}%` }} />
       </div>
       {sub ? <p className="mt-1 text-xs text-dim">{sub}</p> : null}
-    </div>
+    </>
   );
+  if (onTap) {
+    return (
+      <button type="button" onClick={onTap} className="mb-4 block w-full min-w-0 max-w-full text-left active:opacity-70">
+        {inner}
+      </button>
+    );
+  }
+  return <div className="mb-4 min-w-0 max-w-full">{inner}</div>;
 }

@@ -50,6 +50,19 @@ export function knownProblem(id: string) {
   return PROBLEMS.find((item) => item[0] === id)?.[1] ?? null;
 }
 
+export const METHODS = [
+  ["pullout", "methodPullout"],
+  ["pill", "methodPill"],
+  ["condom", "methodCondom"],
+  ["iud", "methodIud"],
+  ["implant", "methodImplant"],
+  ["none", "methodNone"],
+] as const;
+
+export function knownMethod(id: string) {
+  return METHODS.find((item) => item[0] === id)?.[1] ?? null;
+}
+
 const PLACE_ES: Record<string, string> = {
   Bedroom: "Dormitorio",
   "Living room": "Sala de estar",
