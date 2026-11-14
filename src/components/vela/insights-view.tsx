@@ -20,6 +20,7 @@ import {
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { Sparkle } from "./mark";
 import { CycleStats, EachCycleCard } from "./cycle-card";
+import { AdvisorCard } from "./advisor-card";
 import { Card, RatingIcon } from "./ui";
 import { cn } from "@/lib/cn";
 
@@ -257,6 +258,7 @@ export function InsightsView() {
           </button>
         ) : null}
       </Card>
+      <AdvisorCard />
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
         {dials.length ? (
           <Card className="ag-glass min-w-0 overflow-hidden">
