@@ -25,6 +25,8 @@ import { THEMES } from "@/lib/vela/catalog";
 import { fmtDate, fmtShort } from "@/lib/vela/dates";
 import { cleanMuted } from "@/lib/vela/stories";
 import { cleanArchived } from "@/lib/vela/anniversaries";
+import { ownerPerson, partnerPerson } from "@/lib/vela/people";
+import { partnerKey } from "@/lib/vela/encounters";
 import type { ArchivedPerson } from "@/lib/vela/types";
 import { AppLockSettings, PassphraseNote, useLockBadge } from "./bio";
 import { LockDiagnostics } from "./lock-diag";
@@ -271,6 +273,9 @@ function ArchiveSection() {
   const unarchivePerson = useJournal((s) => s.unarchivePerson);
   const setArchivedPref = useJournal((s) => s.setArchivedPref);
   const deletePersonForever = useJournal((s) => s.deletePersonForever);
+  const coupleMode = useJournal((s) => s.journal.settings.coupleMode);
+  const diaryPeople = useJournal((s) => s.journal.people);
+  const proposeDeletion = useJournal((s) => s.proposeDeletion);
   const showToast = useJournal((s) => s.showToast);
   const [deleteAsk, setDeleteAsk] = useState<ArchivedPerson | null>(null);
   const [typed, setTyped] = useState("");
@@ -342,8 +347,18 @@ function ArchiveSection() {
         confirmDisabled={!deleteAsk || typed.trim() !== deleteAsk.name}
         onConfirm={() => {
           if (deleteAsk) {
-            deletePersonForever(deleteAsk.name);
-            showToast(fill(t("arcDeletedToast"), { name: deleteAsk.name }));
+            // In a couple diary, erasing the partner — and everything of
+            // theirs — takes both (2.2.3): the typed door deliberates, then
+            // it becomes a proposal the partner must sign.
+            const partner = partnerPerson(diaryPeople);
+            const owner = ownerPerson(diaryPeople);
+            if (coupleMode && partner && owner && partnerKey(deleteAsk.name) === partnerKey(partner.name)) {
+              proposeDeletion({ kind: "delete-person", targetLabel: deleteAsk.name }, owner.id);
+              showToast(fill(t("gvProposedToast"), { name: partner.name }));
+            } else {
+              deletePersonForever(deleteAsk.name);
+              showToast(fill(t("arcDeletedToast"), { name: deleteAsk.name }));
+            }
           }
           setDeleteAsk(null);
           setTyped("");

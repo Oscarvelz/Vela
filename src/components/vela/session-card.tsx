@@ -13,7 +13,7 @@ import { Button, ConfirmDialog, RatingIcon } from "./ui";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { PartnerCycleDoor, PhaseDot } from "./cycle-card";
 import { partnerKey } from "@/lib/vela/encounters";
-import { partnerPerson } from "@/lib/vela/people";
+import { ownerPerson, partnerPerson } from "@/lib/vela/people";
 import { VoiceSheet } from "./voice-sheet";
 
 const METHOD_KEY = {
@@ -37,6 +37,7 @@ export function SessionCard({ session, density = "list" }: { session: Session; d
   const confirm = useJournal((s) => s.confirmDeleteId === session.id);
   const setConfirm = useJournal((s) => s.setConfirmDelete);
   const remove = useJournal((s) => s.deleteSession);
+  const proposeDeletion = useJournal((s) => s.proposeDeletion);
   const addRound = useJournal((s) => s.addRound);
   const openEdit = useJournal((s) => s.openEdit);
   const showToast = useJournal((s) => s.showToast);
@@ -294,15 +295,39 @@ export function SessionCard({ session, density = "list" }: { session: Session; d
             setAskRound(false);
           }}
         />
-        <ConfirmDialog
-          open={confirm}
-          title={t("deleteConfirmQ")}
-          name={session.partnerName || undefined}
-          confirmLabel={t("yesDelete")}
-          cancelLabel={t("keep")}
-          onCancel={() => setConfirm(null)}
-          onConfirm={() => remove(session.id)}
-        />
+        {coupleMode && voicePartner ? (
+          <ConfirmDialog
+            open={confirm}
+            title={t("gvProposeTitle")}
+            confirmLabel={t("gvProposeBtn")}
+            cancelLabel={t("keep")}
+            onCancel={() => setConfirm(null)}
+            onConfirm={() => {
+              proposeDeletion(
+                {
+                  kind: "delete-session",
+                  targetId: session.id,
+                  targetLabel: `${fmtDate(session.date, lang)} · ${session.partnerName}`,
+                },
+                ownerPerson(people)?.id ?? "p-owner",
+              );
+              showToast(fill(t("gvProposedToast"), { name: voicePartner.name }));
+              setConfirm(null);
+            }}
+          >
+            <p className="text-sm leading-relaxed text-dim">{fill(t("gvProposeBody"), { name: voicePartner.name })}</p>
+          </ConfirmDialog>
+        ) : (
+          <ConfirmDialog
+            open={confirm}
+            title={t("deleteConfirmQ")}
+            name={session.partnerName || undefined}
+            confirmLabel={t("yesDelete")}
+            cancelLabel={t("keep")}
+            onCancel={() => setConfirm(null)}
+            onConfirm={() => remove(session.id)}
+          />
+        )}
       </article>
     </div>
   );

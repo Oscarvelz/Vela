@@ -7,8 +7,10 @@ import { useState } from "react";
 import { fill } from "@/lib/vela/cycle-words";
 import { fmtDate, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
-import { hashPin, ownerPerson, partnerPerson } from "@/lib/vela/people";
+import { hashPin, ownerPerson, partnerPerson, verifyPin, WIPE_COOLING_MS } from "@/lib/vela/people";
 import { useJournal } from "@/lib/vela/store";
+import { signOut } from "@/lib/vela/sync";
+import type { Proposal } from "@/lib/vela/types";
 import { Button, ConfirmDialog, fieldClass } from "./ui";
 import { cn } from "@/lib/cn";
 
@@ -33,6 +35,12 @@ export function CoupleSection() {
   const [pinB, setPinB] = useState("");
   const [busy, setBusy] = useState(false);
   const [askOff, setAskOff] = useState(false);
+  const [askWipe, setAskWipe] = useState(false);
+  const [askLeave, setAskLeave] = useState(false);
+  const proposals = useJournal((s) => s.journal.proposals);
+  const proposeDeletion = useJournal((s) => s.proposeDeletion);
+  const exportJSON = useJournal((s) => s.exportJSON);
+  const showToast = useJournal((s) => s.showToast);
 
   if (coupleMode) {
     const owner = ownerPerson(people);
@@ -51,8 +59,22 @@ export function CoupleSection() {
             <li>{t("cpLedgerExit")}</li>
           </ul>
         </div>
-        <Button variant="ghost" className="min-h-10 px-3 text-sm" onClick={() => setAskOff(true)}>
-          {t("cpTurnOff")}
+        <ProposalsInbox proposals={proposals ?? []} />
+        <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" className="min-h-10 px-3 text-sm" onClick={() => setAskOff(true)}>
+            {t("cpTurnOff")}
+          </Button>
+          <Button variant="ghost" className="min-h-10 px-3 text-sm" data-testid="couple-leave" onClick={() => setAskLeave(true)}>
+            {t("gvLeave")}
+          </Button>
+        </div>
+        <Button
+          variant="ghost"
+          className="min-h-10 px-3 text-sm text-[var(--ag-danger,#e0655f)]"
+          data-testid="couple-propose-wipe"
+          onClick={() => setAskWipe(true)}
+        >
+          {t("gvProposeWipe")}
         </Button>
         <ConfirmDialog
           open={askOff}
@@ -66,6 +88,43 @@ export function CoupleSection() {
           }}
         >
           <p className="text-sm leading-relaxed text-dim">{t("cpTurnOffBody")}</p>
+        </ConfirmDialog>
+        <ConfirmDialog
+          open={askWipe}
+          title={t("gvPropWipe")}
+          confirmLabel={t("gvProposeBtn")}
+          cancelLabel={t("cancelBtn")}
+          confirmTone="danger"
+          onCancel={() => setAskWipe(false)}
+          onConfirm={() => {
+            setAskWipe(false);
+            if (owner && partner) {
+              proposeDeletion({ kind: "wipe-vault" }, owner.id);
+              showToast(fill(t("gvProposedToast"), { name: partner.name }));
+            }
+          }}
+        >
+          <p className="text-sm leading-relaxed text-dim">{t("gvProposeWipeBody")}</p>
+        </ConfirmDialog>
+        <ConfirmDialog
+          open={askLeave}
+          title={t("gvLeaveTitle")}
+          confirmLabel={t("gvLeaveBtn")}
+          cancelLabel={t("cancelBtn")}
+          confirmTone="danger"
+          onCancel={() => setAskLeave(false)}
+          onConfirm={() => {
+            setAskLeave(false);
+            // The exit is always open (the law): your copy first, then this
+            // device forgets the journal. The diary itself is not erased.
+            void (async () => {
+              await exportJSON();
+              disableCoupleMode();
+              await signOut({ forget: true });
+            })();
+          }}
+        >
+          <p className="text-sm leading-relaxed text-dim">{t("gvLeaveBody")}</p>
         </ConfirmDialog>
       </div>
     );
@@ -191,6 +250,138 @@ export function CoupleSection() {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Shared decisions (2.2.3): the proposals inbox. What belongs to both is
+ *  erased only by both — approval is signed with the OTHER person's PIN
+ *  (the proposer can never consent to their own proposal), while declining
+ *  or cancelling needs no signature: the safe direction is always one tap,
+ *  and a refused proposal leaves no scar. */
+function ProposalsInbox({ proposals }: { proposals: Proposal[] }) {
+  const t = useT();
+  const lang = useLang();
+  const people = useJournal((s) => s.journal.people);
+  const decideProposal = useJournal((s) => s.decideProposal);
+  const cancelProposal = useJournal((s) => s.cancelProposal);
+  const executeWipe = useJournal((s) => s.executeWipe);
+  const [signing, setSigning] = useState<string | null>(null);
+  const [pin, setPin] = useState("");
+  const [pinBad, setPinBad] = useState(false);
+
+  const nameOf = (id: string) => people?.find((p) => p.id === id)?.name ?? "";
+  const title = (p: Proposal) =>
+    p.kind === "wipe-vault"
+      ? t("gvPropWipe")
+      : fill(t(p.kind === "delete-session" ? "gvPropSession" : p.kind === "delete-encounter" ? "gvPropEncounter" : "gvPropPerson"), {
+          label: p.targetLabel ?? "",
+        });
+
+  return (
+    <div data-testid="proposals-inbox">
+      <p className="text-xs font-semibold uppercase tracking-wide text-dim">{t("gvInbox")}</p>
+      {proposals.length === 0 ? (
+        <p className="mt-1.5 text-sm leading-relaxed text-dim">{t("gvEmpty")}</p>
+      ) : (
+        <div className="mt-2 space-y-2.5">
+          {proposals.map((p) => {
+            const other = people?.find((person) => person.id !== p.proposedBy);
+            const readyAt = p.decidedAt ? p.decidedAt + WIPE_COOLING_MS : 0;
+            const canExecute = p.state === "approved" && Date.now() >= readyAt;
+            return (
+              <div key={p.id} className="rounded-2xl border border-border px-3.5 py-3" data-testid="proposal-row">
+                <p className="text-sm font-medium leading-snug">{title(p)}</p>
+                <p className="mt-0.5 text-xs text-dim">{fill(t("gvProposedBy"), { name: nameOf(p.proposedBy) })}</p>
+                {p.state === "approved" ? (
+                  <>
+                    <p className="mt-1.5 text-sm leading-relaxed text-dim">
+                      {fill(t("gvWipeReady"), { date: fmtDate(new Date(readyAt).toISOString().slice(0, 10), lang) })}
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <Button variant="ghost" className="min-h-10 px-3 text-sm" onClick={() => cancelProposal(p.id)}>
+                        {t("gvCancel")}
+                      </Button>
+                      <Button
+                        className="min-h-10 flex-1 px-3 text-sm"
+                        disabled={!canExecute}
+                        data-testid="proposal-execute"
+                        onClick={() => executeWipe(p.id)}
+                      >
+                        {t("gvExecute")}
+                      </Button>
+                    </div>
+                  </>
+                ) : signing === p.id ? (
+                  <div className="mt-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-dim">
+                      {fill(t("gvSignPin"), { name: other?.name ?? "" })}
+                    </label>
+                    <input
+                      className={cn(fieldClass, "mt-1")}
+                      value={pin}
+                      inputMode="numeric"
+                      type="password"
+                      autoComplete="off"
+                      onChange={(e) => {
+                        setPin(e.target.value.replace(/\D/g, "").slice(0, 6));
+                        setPinBad(false);
+                      }}
+                    />
+                    {pinBad ? <p className="mt-1 text-xs text-[var(--ag-danger)]">{t("cpPinWrong")}</p> : null}
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        variant="ghost"
+                        className="min-h-10 px-3 text-sm"
+                        onClick={() => {
+                          setSigning(null);
+                          setPin("");
+                        }}
+                      >
+                        {t("cancelBtn")}
+                      </Button>
+                      <Button
+                        className="min-h-10 flex-1 px-3 text-sm"
+                        data-testid="proposal-approve"
+                        disabled={!other?.pin || pin.length < 4}
+                        onClick={() => {
+                          if (!other?.pin) return;
+                          void (async () => {
+                            if (await verifyPin(other, pin)) {
+                              decideProposal(p.id, other.id, true);
+                              setSigning(null);
+                              setPin("");
+                            } else setPinBad(true);
+                          })();
+                        }}
+                      >
+                        {t("gvApprove")}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex gap-2">
+                    <Button variant="ghost" className="min-h-10 px-3 text-sm" onClick={() => cancelProposal(p.id)}>
+                      {t("gvCancel")}
+                    </Button>
+                    <Button
+                      className="min-h-10 flex-1 px-3 text-sm"
+                      data-testid="proposal-sign"
+                      onClick={() => {
+                        setSigning(p.id);
+                        setPin("");
+                        setPinBad(false);
+                      }}
+                    >
+                      {t("gvApprove")}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

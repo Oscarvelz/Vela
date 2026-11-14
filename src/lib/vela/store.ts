@@ -9,9 +9,9 @@ import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
 import { cleanMuted } from "./stories";
 import { cleanAnniversaries, cleanArchived, cleanChildren } from "./anniversaries";
-import { cleanPeople, mergePeople, newPersonId } from "./people";
+import { cleanPeople, cleanProposals, mergePeople, newPersonId, newProposalId, PROPOSAL_TTL_MS, WIPE_COOLING_MS } from "./people";
 import { runMigrations } from "./migrations";
-import type { Anniversary, ChildEntry, Draft, Encounter, Journal, JournalWipe, Person, Profile, Session, Settings, SpeakAs, TabId } from "./types";
+import type { Anniversary, ChildEntry, Draft, Encounter, Journal, JournalWipe, Person, Profile, Proposal, Session, Settings, SpeakAs, TabId } from "./types";
 import { STR, type Lang } from "./copy";
 import { claimGrace, dropGrace, parkKey } from "./grace";
 import { appLockOn, clearSeen, gateAsking, gateReady, gateUnavailable, lockAfterMs, markSeen, migrateLock, pickerJustOpened, quietResume } from "./app-lock";
@@ -290,6 +290,7 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       deleted: cleanDeleted(data.deleted),
       migrations: Array.isArray(data.migrations) ? data.migrations.filter((m): m is string => typeof m === "string") : [],
       ...(cleanPeople(data.people).length ? { people: cleanPeople(data.people) } : {}),
+      ...(cleanProposals(data.proposals).length ? { proposals: cleanProposals(data.proposals) } : {}),
     };
   } catch {
     return empty;
@@ -400,6 +401,18 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     migrations: [...new Set([...(local.migrations ?? []), ...(remote.migrations ?? [])])],
     // People merge by id, per person (2.2) — never wholesale like settings.
     ...(mergePeople(local.people, remote.people) ? { people: mergePeople(local.people, remote.people) } : {}),
+    // Proposals union by id (2.2.3): the copy that knows more about a
+    // proposal (decided beats proposed) wins; a tombstoned proposal — one
+    // already decided, declined, cancelled or executed — never resurfaces.
+    ...(() => {
+      const byId = new Map<string, Proposal>();
+      for (const p of [...(local.proposals ?? []), ...(remote.proposals ?? [])]) {
+        const prev = byId.get(p.id);
+        if (!prev || (p.decidedAt ?? p.proposedAt) >= (prev.decidedAt ?? prev.proposedAt)) byId.set(p.id, p);
+      }
+      const merged = [...byId.values()].filter((p) => !(deleted[p.id] >= p.proposedAt));
+      return merged.length ? { proposals: merged } : {};
+    })(),
     updatedAt: Math.max(local.updatedAt, remote.updatedAt),
   };
 }
@@ -794,6 +807,12 @@ type Store = {
   savePartnerVoice: (sessionId: string, voice: Omit<import("./types").Voice, "notes" | "updatedAt">) => void;
   /** Her voice is hers: she (or the hand holding her PIN) may erase it alone. */
   deletePartnerVoice: (sessionId: string) => void;
+  /** The shared-erasure government (2.2.3): propose, decide, cancel, and —
+   *  for an approved wipe whose cooling-off has passed — carry out. */
+  proposeDeletion: (input: { kind: Proposal["kind"]; targetId?: string; targetLabel?: string }, by: string) => string;
+  decideProposal: (id: string, by: string, approve: boolean) => void;
+  cancelProposal: (id: string) => void;
+  executeWipe: (id: string) => void;
   archivePerson: (name: string) => void;
   unarchivePerson: (name: string) => void;
   setArchivedPref: (name: string, key: "showInHistory" | "countInStats" | "resurface", value: boolean) => void;
@@ -1650,6 +1669,75 @@ export const useJournal = create<Store>((set, get) => {
         return next;
       });
       commit({ ...journal, sessions });
+    },
+    proposeDeletion: (input, by) => {
+      const journal = get().journal;
+      const existing = (journal.proposals ?? []).find(
+        (p) => p.state === "pending" && p.kind === input.kind && p.targetId === input.targetId && p.targetLabel === input.targetLabel,
+      );
+      if (existing) return existing.id;
+      const now = Date.now();
+      const proposal: Proposal = {
+        id: newProposalId(),
+        kind: input.kind,
+        ...(input.targetId ? { targetId: input.targetId } : {}),
+        ...(input.targetLabel ? { targetLabel: input.targetLabel } : {}),
+        proposedBy: by,
+        proposedAt: now,
+        state: "pending",
+        expiresAt: now + PROPOSAL_TTL_MS,
+      };
+      commit({ ...journal, proposals: [...(journal.proposals ?? []), proposal] });
+      return proposal.id;
+    },
+    decideProposal: (id, by, approve) => {
+      const journal = get().journal;
+      const proposal = (journal.proposals ?? []).find((p) => p.id === id);
+      // Consent comes from the other person — never from the proposer.
+      if (!proposal || proposal.state !== "pending" || proposal.proposedBy === by) return;
+      const now = Date.now();
+      if (approve && proposal.kind === "wipe-vault") {
+        // The second consent starts the cooling-off; the wipe itself is a
+        // separate, later act either partner can still cancel.
+        commit({
+          ...journal,
+          proposals: (journal.proposals ?? []).map((p) =>
+            p.id === id ? { ...p, state: "approved" as const, decidedBy: by, decidedAt: now } : p,
+          ),
+        });
+        return;
+      }
+      // Declined, or approved for a single shared thing: the proposal leaves
+      // no scar — it is removed and tombstoned so no other device can
+      // resurrect it as pending. Execution reuses the standing engines, so
+      // the erasure itself tombstones and survives merges exactly like a
+      // deletion made by hand.
+      commit({
+        ...journal,
+        proposals: (journal.proposals ?? []).filter((p) => p.id !== id),
+        deleted: { ...journal.deleted, [id]: now },
+      });
+      if (!approve) return;
+      if (proposal.kind === "delete-session" && proposal.targetId) get().deleteSession(proposal.targetId);
+      else if (proposal.kind === "delete-encounter" && proposal.targetId) get().removeEncounter(proposal.targetId);
+      else if (proposal.kind === "delete-person" && proposal.targetLabel) get().deletePersonForever(proposal.targetLabel);
+    },
+    cancelProposal: (id) => {
+      const journal = get().journal;
+      if (!(journal.proposals ?? []).some((p) => p.id === id)) return;
+      commit({
+        ...journal,
+        proposals: (journal.proposals ?? []).filter((p) => p.id !== id),
+        deleted: { ...journal.deleted, [id]: Date.now() },
+      });
+    },
+    executeWipe: (id) => {
+      const journal = get().journal;
+      const proposal = (journal.proposals ?? []).find((p) => p.id === id);
+      if (!proposal || proposal.kind !== "wipe-vault" || proposal.state !== "approved" || !proposal.decidedAt) return;
+      if (Date.now() < proposal.decidedAt + WIPE_COOLING_MS) return;
+      get().cancelProposal(id);
+      get().eraseAll({ sessions: true, encounters: true, partners: true, places: true, positions: true, problems: true });
     },
     archivePerson: (name) => {
       const settings = get().journal.settings;

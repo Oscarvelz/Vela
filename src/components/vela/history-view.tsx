@@ -8,6 +8,7 @@ import { sessionsSorted } from "@/lib/vela/stats";
 import { useJournal } from "@/lib/vela/store";
 import { trackerForPartner, type CycleTracker } from "@/lib/vela/cycle-trackers";
 import { fill } from "@/lib/vela/cycle-words";
+import { ownerPerson, partnerPerson } from "@/lib/vela/people";
 import type { Encounter, Session } from "@/lib/vela/types";
 import { GlanceCard } from "./glance-card";
 import { AnniversariesCard } from "./anniversaries-card";
@@ -330,6 +331,10 @@ function EncounterReport({
   const openEdit = useJournal((s) => s.openEdit);
   const begin = useJournal((s) => s.beginSession);
   const remove = useJournal((s) => s.removeEncounter);
+  const coupleMode = useJournal((s) => s.journal.settings.coupleMode);
+  const diaryPeople = useJournal((s) => s.journal.people);
+  const proposeDeletion = useJournal((s) => s.proposeDeletion);
+  const showToast = useJournal((s) => s.showToast);
   const [askRemove, setAskRemove] = useState(false);
   const [askAdd, setAskAdd] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
@@ -427,18 +432,40 @@ function EncounterReport({
           begin(encounter.id);
         }}
       />
-      <ConfirmDialog
-        open={askRemove}
-        title={t("confirmRemoveQ")}
-        name={`${title} · ${rows.length} ${rows.length === 1 ? t("sessionWord") : t("sessionsWord")}`}
-        confirmLabel={t("yesDelete")}
-        cancelLabel={t("keep")}
-        onCancel={() => setAskRemove(false)}
-        onConfirm={() => {
-          remove(encounter.id);
-          setAskRemove(false);
-        }}
-      />
+      {coupleMode && partnerPerson(diaryPeople) ? (
+        <ConfirmDialog
+          open={askRemove}
+          title={t("gvProposeTitle")}
+          confirmLabel={t("gvProposeBtn")}
+          cancelLabel={t("keep")}
+          onCancel={() => setAskRemove(false)}
+          onConfirm={() => {
+            proposeDeletion(
+              { kind: "delete-encounter", targetId: encounter.id, targetLabel: title },
+              ownerPerson(diaryPeople)?.id ?? "p-owner",
+            );
+            showToast(fill(t("gvProposedToast"), { name: partnerPerson(diaryPeople)!.name }));
+            setAskRemove(false);
+          }}
+        >
+          <p className="text-sm leading-relaxed text-dim">
+            {fill(t("gvProposeBody"), { name: partnerPerson(diaryPeople)!.name })}
+          </p>
+        </ConfirmDialog>
+      ) : (
+        <ConfirmDialog
+          open={askRemove}
+          title={t("confirmRemoveQ")}
+          name={`${title} · ${rows.length} ${rows.length === 1 ? t("sessionWord") : t("sessionsWord")}`}
+          confirmLabel={t("yesDelete")}
+          cancelLabel={t("keep")}
+          onCancel={() => setAskRemove(false)}
+          onConfirm={() => {
+            remove(encounter.id);
+            setAskRemove(false);
+          }}
+        />
+      )}
     </>
   );
 

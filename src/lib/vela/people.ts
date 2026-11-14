@@ -1,4 +1,4 @@
-import type { Person, SpeakAs } from "./types";
+import type { Person, Proposal, SpeakAs } from "./types";
 
 /**
  * The people of the diary (2.2, couple mode).
@@ -115,4 +115,46 @@ export function mergePeople(local: Person[] | undefined, remote: Person[] | unde
 
 export function newPersonId(): string {
   return `p${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+}
+
+/* ── Proposals (2.2.3) ────────────────────────────────────────────────────── */
+
+export const PROPOSAL_TTL_MS = 7 * 86400000;
+/** After both partners approve erasing the whole vault, a week must pass
+ *  before it can be carried out — and either of them can cancel meanwhile. */
+export const WIPE_COOLING_MS = 7 * 86400000;
+
+export function newProposalId(): string {
+  return `prop-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+}
+
+const PROPOSAL_KINDS = ["delete-session", "delete-encounter", "delete-person", "wipe-vault"] as const;
+
+export function cleanProposals(raw: unknown): Proposal[] {
+  if (!Array.isArray(raw)) return [];
+  const now = Date.now();
+  const out: Proposal[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const p = item as Partial<Proposal>;
+    if (typeof p.id !== "string" || !p.id) continue;
+    if (!PROPOSAL_KINDS.includes(p.kind as (typeof PROPOSAL_KINDS)[number])) continue;
+    if (typeof p.proposedBy !== "string" || typeof p.proposedAt !== "number" || typeof p.expiresAt !== "number") continue;
+    // A pending proposal whose week has lapsed caduces silently (the law):
+    // it is dropped here, at the gate, and never resurfaces.
+    if (p.state !== "approved" && p.expiresAt < now) continue;
+    out.push({
+      id: p.id,
+      kind: p.kind as Proposal["kind"],
+      ...(typeof p.targetId === "string" && p.targetId ? { targetId: p.targetId } : {}),
+      ...(typeof p.targetLabel === "string" && p.targetLabel ? { targetLabel: p.targetLabel.slice(0, 120) } : {}),
+      proposedBy: p.proposedBy,
+      proposedAt: p.proposedAt,
+      state: p.state === "approved" ? "approved" : "pending",
+      ...(typeof p.decidedBy === "string" && p.decidedBy ? { decidedBy: p.decidedBy } : {}),
+      ...(typeof p.decidedAt === "number" ? { decidedAt: p.decidedAt } : {}),
+      expiresAt: p.expiresAt,
+    });
+  }
+  return out;
 }

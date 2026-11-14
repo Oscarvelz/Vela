@@ -205,6 +205,28 @@ export type Journal = {
   /** The people of the diary (2.2, couple mode). Journal-level on purpose:
    *  merges take settings wholesale, but people merge by id, per person. */
   people?: Person[];
+  /** Shared-erasure proposals (2.2.3): what belongs to both is erased only
+   *  by both. A proposal the other partner declines or lets lapse is removed
+   *  outright — it leaves no scar in the journal. */
+  proposals?: Proposal[];
+};
+
+/** A request to erase something shared. Consent comes from the OTHER
+ *  person; a wipe of the whole vault, once approved by both, waits out a
+ *  cooling-off before it can be carried out, and either person can cancel
+ *  it until the moment it runs. */
+export type Proposal = {
+  id: string;
+  kind: "delete-session" | "delete-encounter" | "delete-person" | "wipe-vault";
+  targetId?: string;
+  /** What is being proposed, in words (a date, a name) — consent is never blind. */
+  targetLabel?: string;
+  proposedBy: string;
+  proposedAt: number;
+  state: "pending" | "approved";
+  decidedBy?: string;
+  decidedAt?: number;
+  expiresAt: number;
 };
 
 export type JournalWipe = {
