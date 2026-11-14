@@ -96,6 +96,16 @@ function asSettings(raw: unknown, language: Lang): Settings {
     defaultPartner: typeof s.defaultPartner === "string" ? s.defaultPartner : "",
     batchDraft: asBatchDraft(s.batchDraft),
     ...cycleFields(s),
+    // The optional lists (2.1.23/2.1.24) ride through the same gate as everything
+    // else — a field asSettings does not name is stripped at every unlock, and
+    // the next save makes the loss permanent (the 2.1.27 lesson: every bench
+    // before this fix worked inside one session and never saw it).
+    ...(cleanMuted(s.storiesMuted).people.length || cleanMuted(s.storiesMuted).days.length
+      ? { storiesMuted: cleanMuted(s.storiesMuted) }
+      : {}),
+    ...(Array.isArray(s.anniversaries) && s.anniversaries.length ? { anniversaries: cleanAnniversaries(s.anniversaries) } : {}),
+    ...(Array.isArray(s.children) && s.children.length ? { children: cleanChildren(s.children) } : {}),
+    ...(Array.isArray(s.archivedPeople) && s.archivedPeople.length ? { archivedPeople: cleanArchived(s.archivedPeople) } : {}),
   };
 }
 
@@ -210,6 +220,12 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
         ? {
             displayName: typeof profileRaw.displayName === "string" ? profileRaw.displayName : "",
             createdAt: typeof profileRaw.createdAt === "number" ? profileRaw.createdAt : Date.now(),
+            // speakAs (2.1.24) survives the gate like every other field.
+            ...((profileRaw as Partial<Profile>).speakAs === "man" ||
+            (profileRaw as Partial<Profile>).speakAs === "woman" ||
+            (profileRaw as Partial<Profile>).speakAs === "neutral"
+              ? { speakAs: (profileRaw as Partial<Profile>).speakAs }
+              : {}),
           }
         : null;
     const encounters = (Array.isArray(data.encounters) ? data.encounters : [])
