@@ -294,6 +294,9 @@ function matchesSession(session: Session, partner: string, q: string, lang: Retu
     session.positions.map((item) => positionLabel(lang, item)).join(" "),
     session.notes,
     session.ownWords,
+    // Her words are findable too (2.2): a diary of two voices is searched whole.
+    session.partnerVoice?.notes ?? "",
+    session.partnerVoice?.ownWords ?? "",
     (session.problems ?? []).join(" "),
     session.date,
   ]

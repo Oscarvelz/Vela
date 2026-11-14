@@ -26,6 +26,9 @@ export type CycleTracker = CycleSettings & {
   id: string;
   /** Saved partner (journal.partners entry) this tracker follows; "" when only a typed name is known. */
   partnerLink: string;
+  /** The Person (2.2) this cycle belongs to, bound at couple-mode turn-on.
+   *  Absent = legacy name resolution, exactly as before. */
+  ownerId?: string;
   /** Last change of anything in this tracker (ms). 0 = migrated and never touched since. */
   updatedAt: number;
   /** Last change of its settings (perspective, name, link, lengths, enabled). */
@@ -39,7 +42,7 @@ export type CycleTracker = CycleSettings & {
 
 export const FIRST_TRACKER_ID = "c1";
 export const MAX_TRACKERS = 8;
-const META_KEYS = ["enabled", "perspective", "partnerName", "partnerLink", "periodDays", "cycleDays", "lutealDays", "fertileDays"] as const;
+const META_KEYS = ["enabled", "perspective", "partnerName", "partnerLink", "ownerId", "periodDays", "cycleDays", "lutealDays", "fertileDays"] as const;
 
 export function newTrackerId() {
   return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -68,7 +71,19 @@ export function cleanTracker(raw: unknown, fallbackId = FIRST_TRACKER_ID): Cycle
   const partnerLink = cycle.perspective === "partner" && typeof value.partnerLink === "string" ? value.partnerLink.trim().slice(0, 60) : "";
   // Day logs and ends in date order, so two devices holding the same history serialise it identically.
   const sorted = <T,>(map: Record<string, T>) => Object.fromEntries(Object.entries(map).sort(([x], [y]) => (x < y ? -1 : 1)));
-  return { ...cycle, ends: sorted(cycle.ends), days: sorted(cycle.days), id, partnerLink, updatedAt: num(value.updatedAt), metaAt: num(value.metaAt), stamps };
+  const ownerId = typeof value.ownerId === "string" && value.ownerId ? value.ownerId.slice(0, 40) : undefined;
+  return {
+    ...cycle,
+    ends: sorted(cycle.ends),
+    days: sorted(cycle.days),
+    id,
+    partnerLink,
+    // Only present once bound (2.2), so unbound trackers serialise byte-identically to before.
+    ...(ownerId ? { ownerId } : {}),
+    updatedAt: num(value.updatedAt),
+    metaAt: num(value.metaAt),
+    stamps,
+  };
 }
 
 /** Plain single-cycle view of a tracker (what the legacy `settings.cycle` field holds). */

@@ -41,6 +41,7 @@ import { Mark } from "./mark";
 import { AccountPanel } from "./account-panel";
 import { useCloud } from "@/lib/vela/sync";
 import { CycleTune, useCycleUndo } from "./cycle-card";
+import { CoupleSection } from "./couple-section";
 import { AddTracker } from "./cycle-add";
 import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PassphraseInput } from "./ui";
 import { useBackLayer } from "@/lib/vela/back-stack";
@@ -146,6 +147,15 @@ export function SettingsView() {
         onToggle={toggle}
       >
         <ArchiveSection />
+      </Accordion>
+      <Accordion
+        id="couple"
+        icon={<Heart className="size-5" />}
+        title={t("cpTitle")}
+        open={open.couple}
+        onToggle={toggle}
+      >
+        <CoupleSection />
       </Accordion>
       <Accordion
         id="cycle"

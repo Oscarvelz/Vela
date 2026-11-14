@@ -9,8 +9,9 @@ import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
 import { cleanMuted } from "./stories";
 import { cleanAnniversaries, cleanArchived, cleanChildren } from "./anniversaries";
+import { cleanPeople, mergePeople, newPersonId } from "./people";
 import { runMigrations } from "./migrations";
-import type { Anniversary, ChildEntry, Draft, Encounter, Journal, JournalWipe, Profile, Session, Settings, SpeakAs, TabId } from "./types";
+import type { Anniversary, ChildEntry, Draft, Encounter, Journal, JournalWipe, Person, Profile, Session, Settings, SpeakAs, TabId } from "./types";
 import { STR, type Lang } from "./copy";
 import { claimGrace, dropGrace, parkKey } from "./grace";
 import { appLockOn, clearSeen, gateAsking, gateReady, gateUnavailable, lockAfterMs, markSeen, migrateLock, pickerJustOpened, quietResume } from "./app-lock";
@@ -106,6 +107,9 @@ function asSettings(raw: unknown, language: Lang): Settings {
     ...(Array.isArray(s.anniversaries) && s.anniversaries.length ? { anniversaries: cleanAnniversaries(s.anniversaries) } : {}),
     ...(Array.isArray(s.children) && s.children.length ? { children: cleanChildren(s.children) } : {}),
     ...(Array.isArray(s.archivedPeople) && s.archivedPeople.length ? { archivedPeople: cleanArchived(s.archivedPeople) } : {}),
+    ...(s.coupleMode && typeof s.coupleMode === "object" && typeof s.coupleMode.sharedFrom === "string"
+      ? { coupleMode: { sharedFrom: s.coupleMode.sharedFrom, enabledAt: typeof s.coupleMode.enabledAt === "number" ? s.coupleMode.enabledAt : 0 } }
+      : {}),
   };
 }
 
@@ -136,6 +140,26 @@ export function selectActiveCycle(state: { journal: Journal }): CycleTracker {
   return activeTracker(settings.cycles, settings.cycleSelected);
 }
 
+/** The second voice (2.2) is cleaned like everything else at the gate: a
+ *  voice that isn't well-shaped never reaches the journal. */
+function asVoice(raw: unknown): Session["partnerVoice"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const v = raw as Partial<import("./types").Voice>;
+  if (typeof v.by !== "string" || !v.by) return undefined;
+  const dial = (n: unknown) => Math.min(5, Math.max(0, Number(n) || 0));
+  return {
+    intensity: dial(v.intensity),
+    connection: dial(v.connection),
+    satisfaction: dial(v.satisfaction),
+    energy: dial(v.energy),
+    overall: dial(v.overall),
+    ownWords: typeof v.ownWords === "string" ? v.ownWords.slice(0, 4000) : "",
+    notes: typeof v.notes === "string" ? v.notes.slice(0, 4000) : "",
+    by: v.by,
+    updatedAt: typeof v.updatedAt === "number" ? v.updatedAt : 0,
+  };
+}
+
 function asSession(raw: unknown, index: number): Session | null {
   if (!raw || typeof raw !== "object") return null;
   const s = raw as Partial<Session>;
@@ -161,6 +185,9 @@ function asSession(raw: unknown, index: number): Session | null {
     sessionNumber: Number(s.sessionNumber) || 0,
     encounterId: typeof s.encounterId === "string" ? s.encounterId : "",
     updatedAt: typeof s.updatedAt === "number" ? s.updatedAt : undefined,
+    // Without this line, every reload would strip the partner's voice from
+    // every session — the 2.1.27 trap at session level.
+    ...(asVoice(s.partnerVoice) ? { partnerVoice: asVoice(s.partnerVoice) } : {}),
   };
 }
 
@@ -262,6 +289,7 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       partnersClearedAt: typeof data.partnersClearedAt === "number" ? data.partnersClearedAt : 0,
       deleted: cleanDeleted(data.deleted),
       migrations: Array.isArray(data.migrations) ? data.migrations.filter((m): m is string => typeof m === "string") : [],
+      ...(cleanPeople(data.people).length ? { people: cleanPeople(data.people) } : {}),
     };
   } catch {
     return empty;
@@ -370,6 +398,8 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     partnersClearedAt: Math.max(local.partnersClearedAt ?? 0, remote.partnersClearedAt ?? 0),
     deleted,
     migrations: [...new Set([...(local.migrations ?? []), ...(remote.migrations ?? [])])],
+    // People merge by id, per person (2.2) — never wholesale like settings.
+    ...(mergePeople(local.people, remote.people) ? { people: mergePeople(local.people, remote.people) } : {}),
     updatedAt: Math.max(local.updatedAt, remote.updatedAt),
   };
 }
@@ -755,6 +785,15 @@ type Store = {
   saveChild: (c: ChildEntry) => void;
   deleteChild: (id: string) => void;
   setSpeakAs: (v: SpeakAs) => void;
+  /** Couple mode (2.2): the ceremony seeds the two people with their PINs,
+   *  binds the partner's cycle trackers to her, and stamps the shared start. */
+  enableCoupleMode: (args: { partnerName: string; sharedFrom: string; ownerPinHash: Person["pin"]; partnerPinHash: Person["pin"] }) => void;
+  disableCoupleMode: () => void;
+  /** The partner writes (or rewrites) her voice on a session. Composing her
+   *  note from her dials happens here, with the same writer as the owner's. */
+  savePartnerVoice: (sessionId: string, voice: Omit<import("./types").Voice, "notes" | "updatedAt">) => void;
+  /** Her voice is hers: she (or the hand holding her PIN) may erase it alone. */
+  deletePartnerVoice: (sessionId: string) => void;
   archivePerson: (name: string) => void;
   unarchivePerson: (name: string) => void;
   setArchivedPref: (name: string, key: "showInHistory" | "countInStats" | "resurface", value: boolean) => void;
@@ -1453,6 +1492,9 @@ export const useJournal = create<Store>((set, get) => {
         id: newId(),
         createdAt: Date.now(),
       };
+      // A new round is a new moment: the partner's voice belongs to the moment
+      // she spoke about and is never copied into another one (2.2).
+      delete copy.partnerVoice;
       let encounters = journal.encounters;
       if (copy.encounterId) {
         encounters = encounters.map((encounter) =>
@@ -1534,6 +1576,77 @@ export const useJournal = create<Store>((set, get) => {
       const journal = get().journal;
       if (!journal.profile) return;
       commit({ ...journal, profile: { ...journal.profile, speakAs } });
+    },
+    enableCoupleMode: ({ partnerName, sharedFrom, ownerPinHash, partnerPinHash }) => {
+      const journal = get().journal;
+      if (!journal.profile || journal.settings.coupleMode) return;
+      const now = Date.now();
+      const owner: Person = {
+        id: "p-owner",
+        name: journal.profile.displayName || "Me",
+        role: "owner",
+        ...(journal.profile.speakAs ? { speakAs: journal.profile.speakAs } : {}),
+        ...(ownerPinHash ? { pin: ownerPinHash } : {}),
+        createdAt: now,
+        updatedAt: now,
+      };
+      const partner: Person = {
+        id: newPersonId(),
+        name: partnerName.trim(),
+        role: "partner",
+        ...(partnerPinHash ? { pin: partnerPinHash } : {}),
+        createdAt: now,
+        updatedAt: now,
+      };
+      // Her cycle trackers become hers in fact: bind by the same name matching
+      // the app already uses to assign phases (followsPartner), never by guess.
+      const key = partnerKey(partner.name);
+      const cycles = (journal.settings.cycles ?? []).map((tracker) =>
+        !tracker.ownerId && (partnerKey(tracker.partnerLink || "") === key || partnerKey(tracker.partnerName || "") === key)
+          ? { ...tracker, ownerId: partner.id, metaAt: now, updatedAt: now }
+          : tracker,
+      );
+      commit({
+        ...journal,
+        people: [owner, partner],
+        settings: { ...journal.settings, cycles, coupleMode: { sharedFrom, enabledAt: now } },
+      });
+    },
+    disableCoupleMode: () => {
+      // The people and their voices stay — history is not unwritten. Only the
+      // mode turns off: no new voices are asked for until it is on again.
+      const settings = { ...get().journal.settings };
+      delete settings.coupleMode;
+      patchSettings(settings);
+    },
+    savePartnerVoice: (sessionId, voice) => {
+      const journal = get().journal;
+      const lang = journal.settings.language;
+      const sessions = journal.sessions.map((s) =>
+        s.id === sessionId
+          ? {
+              ...s,
+              partnerVoice: {
+                ...voice,
+                ownWords: voice.ownWords.slice(0, 4000),
+                notes: composedNote(voice, lang),
+                updatedAt: Date.now(),
+              },
+              updatedAt: Date.now(),
+            }
+          : s,
+      );
+      commit({ ...journal, sessions });
+    },
+    deletePartnerVoice: (sessionId) => {
+      const journal = get().journal;
+      const sessions = journal.sessions.map((s) => {
+        if (s.id !== sessionId || !s.partnerVoice) return s;
+        const next = { ...s, updatedAt: Date.now() };
+        delete next.partnerVoice;
+        return next;
+      });
+      commit({ ...journal, sessions });
     },
     archivePerson: (name) => {
       const settings = get().journal.settings;

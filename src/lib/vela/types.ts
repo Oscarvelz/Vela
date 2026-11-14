@@ -104,6 +104,10 @@ export type Settings = {
   /** People at rest in the Archive (2.1.24): honored, kept, and quiet where
    *  the user decided they should be quiet. */
   archivedPeople?: ArchivedPerson[];
+  /** Couple mode (2.2): present only once the owner has turned it on in its
+   *  ceremony. sharedFrom is the first day the diary counts as shared —
+   *  entries before it stay governed by the owner's voice alone. */
+  coupleMode?: { sharedFrom: string; enabledAt: number };
 };
 
 export type Profile = {
@@ -134,6 +138,27 @@ export type Session = {
   sessionNumber: number;
   encounterId: string;
   updatedAt?: number;
+  /** The second voice (2.2, couple mode): the partner's own reading of this
+   *  same moment, written blind and revealed beside the owner's. Absent means
+   *  she has not spoken — forever distinguishable from a voice of zeros. */
+  partnerVoice?: Voice;
+};
+
+/** One person's reading of a shared moment: her five dials and her words.
+ *  The entry itself (date, place, positions, problems) stays shared fact;
+ *  only the reading is personal — and only she may write or erase it. */
+export type Voice = {
+  intensity: number;
+  connection: number;
+  satisfaction: number;
+  energy: number;
+  overall: number;
+  ownWords: string;
+  /** Her note, composed from her dials by the same writer as the owner's. */
+  notes: string;
+  /** Person id of the author (see Person). */
+  by: string;
+  updatedAt: number;
 };
 
 export type Encounter = {
@@ -146,6 +171,20 @@ export type Encounter = {
   comment: string;
   problems: string[];
   updatedAt?: number;
+};
+
+/** A person of the diary (2.2). Solo journals have no people list at all:
+ *  the list is born in the couple-mode ceremony, seeded with the owner and
+ *  the partner. A PIN is an attribution signature inside an already-open
+ *  journal — a salted hash, never the PIN itself — not an encryption key. */
+export type Person = {
+  id: string;
+  name: string;
+  role: "owner" | "partner";
+  speakAs?: SpeakAs;
+  pin?: { salt: string; hash: string; iterations: number };
+  createdAt: number;
+  updatedAt: number;
 };
 
 export type Journal = {
@@ -163,6 +202,9 @@ export type Journal = {
   deleted?: Record<string, number>;
   /** One-time data migrations already applied to this journal (e.g. "enc-split-1"). */
   migrations?: string[];
+  /** The people of the diary (2.2, couple mode). Journal-level on purpose:
+   *  merges take settings wholesale, but people merge by id, per person. */
+  people?: Person[];
 };
 
 export type JournalWipe = {

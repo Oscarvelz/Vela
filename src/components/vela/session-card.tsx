@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { knownProblem, placeLabel, positionLabel } from "@/lib/vela/catalog";
 import type { CopyKey } from "@/lib/vela/copy";
 import { fmtDate, fmtDuration, fmtShort, fmtTime } from "@/lib/vela/dates";
+import { fill } from "@/lib/vela/cycle-words";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { ratingLabel } from "@/lib/vela/notes";
 import { useJournal } from "@/lib/vela/store";
@@ -11,6 +12,9 @@ import { cn } from "@/lib/cn";
 import { Button, ConfirmDialog, RatingIcon } from "./ui";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { PartnerCycleDoor, PhaseDot } from "./cycle-card";
+import { partnerKey } from "@/lib/vela/encounters";
+import { partnerPerson } from "@/lib/vela/people";
+import { VoiceSheet } from "./voice-sheet";
 
 const METHOD_KEY = {
   pullout: "methodPullout",
@@ -38,6 +42,11 @@ export function SessionCard({ session, density = "list" }: { session: Session; d
   const showToast = useJournal((s) => s.showToast);
   const [open, setOpen] = useState(false);
   const [askRound, setAskRound] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const coupleMode = useJournal((s) => s.journal.settings.coupleMode);
+  const people = useJournal((s) => s.journal.people);
+  const voicePartner = partnerPerson(people);
+  const voiceDoor = Boolean(coupleMode && voicePartner && partnerKey(session.partnerName) === partnerKey(voicePartner.name));
   const [showKin, setShowKin] = useState(false);
   const [drag, setDrag] = useState(0);
   // Back / gesture: a swiped-open action tray slides shut.
@@ -202,6 +211,48 @@ export function SessionCard({ session, density = "list" }: { session: Session; d
             {session.ownWords ? <p className={cn("text-sm leading-relaxed text-dim", session.notes && "mt-1.5")}>{session.ownWords}</p> : null}
           </div>
         ) : null}
+        {session.partnerVoice && voicePartner ? (
+          <div className="rounded-2xl border border-accent/35 bg-surface-2/45 px-3.5 py-3" data-testid="voice-block">
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide text-accent">
+                {fill(t("vcVoiceOf"), { name: voicePartner.name })}
+              </span>
+              <span className="flex items-center" aria-label={`${session.partnerVoice.overall} ${t("of5")}`}>
+                {[1, 2, 3, 4, 5].map((level) => (
+                  <RatingIcon key={level} style={style} className="size-3.5" active={session.partnerVoice!.overall >= level} />
+                ))}
+              </span>
+              <button
+                type="button"
+                data-noswipe
+                className="shrink-0 text-xs font-semibold text-dim active:opacity-70"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setVoiceOpen(true);
+                }}
+              >
+                {t("edit")}
+              </button>
+            </div>
+            {session.partnerVoice.notes ? <p className="mt-1.5 text-sm leading-relaxed">“{session.partnerVoice.notes}”</p> : null}
+            {session.partnerVoice.ownWords ? (
+              <p className={cn("text-sm leading-relaxed text-dim", session.partnerVoice.notes && "mt-1.5")}>{session.partnerVoice.ownWords}</p>
+            ) : null}
+          </div>
+        ) : voiceDoor && voicePartner ? (
+          <Button
+            variant="ghost"
+            className="min-h-10 self-start px-3 text-sm"
+            data-testid="voice-add"
+            onClick={(event) => {
+              event.stopPropagation();
+              setVoiceOpen(true);
+            }}
+          >
+            {fill(t("vcAddTitle"), { name: voicePartner.name })}
+          </Button>
+        ) : null}
+        {voiceOpen ? <VoiceSheet session={session} onClose={() => setVoiceOpen(false)} /> : null}
         {(session.contraception ?? []).length > 0 ? (
           <div className="flex flex-wrap justify-end gap-1.5">
             {(session.contraception ?? []).map((id) => (
