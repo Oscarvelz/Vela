@@ -139,12 +139,16 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
       : b("partnerHint");
 
   // The journal page grows with the words (and shrinks back), never a scroll box inside a scroll.
+  // It can only measure while it can be seen: mounted under the closed (display:none) card, the
+  // measurement reads 0 and froze the page at its minimum — a restored draft's words sat trapped
+  // behind overflow:hidden where no finger could reach them (Oscar, Nov 14 2026). So it measures
+  // again the moment the section opens (`live`), and never writes a height it couldn't measure.
   useLayoutEffect(() => {
     const el = area.current;
-    if (!el) return;
+    if (!el || el.getClientRects().length === 0) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight + 2}px`;
-  }, [text]);
+  }, [text, live]);
 
   useEffect(() => {
     if (naming) nameField.current?.focus();
