@@ -2081,14 +2081,15 @@ html[data-splash="on"] .vela-rise { animation-play-state: paused; }
 
 /* Stories (2.1.23) — Home's memory rail. Cards arrive once, staggered, then rest:
    no perpetual motion competes with the hero's breathing above them. */
-.ag-stories { scrollbar-width: none; }
+.ag-stories { scrollbar-width: none; scroll-snap-type: x mandatory; }
 .ag-stories::-webkit-scrollbar { display: none; }
 .ag-story-card {
   position: relative;
   flex: 0 0 auto;
   width: 10.75rem;
   border-radius: 1rem;
-  animation: ag-story-in .55s cubic-bezier(.22,.8,.32,1) both;
+  scroll-snap-align: start;
+  animation: ag-story-in .3s cubic-bezier(.22,.8,.32,1) both;
 }
 .ag-story-main {
   display: block;

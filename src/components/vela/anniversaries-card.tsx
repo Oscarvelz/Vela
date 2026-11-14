@@ -3,7 +3,7 @@
    the day itself also blooms on Home among the Memories. Every row carries
    its living counter and sorts by what comes next; milestones wear the
    aurora. Children are people with birthdays — same engine, same list. */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Cake, CalendarHeart, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   cleanAnniversaries,
@@ -36,31 +36,50 @@ const REFS: { id: ChildRef; key: CopyKey }[] = [
   { id: "child", key: "annRefName" },
 ];
 
-/** The counter counts up on arrival (~1.2s ease-out) so the number lands
- *  instead of sitting there. Reduced motion — or a bench — gets the number. */
-function CountUp({ value }: { value: number }) {
-  const [shown, setShown] = useState(value);
-  const first = useRef(true);
+/** The counter arrives once (research brief, 2.1.26): small sacred numbers tick
+ *  through each integer — 0→9 over ~900 ms feels like nine arrivals — while
+ *  larger ones sweep on an ease-out-expo capped at 1.4 s. It runs a single
+ *  time per session per date: a ceremony repeated on every tab switch becomes
+ *  noise by day three. Reduced motion renders the final number, always. */
+const countedOnce = new Set<string>();
+
+function CountUp({ value, id }: { value: number; id: string }) {
+  const [shown, setShown] = useState(() => (countedOnce.has(id) || value <= 1 ? value : 0));
   useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || value <= 1) {
+    if (countedOnce.has(id) || value <= 1) {
+      setShown(value);
+      return;
+    }
+    countedOnce.add(id);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setShown(value);
+      return;
+    }
+    if (value <= 20) {
+      let n = 0;
+      const stepMs = Math.min(110, Math.max(60, Math.floor(1400 / value)));
+      const iv = setInterval(() => {
+        n += 1;
+        setShown(n);
+        if (n >= value) clearInterval(iv);
+      }, stepMs);
+      return () => clearInterval(iv);
+    }
+    const start = performance.now();
+    const dur = 1400;
+    let raf = 0;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / dur);
+      if (p >= 1) {
         setShown(value);
         return;
       }
-      const start = performance.now();
-      const dur = 1200;
-      let raf = 0;
-      const tick = (now: number) => {
-        const p = Math.min(1, (now - start) / dur);
-        setShown(Math.round(value * (1 - Math.pow(1 - p, 3))));
-        if (p < 1) raf = requestAnimationFrame(tick);
-      };
+      setShown(Math.round(value * (1 - Math.pow(2, -10 * p))));
       raf = requestAnimationFrame(tick);
-      return () => cancelAnimationFrame(raf);
-    }
-    setShown(value);
-  }, [value]);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, id]);
   return <>{shown}</>;
 }
 
@@ -162,7 +181,7 @@ export function AnniversariesCard() {
                 {counter ? (
                   <div className="w-14 shrink-0 text-center">
                     <div className="font-display text-2xl font-bold leading-none text-[var(--ag-accent)]">
-                      <CountUp value={counter.n} />
+                      <CountUp value={counter.n} id={u.key} />
                     </div>
                     <div className="mt-0.5 text-[0.62rem] uppercase tracking-wide text-[var(--ag-dim)]">{counter.unit}</div>
                   </div>
@@ -182,12 +201,15 @@ export function AnniversariesCard() {
                     {u.personName ? <span className="font-normal text-[var(--ag-dim)]"> · {u.personName}</span> : null}
                   </span>
                   <span
-                    className={cn(
-                      "block text-xs",
-                      u.daysUntil === 0 || (u.milestone && u.daysUntil <= 7)
-                        ? "font-semibold text-[var(--ag-accent)]"
-                        : "text-[var(--ag-dim)]",
-                    )}
+                    className={cn("block text-xs", u.daysUntil === 0 ? "font-semibold text-[var(--ag-accent)]" : "text-[var(--ag-dim)]")}
+                    style={
+                      // A milestone's date warms into the accent across its final
+                      // week (research brief, 2.1.26) — daily steps, full gold on
+                      // the day itself, gone the morning after.
+                      u.milestone && u.daysUntil >= 1 && u.daysUntil <= 7
+                        ? { color: `color-mix(in srgb, var(--ag-accent) ${Math.round(((8 - u.daysUntil) / 7) * 100)}%, var(--ag-dim))` }
+                        : undefined
+                    }
                   >
                     {secondaryLine(u)}
                     {u.source === "anniversary" ? ` · ${fmtDate(u.date, lang)}` : ""}

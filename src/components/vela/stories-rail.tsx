@@ -30,6 +30,7 @@ export function StoriesRail() {
   const openHistRange = useJournal((s) => s.openHistRange);
   const muteStoryDay = useJournal((s) => s.muteStoryDay);
   const muteStoryPerson = useJournal((s) => s.muteStoryPerson);
+  const unmuteStory = useJournal((s) => s.unmuteStory);
   const showToast = useJournal((s) => s.showToast);
   const [menuDate, setMenuDate] = useState<string | null>(null);
 
@@ -97,7 +98,7 @@ export function StoriesRail() {
             <div
               key={story.date}
               className="ag-story-card ag-glass"
-              style={{ animationDelay: `${Math.min(i, 6) * 70}ms` }}
+              style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}
               data-testid="story-card"
               data-date={story.date}
             >
@@ -138,9 +139,12 @@ export function StoriesRail() {
             className="ag-story-menu-item"
             data-testid="story-hide-day"
             onClick={() => {
-              muteStoryDay(menuStory.date);
+              const date = menuStory.date;
+              muteStoryDay(date);
               setMenuDate(null);
-              showToast(t("storiesHiddenToast"));
+              // A mis-tap is not a sentence (research brief, 2.1.26): the toast
+              // itself carries the way back, in the house's undo pattern.
+              showToast(t("storiesHiddenToast"), { label: t("cyUndo"), run: () => unmuteStory("day", date) });
             }}
           >
             {t("storiesHideDay")}
@@ -156,7 +160,10 @@ export function StoriesRail() {
                 onClick={() => {
                   muteStoryPerson(name);
                   setMenuDate(null);
-                  showToast(fill(t("storiesMutedToast"), { name }));
+                  showToast(fill(t("storiesMutedToast"), { name }), {
+                    label: t("cyUndo"),
+                    run: () => unmuteStory("person", name),
+                  });
                 }}
               >
                 {fill(t("storiesMutePerson"), { name })}
