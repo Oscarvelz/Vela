@@ -10,7 +10,7 @@ import { RATING_KEYS } from "@/lib/vela/types";
 import { cn } from "@/lib/cn";
 import { Button, ConfirmDialog, RatingIcon } from "./ui";
 import { useBackLayer } from "@/lib/vela/back-stack";
-import { PhaseDot } from "./cycle-card";
+import { PartnerCycleDoor, PhaseDot } from "./cycle-card";
 
 const METHOD_KEY = {
   pullout: "methodPullout",
@@ -130,8 +130,8 @@ export function SessionCard({ session, density = "list" }: { session: Session; d
           </div>
           <div className="min-w-0 flex-1 space-y-1 pt-0.5">
             <h3 className="font-display text-xl leading-tight">
-              {session.partnerName ? (lang === "es" ? "Con" : "With") : ""}
-              {session.partnerName ? ` ${session.partnerName}` : t("soloMoment")}
+              {session.partnerName ? (lang === "es" ? "Con " : "With ") : ""}
+              {session.partnerName ? <PartnerCycleDoor name={session.partnerName} /> : t("soloMoment")}
               <span className="font-sans text-base font-medium text-dim"> · {placeLabel(lang, session.place)}</span>
             </h3>
             <p className="text-sm leading-snug">

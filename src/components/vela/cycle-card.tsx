@@ -19,12 +19,12 @@ import {
 } from "@/lib/vela/cycle";
 import type { CopyKey, Lang } from "@/lib/vela/copy";
 import { fill, stageKey, trackerLabel, useCycleWords } from "@/lib/vela/cycle-words";
-import { sessionsByPhaseFor, trackerForPartner, visibleTrackers } from "@/lib/vela/cycle-trackers";
+import { followsPartner, sessionsByPhaseFor, trackerForPartner, visibleTrackers } from "@/lib/vela/cycle-trackers";
 import { addDays, fmtShort, parseDate, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
-import { Button, Card, fieldClass } from "./ui";
+import { Button, Card, ConfirmDialog, fieldClass } from "./ui";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { CycleSky } from "./cycle-sky";
 
@@ -1734,6 +1734,69 @@ export function PhaseDot({ date, partner = "", className }: { date: string; part
   if (!info || info.phase === "quiet") return null;
   const label = t(stageKey(info.stage));
   return <span role="img" aria-label={label} title={label} className={cn("inline-block size-2 shrink-0 rounded-full align-middle", stageDot(info.stage), className)} />;
+}
+
+/* ── The person's name in a story is the door to her cycle (Oscar, Nov 13 2026) ──
+   Tapping the partner's name on a History card surfaces HER cycle: the tracker that follows her is
+   selected and the cycle sheet opens on it. When nobody follows her cycle yet, the tap first asks,
+   then creates her tracker (linked to the saved partner when she is one) and surfaces it. A paused
+   tracker is switched back on by the same tap — asking for her by name un-hides her. Each tracker
+   keeps its own dates, history and settings; surfacing one never touches another. */
+
+export function PartnerCycleDoor({ name }: { name: string }) {
+  const t = useT();
+  const cycles = useJournal((s) => s.journal.settings.cycles);
+  const partners = useJournal((s) => s.journal.partners);
+  const selectCycle = useJournal((s) => s.selectCycle);
+  const setCycleSheet = useJournal((s) => s.setCycleSheet);
+  const addTracker = useJournal((s) => s.addTracker);
+  const setCycle = useJournal((s) => s.setCycle);
+  const [ask, setAsk] = useState(false);
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const tracker = cycles.find((item) => followsPartner(item, trimmed));
+  const surface = (id: string) => {
+    selectCycle(id);
+    setCycleSheet(true);
+  };
+  const follow = () => {
+    const saved = partners.find((partner) => partner.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
+    const id = addTracker({ perspective: "partner", partnerName: saved ?? trimmed, partnerLink: saved ?? "" });
+    setAsk(false);
+    if (id) surface(id);
+  };
+  return (
+    <>
+      <button
+        type="button"
+        data-noswipe
+        data-testid="partner-cycle-door"
+        aria-label={`${t("cyOpenCycle")} · ${trimmed}`}
+        className="cursor-pointer"
+        onClick={(event) => {
+          event.stopPropagation();
+          if (!tracker) {
+            setAsk(true);
+            return;
+          }
+          if (!tracker.enabled) setCycle({ enabled: true }, tracker.id);
+          surface(tracker.id);
+        }}
+      >
+        {name}
+      </button>
+      <ConfirmDialog
+        open={ask}
+        title={fill(t("cyFollowQ"), { name: trimmed })}
+        confirmLabel={t("add")}
+        cancelLabel={t("cancelBtn")}
+        onCancel={() => setAsk(false)}
+        onConfirm={follow}
+      >
+        <p className="mt-3 text-sm leading-relaxed text-dim">{t("cyAddPersonHint")}</p>
+      </ConfirmDialog>
+    </>
+  );
 }
 
 /* ── Header pill ────────────────────────────────────────────────────────── */
