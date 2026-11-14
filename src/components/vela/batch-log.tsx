@@ -10,6 +10,8 @@ import { ratingLabel } from "@/lib/vela/notes";
 import { useJournal } from "@/lib/vela/store";
 import { fill } from "@/lib/vela/cycle-words";
 import { readThemeProposals } from "@/lib/vela/quiet";
+import { readPregnancy } from "@/lib/vela/pregnancy";
+import { trackerForPartner } from "@/lib/vela/cycle-trackers";
 import { QUIET_REASON_KEY } from "./quiet-sheet";
 import { RATING_KEYS } from "@/lib/vela/types";
 import { Button, RatingIcon, Switch, fieldClass, saveBurst } from "./ui";
@@ -50,6 +52,9 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
   const lang = useLang();
   const saveBatch = useJournal((s) => s.saveBatch);
   const saveQuietMark = useJournal((s) => s.saveQuietMark);
+  const addPregnancyTests = useJournal((s) => s.addPregnancyTests);
+  const setCycle = useJournal((s) => s.setCycle);
+  const allCycles = useJournal((s) => s.journal.settings.cycles);
   const setBatchDraft = useJournal((s) => s.setBatchDraft);
   const partners = useJournal((s) => s.journal.partners);
   const settings = useJournal((s) => s.journal.settings);
@@ -138,6 +143,27 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
   }, [text, parsed]);
   const keptThemes = themeProposals.filter((p) => !dismissedThemes.has(`${p.theme}|${p.from}|${p.to}`));
   const kept = cards.filter((card) => !card.skip);
+  // The pregnancy reader (2.2.7): her words may already state what the
+  // cycle question exists to ask. A proposal, never a write — it rides the
+  // save only if it is still here when the user confirms, and it shows its
+  // evidence. A cycle that already carries a reason is never re-proposed:
+  // her earlier word stands.
+  const [dismissedPreg, setDismissedPreg] = useState(false);
+  const pregReading = useMemo(() => readPregnancy(kept.map((c) => c.entry)), [cards, edits]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pregTarget = useMemo(() => {
+    if (!pregReading.reason) return null;
+    const entry = kept.map((c) => c.entry).find((e) => e.date === pregReading.reason!.date);
+    const tracker = trackerForPartner(allCycles ?? [], entry?.partnerName || batchPartner);
+    if (!tracker) return null;
+    const cycleStart = [...tracker.starts].sort().reverse().find((s) => s <= pregReading.reason!.date);
+    if (!cycleStart || tracker.reasons?.[cycleStart]) return null;
+    return { tracker, cycleStart };
+  }, [pregReading, allCycles, batchPartner, cards, edits]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pregTotals = pregReading.tests.reduce(
+    (acc, x) => ({ n: acc.n + x.count, p: acc.p + (x.result === "positive" ? x.count : 0), q: acc.q + (x.result === "negative" ? x.count : 0) }),
+    { n: 0, p: 0, q: 0 },
+  );
+  const showPreg = !dismissedPreg && (pregTarget !== null || pregReading.tests.length > 0);
   const missingPartner = kept.some((card) => !card.entry.partnerName && !card.entry.solo && !batchPartner);
   const sessionTotal = kept.reduce((sum, card) => sum + card.entry.count, 0);
   const showName = naming || partners.length === 0 || typed.length > 0;
@@ -386,6 +412,29 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
         </section>
       ) : null}
 
+      {showPreg ? (
+        <div className="mb-3 space-y-2" data-testid="preg-proposals">
+          <div className="rounded-2xl border border-accent/35 bg-surface-2/45 px-3.5 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-dim">{pregTarget ? t("pgPropTitle") : t("pgTestsTitle")}</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-dim">
+              {pregTarget
+                ? fill(t("pgPropBody"), { text: pregReading.reason?.evidence ?? "" })
+                : fill(t("pgTestsBody"), { text: pregReading.tests[0]?.evidence ?? "" })}
+            </p>
+            {pregReading.tests.length ? (
+              <p className="mt-1.5 text-sm leading-relaxed text-dim">{fill(t("pgTestsLine"), { n: pregTotals.n, p: pregTotals.p, q: pregTotals.q })}</p>
+            ) : null}
+            <button
+              type="button"
+              className="mt-2 min-h-[37px] text-sm font-semibold text-dim active:opacity-70"
+              onClick={() => setDismissedPreg(true)}
+            >
+              {t("pgPropSkip")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {keptThemes.length ? (
         <div className="mb-3 space-y-2" data-testid="theme-proposals">
           {keptThemes.map((p) => (
@@ -425,6 +474,16 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
             for (const p of keptThemes) {
               saveQuietMark({ from: p.from, to: p.to, reason: p.theme, source: "read", themeText: p.evidence });
             }
+            if (!dismissedPreg) {
+              if (pregTarget) {
+                setCycle(
+                  { reasons: { ...(pregTarget.tracker.reasons ?? {}), [pregTarget.cycleStart]: { id: "pregnant", at: Date.now() } } },
+                  pregTarget.tracker.id,
+                );
+              }
+              if (pregReading.tests.length) addPregnancyTests(pregReading.tests);
+            }
+            setDismissedPreg(false);
             setDismissedThemes(new Set());
             setText("");
             setTyped("");

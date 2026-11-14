@@ -213,6 +213,22 @@ export type Journal = {
    *  a reason so the silence is explained wherever it is read. Journal-level
    *  on purpose — a quiet stretch belongs to no cycle and no person. */
   quietDays?: QuietMark[];
+  /** Pregnancy tests her own words stated (2.2.7), kept as events so
+   *  Statistics can learn from them: the date, the result, and the count
+   *  exactly as she stated it ("two were negative and one was positive"). */
+  pregnancyTests?: PregnancyTestEvent[];
+};
+
+/** One stated pregnancy test (2.2.7): an event in the journal's words,
+ *  never the app's inference. Several tests stated together share a date
+ *  and an evidence clause; `count` is the number she stated. */
+export type PregnancyTestEvent = {
+  id: string;
+  date: string;
+  result: "positive" | "negative";
+  count: number;
+  evidence: string;
+  createdAt: number;
 };
 
 /** The reasons a quiet stretch can be named with, in the settled order. */

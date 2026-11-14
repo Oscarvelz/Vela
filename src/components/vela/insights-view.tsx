@@ -25,6 +25,7 @@ import { voiceReading } from "@/lib/vela/voices";
 import { episodes, unnamedLongGaps, type QuietEpisode } from "@/lib/vela/quiet";
 import { quietWord } from "./quiet-sheet";
 import { cycleOutlier, pastCycles, CYCLE_REASON_IDS, type CycleReasonId } from "@/lib/vela/cycle";
+import { cleanPregnancyTests } from "@/lib/vela/pregnancy";
 import { trackerName, type CycleTracker } from "@/lib/vela/cycle-trackers";
 import { REASON_KEY } from "./cycle-reason";
 import { Sparkle } from "./mark";
@@ -228,6 +229,32 @@ function CycleReasonsCard({ tracker }: { tracker: CycleTracker }) {
   );
 }
 
+/** Pregnancy tests (2.2.7): the tests her own words stated, counted as she
+ *  stated them. Events, not verdicts — the card says how many, with what
+ *  results, and when the last one was. Nothing more is claimed. */
+function CycleTestsCard() {
+  const t = useT();
+  const lang = useLang();
+  const raw = useJournal((s) => s.journal.pregnancyTests);
+  const tests = useMemo(() => cleanPregnancyTests(raw), [raw]);
+  if (!tests.length) return null;
+  const total = tests.reduce((n, x) => n + x.count, 0);
+  const pos = tests.filter((x) => x.result === "positive").reduce((n, x) => n + x.count, 0);
+  const last = tests[tests.length - 1];
+  const resultWord = (r: "positive" | "negative") => t(r === "positive" ? "pgResultPositive" : "pgResultNegative");
+  return (
+    <Card className="ag-glass min-w-0 overflow-hidden" data-testid="cycle-tests-card">
+      <h2 className="font-display text-2xl">{t("pgTestsTitle")}</h2>
+      <p className="mt-2 text-sm text-dim">
+        {total === 1 ? fill(t("pgTestsLeadOne"), { r: resultWord(last.result) }) : fill(t("pgTestsLead"), { n: total, p: pos, q: total - pos })}
+      </p>
+      {total > 1 ? (
+        <p className="mt-1 text-sm text-dim">{fill(t("pgTestsLast"), { r: resultWord(last.result), d: fmtDate(last.date, lang) })}</p>
+      ) : null}
+    </Card>
+  );
+}
+
 export function InsightsView() {
   const t = useT();
   const lang = useLang();
@@ -399,6 +426,7 @@ export function InsightsView() {
       <CycleStats />
       <EachCycleCard />
       <CycleReasonsCards />
+      <CycleTestsCard />
       <LoggedDaysCard />
       <Card className="ag-glass min-w-0 overflow-hidden">
         <h2 className="font-display text-2xl">{t("avgGlowLength")}</h2>

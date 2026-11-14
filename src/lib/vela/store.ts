@@ -11,8 +11,9 @@ import { cleanMuted } from "./stories";
 import { cleanAnniversaries, cleanArchived, cleanChildren } from "./anniversaries";
 import { cleanPeople, cleanProposals, mergePeople, newPersonId, newProposalId, PROPOSAL_TTL_MS, WIPE_COOLING_MS } from "./people";
 import { cleanQuietMarks, newQuietId } from "./quiet";
+import { cleanPregnancyTests, newTestId } from "./pregnancy";
 import { runMigrations } from "./migrations";
-import type { Anniversary, ChildEntry, Draft, Encounter, Journal, JournalWipe, Person, Profile, Proposal, QuietMark, Session, Settings, SpeakAs, TabId } from "./types";
+import type { Anniversary, ChildEntry, Draft, Encounter, Journal, JournalWipe, Person, PregnancyTestEvent, Profile, Proposal, QuietMark, Session, Settings, SpeakAs, TabId } from "./types";
 import { STR, type Lang } from "./copy";
 import { claimGrace, dropGrace, parkKey } from "./grace";
 import { appLockOn, clearSeen, gateAsking, gateReady, gateUnavailable, lockAfterMs, markSeen, migrateLock, pickerJustOpened, quietResume } from "./app-lock";
@@ -293,6 +294,7 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       ...(cleanPeople(data.people).length ? { people: cleanPeople(data.people) } : {}),
       ...(cleanProposals(data.proposals).length ? { proposals: cleanProposals(data.proposals) } : {}),
       ...(cleanQuietMarks(data.quietDays).length ? { quietDays: cleanQuietMarks(data.quietDays) } : {}),
+      ...(cleanPregnancyTests(data.pregnancyTests).length ? { pregnancyTests: cleanPregnancyTests(data.pregnancyTests) } : {}),
     };
   } catch {
     return empty;
@@ -425,6 +427,14 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       }
       const merged = [...byId.values()].filter((m) => !(deleted[m.id] >= (m.updatedAt ?? m.createdAt)));
       return merged.length ? { quietDays: merged } : {};
+    })(),
+    // Pregnancy tests union by id (2.2.7): stated events never edit each
+    // other, so the union is the whole merge; a tombstone still wins.
+    ...(() => {
+      const byId = new Map<string, PregnancyTestEvent>();
+      for (const t of [...(local.pregnancyTests ?? []), ...(remote.pregnancyTests ?? [])]) byId.set(t.id, t);
+      const merged = [...byId.values()].filter((t) => !(deleted[t.id] >= t.createdAt));
+      return merged.length ? { pregnancyTests: cleanPregnancyTests(merged) } : {};
     })(),
     updatedAt: Math.max(local.updatedAt, remote.updatedAt),
   };
@@ -830,6 +840,9 @@ type Store = {
    *  existing mark replaces the overlapped portion — the newest word wins
    *  and the user never arbitrates geometry. */
   saveQuietMark: (mark: Omit<QuietMark, "id" | "createdAt" | "updatedAt"> & { id?: string }) => void;
+  /** Pregnancy tests her words stated (2.2.7): kept from the batch door,
+   *  appended as events — the journal learns what she said, verbatim. */
+  addPregnancyTests: (events: Omit<PregnancyTestEvent, "id" | "createdAt">[]) => void;
   deleteQuietMark: (id: string) => void;
   archivePerson: (name: string) => void;
   unarchivePerson: (name: string) => void;
@@ -1756,6 +1769,13 @@ export const useJournal = create<Store>((set, get) => {
       if (Date.now() < proposal.decidedAt + WIPE_COOLING_MS) return;
       get().cancelProposal(id);
       get().eraseAll({ sessions: true, encounters: true, partners: true, places: true, positions: true, problems: true });
+    },
+    addPregnancyTests: (events) => {
+      if (!events.length) return;
+      const journal = get().journal;
+      const now = Date.now();
+      const fresh = events.map((e, i) => ({ ...e, id: newTestId(), createdAt: now + i }));
+      commit({ ...journal, pregnancyTests: cleanPregnancyTests([...(journal.pregnancyTests ?? []), ...fresh]) });
     },
     saveQuietMark: (input) => {
       const journal = get().journal;

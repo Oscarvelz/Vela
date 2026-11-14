@@ -383,6 +383,14 @@ function settingsNums(cycle: CycleSettings) {
  *  projection ends by itself; her corrections are the record from there. */
 export function pregnancyNoted(cycle: CycleSettings): boolean {
   const starts = sortedStarts(cycle.starts);
+  if (!starts.length) return false;
+  // A pregnancy noted for the cycle still open (2.2.7: she stated it in her
+  // words while the cycle runs, before any closing start exists) counts
+  // exactly like one noted for the latest closed cycle (the 2.2.1 answer):
+  // either way the calendar ahead is a projection, never a due date. When
+  // a real start later closes that cycle, the same note becomes the
+  // closed-cycle case by construction.
+  if (cycle.reasons?.[starts[starts.length - 1]]?.id === "pregnant") return true;
   if (starts.length < 2) return false;
   return cycle.reasons?.[starts[starts.length - 2]]?.id === "pregnant";
 }
