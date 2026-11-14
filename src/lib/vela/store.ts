@@ -648,7 +648,7 @@ type Store = {
   histPartner: string;
   histFrom: string;
   histTo: string;
-  histPhase: "" | "period" | "fertile" | "quiet";
+  histPhase: "" | "period" | "fertile" | "ovulation" | "quiet";
   histLayout: "list" | 2 | 3 | 4;
   compare: CompareMode;
   toast: string | null;
@@ -756,7 +756,7 @@ type Store = {
   setHistList: () => void;
   cycleHistGrid: () => void;
   openHistRange: (from: string, to: string) => void;
-  openHistPhase: (phase: "period" | "fertile" | "quiet") => void;
+  openHistPhase: (phase: "period" | "fertile" | "ovulation" | "quiet") => void;
   clearHistRange: () => void;
   setCompare: (mode: CompareMode) => void;
   showToast: (message: string, action?: { label: string; run: () => void }) => void;

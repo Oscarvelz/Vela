@@ -1496,9 +1496,10 @@ export function CycleStats() {
   // Each moment is read against its own tracker (its partner's cycle, else the user's own).
   const counts = sessionsByPhaseFor(cycles, sessions, today);
   const multi = visibleTrackers(cycles).length > 1;
-  const rows: { phase: "period" | "fertile" | "quiet"; label: string; value: number; dot: string }[] = [
+  const rows: { phase: "period" | "fertile" | "ovulation" | "quiet"; label: string; value: number; dot: string }[] = [
     { phase: "period", label: t("cyclePeriod"), value: counts.period, dot: "cy-bg-period" },
-    { phase: "fertile", label: t("cycleFertile"), value: counts.fertile + counts.ovulation, dot: "cy-bg-fertile" },
+    { phase: "fertile", label: t("cycleFertile"), value: counts.fertile, dot: "cy-bg-fertile" },
+    { phase: "ovulation", label: t("cyLegendOvulation"), value: counts.ovulation, dot: "cy-bg-ovulation" },
     { phase: "quiet", label: t("cyclePhaseQuiet"), value: counts.quiet, dot: "cy-bg-quiet" },
   ];
   const max = Math.max(1, ...rows.map((row) => row.value));
@@ -1559,6 +1560,45 @@ export function CycleStats() {
         ))}
       </div>
       {libido && libido.total > 0 ? <LibidoRows libido={libido} /> : null}
+    </Card>
+  );
+}
+
+/* Every followed cycle at a glance (2.1.20): CycleStats above speaks for the selected tracker;
+   this card is the receipt for the rest — each person's own average, next expected period and
+   regularity, one tap away from becoming the main card. Shown only when two or more cycles
+   actually carry dates. */
+export function EachCycleCard() {
+  const t = useT();
+  const lang = useLang();
+  const cycles = useJournal((s) => s.journal.settings.cycles);
+  const active = useJournal(selectActiveCycle);
+  const selectCycle = useJournal((s) => s.selectCycle);
+  const today = todayStr();
+  const rows = visibleTrackers(cycles).filter((tracker) => tracker.starts.length > 0);
+  if (rows.length < 2) return null;
+  return (
+    <Card className="ag-glass min-w-0 overflow-hidden" data-testid="each-cycle">
+      <h2 className="font-display text-2xl">{t("insEachCycle")}</h2>
+      <div className="mt-3 space-y-3">
+        {rows.map((tracker) => {
+          const stats = cycleStats(tracker);
+          const snap = cycleSnapshot(tracker, today);
+          const on = tracker.id === active.id;
+          return (
+            <button key={tracker.id} type="button" className="block w-full text-left active:opacity-70" onClick={() => selectCycle(tracker.id)}>
+              <span className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0 truncate text-base font-semibold">{trackerLabel(tracker, t)}</span>
+                {on ? <span className="size-2 shrink-0 rounded-full bg-[var(--ag-accent)]" aria-hidden /> : null}
+              </span>
+              <span className="mt-0.5 block text-xs text-dim">
+                {stats.cycle} {t("cycleDaysWord")} · {t("cyNextTile")} {snap.nextPeriod ? fmtShort(snap.nextPeriod, lang) : "—"} ·{" "}
+                {t(stats.regularity === "regular" ? "cyRegular" : stats.regularity === "irregular" ? "cyIrregular" : "cyNeedMore")}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </Card>
   );
 }

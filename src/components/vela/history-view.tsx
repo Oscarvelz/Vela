@@ -237,7 +237,7 @@ function YearMark({ year }: { year: string }) {
 }
 
 /** Each session is judged against its own tracker: its partner's cycle, else the user's own (see trackerForPartner). */
-function matchesPhase(session: { date: string; partnerName: string }, phase: "" | "period" | "fertile" | "quiet", cycles: CycleTracker[]) {
+function matchesPhase(session: { date: string; partnerName: string }, phase: "" | "period" | "fertile" | "ovulation" | "quiet", cycles: CycleTracker[]) {
   if (!phase) return true;
   const cycle = trackerForPartner(cycles, session.partnerName);
   if (!cycle) return false;
@@ -245,7 +245,9 @@ function matchesPhase(session: { date: string; partnerName: string }, phase: "" 
   const first = [...cycle.starts].sort()[0];
   if (!cycle.enabled || !first || date < first) return false;
   const found = phaseOn(cycle, date);
-  if (phase === "fertile") return found === "fertile" || found === "ovulation";
+  // Exact since 2.1.20: ovulation has its own row in the statistics, so each phase filter
+  // shows exactly the days its count names (fertile used to fold ovulation in, back when
+  // no surface could name ovulation on its own).
   return found === phase;
 }
 

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { knownMethod, knownProblem, placeLabel, positionLabel } from "@/lib/vela/catalog";
 import type { CopyKey } from "@/lib/vela/copy";
 import { fill } from "@/lib/vela/cycle-words";
@@ -17,9 +17,9 @@ import {
   weekdayCounts,
   yearCount,
 } from "@/lib/vela/stats";
-import { useJournal } from "@/lib/vela/store";
+import { selectActiveCycle, useJournal } from "@/lib/vela/store";
 import { Sparkle } from "./mark";
-import { CycleStats } from "./cycle-card";
+import { CycleStats, EachCycleCard } from "./cycle-card";
 import { Card, RatingIcon } from "./ui";
 import { cn } from "@/lib/cn";
 
@@ -104,6 +104,31 @@ export function InsightsView() {
   const newPositions = Array.from(firstOccurrences(list).entries())
     .filter(([, session]) => session.date >= addDays(todayStr(), -30))
     .sort((a, b) => b[1].date.localeCompare(a[1].date));
+  // The four dials every session carries (2.1.20): satisfaction, intensity, connection, energy —
+  // recorded from the beginning, presented only now. Averaged over the sessions that rated them.
+  const dials = useMemo(
+    () =>
+      (["satisfaction", "intensity", "connection", "energy"] as const)
+        .map((field) => {
+          const rated = list.filter((session) => session[field] > 0);
+          return {
+            field,
+            rated: rated.length,
+            mean: rated.length ? rated.reduce((sum, session) => sum + session[field], 0) / rated.length : 0,
+            high: rated.filter((session) => session[field] >= 4).length,
+            low: rated.filter((session) => session[field] <= 2).length,
+          };
+        })
+        .filter((dial) => dial.rated > 0),
+    [list],
+  );
+  // When it fell short (2.1.20): the low end of the same record — a session whose glow or whose
+  // satisfaction landed at 2 or less, and what those sessions most often carried.
+  const fellShort = useMemo(
+    () => list.filter((session) => (session.overall > 0 && session.overall <= 2) || (session.satisfaction > 0 && session.satisfaction <= 2)),
+    [list],
+  );
+  const fellProblems = useMemo(() => topCounts(fellShort.flatMap((session) => session.problems)), [fellShort]);
 
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
@@ -142,6 +167,8 @@ export function InsightsView() {
         />
       </div>
       <CycleStats />
+      <EachCycleCard />
+      <LoggedDaysCard />
       <Card className="ag-glass min-w-0 overflow-hidden">
         <h2 className="font-display text-2xl">{t("avgGlowLength")}</h2>
         <p className="mt-2 flex items-center gap-2 text-base">
@@ -207,6 +234,26 @@ export function InsightsView() {
         ) : null}
       </Card>
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+        {dials.length ? (
+          <Card className="ag-glass min-w-0 overflow-hidden">
+            <h2 className="font-display text-2xl">{t("insFelt")}</h2>
+            <div className="mt-3">
+              {dials.map((dial) => (
+                <Meter
+                  key={dial.field}
+                  label={t(dial.field as CopyKey)}
+                  value={dial.mean}
+                  max={5}
+                  aside={
+                    <span>
+                      {dial.mean.toFixed(1)} · {fill(t("insSplit"), { h: dial.high, l: dial.low })}
+                    </span>
+                  }
+                />
+              ))}
+            </div>
+          </Card>
+        ) : null}
         <Card className="ag-glass min-w-0 overflow-hidden">
           <h2 className="font-display text-2xl leading-tight break-words">
             {t("busiestDay")}: <span className="text-accent">{wdName}</span>
@@ -312,6 +359,30 @@ export function InsightsView() {
                 );
               })}
             </div>
+          </Card>
+        ) : null}
+        {fellShort.length ? (
+          <Card className="ag-glass min-w-0 overflow-hidden">
+            <h2 className="font-display text-2xl">{t("insFellShort")}</h2>
+            <p className="mt-2 text-sm text-dim">{fill(t("fellShare"), { n: fellShort.length, total })}</p>
+            {fellProblems.length ? (
+              <div className="mt-3">
+                {fellProblems.map(([id, count]) => {
+                  const rows = fellShort.filter((session) => session.problems.includes(id));
+                  const span = spanOf(rows);
+                  return (
+                    <Meter
+                      key={id}
+                      label={problemLabel(id)}
+                      value={count}
+                      max={Math.max(1, ...fellProblems.map((row) => row[1]))}
+                      sub={`${t("last")}: ${rows[0] ? fmtDate(rows[0].date, lang) : ""}`}
+                      onTap={span ? () => openRange(span[0], span[1]) : undefined}
+                    />
+                  );
+                })}
+              </div>
+            ) : null}
           </Card>
         ) : null}
         {methodRows.length ? (
@@ -450,6 +521,47 @@ function StoryLine({ children }: { children: ReactNode }) {
       <Sparkle className="mt-1 size-3 shrink-0 text-accent" />
       <span>{children}</span>
     </p>
+  );
+}
+
+/* The day log, read back (2.1.20): flow, symptoms and mood are written day by day and, until
+   now, only libido was ever read back. Self trackers only — a partner's tracker holds dates by
+   design, and her day log is never surfaced. Shown once a week of days is logged. */
+function LoggedDaysCard() {
+  const t = useT();
+  const cycles = useJournal((s) => s.journal.settings.cycles);
+  const selected = useJournal(selectActiveCycle);
+  const self =
+    selected.perspective === "self" && selected.enabled ? selected : cycles.find((cycle) => cycle.perspective === "self" && cycle.enabled);
+  const entries = useMemo(
+    () => (self ? Object.values(self.days).filter((day) => day && (day.flow || day.mood || (day.symptoms && day.symptoms.length))) : []),
+    [self],
+  );
+  if (!self || entries.length < 7) return null;
+  const cap = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
+  const flows = topCounts(entries.map((day) => day.flow ?? ""));
+  const symptoms = topCounts(
+    entries.flatMap((day) => day.symptoms ?? []).filter((id) => id !== "libidoHigh" && id !== "libidoLow"),
+  ).slice(0, 5);
+  const moods = topCounts(entries.map((day) => day.mood ?? ""));
+  const group = (title: CopyKey, rows: [string, number][], keyOf: (id: string) => CopyKey) =>
+    rows.length ? (
+      <div className="mt-4">
+        <p className="text-sm font-semibold">{t(title)}</p>
+        <div className="mt-2">
+          {rows.map(([id, count]) => (
+            <Meter key={id} label={t(keyOf(id))} value={count} max={Math.max(1, ...rows.map((row) => row[1]))} />
+          ))}
+        </div>
+      </div>
+    ) : null;
+  return (
+    <Card className="ag-glass min-w-0 overflow-hidden">
+      <h2 className="font-display text-2xl">{t("insLoggedDays")}</h2>
+      {group("cyFlow", flows, (id) => `cyFlow${cap(id)}` as CopyKey)}
+      {group("cySymptoms", symptoms, (id) => `cySym${cap(id)}` as CopyKey)}
+      {group("cyMood", moods, (id) => `cyMood${cap(id)}` as CopyKey)}
+    </Card>
   );
 }
 

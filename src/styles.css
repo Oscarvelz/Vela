@@ -1212,6 +1212,7 @@ input[type="range"].ag-range::-moz-range-thumb {
 .cy-cbar > span { border-radius: 10px 10px 3px 3px; }
 .cy-mbar.is-period { background-color: var(--cy-period); }
 .cy-mbar.is-fertile { background-color: var(--cy-fertile); }
+.cy-mbar.is-ovulation { background-color: var(--cy-ovulation); }
 .cy-mbar.is-quiet { background-color: var(--cy-quiet-bar); }
 
 @media (prefers-reduced-motion: reduce) {
