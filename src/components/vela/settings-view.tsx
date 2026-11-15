@@ -180,7 +180,7 @@ export function SettingsView() {
         <CycleSection />
       </Accordion>
       </Cluster>
-      <Cluster id="cl-privacy" title={t("clPrivacyData")} hint={t("clPrivacyHint")} badges={[lockBadge, dataBadge]}>
+      <Cluster id="cl-privacy" title={t("clPrivacyData")} hint={t("clPrivacyHint")}>
       <Accordion id="privacy" icon={<Lock className="size-5" />} title={t("privacy")} badge={lockBadge} open={open.privacy} onToggle={toggle}>
         <PrivacySection />
       </Accordion>
@@ -271,7 +271,11 @@ function Accordion({
  * brought to Vela: the cluster no longer folds — it is a tray that lives
  * open, one tone under the page, wearing its name, a line saying what it
  * holds, and its state pills (the live state of what is inside: the lock,
- * the account, the cycle), with the sections sitting proud inside. */
+ * the account, the cycle), with the sections sitting proud inside.
+ * Exception (Oscar, 2026-11-15): the Privacy & data tray wears NO header
+ * pills — its two pills pushed the title onto two lines; the lock and
+ * device state still show on the Privacy and Data section rows inside,
+ * where they belong. Do not hoist them back. */
 function Cluster({
   id,
   title,
