@@ -5,23 +5,19 @@ import {
   Check,
   ChevronDown,
   Download,
-  ShieldCheck,
   Fingerprint,
   Droplets,
   EyeOff,
   Heart,
-  HeartHandshake,
   Lock,
   MapPin,
   Moon,
   Palette,
   Settings2,
-  SlidersHorizontal,
   Smartphone,
   Sun,
   Upload,
   UserRound,
-  Users,
   Languages,
   X,
 } from "lucide-react";
@@ -51,7 +47,6 @@ import { CoupleSection } from "./couple-section";
 import { AddTracker } from "./cycle-add";
 import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PassphraseInput } from "./ui";
 import { MANUAL_CHAPTERS, MANUAL_TOPICS } from "@/lib/vela/manual";
-import { SECTION_CLUSTER } from "@/lib/vela/settings-clusters";
 import { Hint } from "./hint";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { APK_URL, androidBrowser } from "@/lib/vela/native";
@@ -61,22 +56,14 @@ export function SettingsView() {
   const t = useT();
   const open = useJournal((s) => s.sections);
   const toggle = useJournal((s) => s.toggleSection);
-  const openClusters = useJournal((s) => s.clusters);
-  const toggleCluster = useJournal((s) => s.toggleCluster);
-  // Back / gesture: a visible open section folds first, then its cluster,
-  // then Settings closes — one layer at a time. A section left open inside
-  // a closed cluster is not a visible layer and does not eat the gesture.
-  const visibleSection = Object.keys(open).find((id) => open[id] && openClusters[SECTION_CLUSTER[id]]) ?? "";
-  const openClusterId = Object.keys(openClusters).find((id) => openClusters[id]) ?? "";
-  useBackLayer(Boolean(visibleSection || openClusterId), () => {
+  // Back / gesture: a visible open section folds first, then Settings
+  // closes — one layer at a time. (The clusters were a fold layer of their
+  // own until 2.2.19; as trays they live open and eat no gesture.)
+  const visibleSection = Object.keys(open).find((id) => open[id]) ?? "";
+  useBackLayer(Boolean(visibleSection), () => {
     const st = useJournal.getState();
-    const sec = Object.keys(st.sections).find((key) => st.sections[key] && st.clusters[SECTION_CLUSTER[key]]);
-    if (sec) {
-      st.toggleSection(sec);
-      return;
-    }
-    const cl = Object.keys(st.clusters).find((key) => st.clusters[key]);
-    if (cl) st.toggleCluster(cl);
+    const sec = Object.keys(st.sections).find((key) => st.sections[key]);
+    if (sec) st.toggleSection(sec);
   }, { tier: 4, name: "settings-section" });
   const displayName = useJournal((s) => s.journal.profile?.displayName ?? "");
   const lockBadge = useLockBadge();
@@ -102,7 +89,7 @@ export function SettingsView() {
           <p className="mt-1 text-sm leading-relaxed text-dim">{t("settingsSub")}</p>
         </div>
       </div>
-      <Cluster id="cl-personal" icon={<SlidersHorizontal className="size-5" />} title={t("clPersonal")} open={openClusters["cl-personal"]} onToggle={toggleCluster}>
+      <Cluster id="cl-personal" title={t("clPersonal")} hint={t("clPersonalHint")}>
       <Accordion
         id="language"
         icon={<Languages className="size-5" />}
@@ -137,7 +124,7 @@ export function SettingsView() {
         <PrefsSection />
       </Accordion>
       </Cluster>
-      <Cluster id="cl-people" icon={<Users className="size-5" />} title={t("clPeople")} open={openClusters["cl-people"]} onToggle={toggleCluster}>
+      <Cluster id="cl-people" title={t("clPeople")} hint={t("clPeopleHint")}>
       <Accordion
         id="partners"
         icon={<Heart className="size-5" />}
@@ -172,7 +159,7 @@ export function SettingsView() {
         <ArchiveSection />
       </Accordion>
       </Cluster>
-      <Cluster id="cl-cycle" icon={<HeartHandshake className="size-5" />} title={t("clCycleCouple")} badges={[cycleOn ? t("cycleOn") : t("cycleOff")]} open={openClusters["cl-cycle"]} onToggle={toggleCluster}>
+      <Cluster id="cl-cycle" title={t("clCycleCouple")} hint={t("clCycleHint")} badges={[cycleOn ? t("cycleOn") : t("cycleOff")]}>
       <Accordion
         id="couple"
         icon={<Heart className="size-5" />}
@@ -193,7 +180,7 @@ export function SettingsView() {
         <CycleSection />
       </Accordion>
       </Cluster>
-      <Cluster id="cl-privacy" icon={<ShieldCheck className="size-5" />} title={t("clPrivacyData")} badges={[lockBadge, dataBadge]} open={openClusters["cl-privacy"]} onToggle={toggleCluster}>
+      <Cluster id="cl-privacy" title={t("clPrivacyData")} hint={t("clPrivacyHint")} badges={[lockBadge, dataBadge]}>
       <Accordion id="privacy" icon={<Lock className="size-5" />} title={t("privacy")} badge={lockBadge} open={open.privacy} onToggle={toggle}>
         <PrivacySection />
       </Accordion>
@@ -201,6 +188,7 @@ export function SettingsView() {
         <DataSection />
       </Accordion>
       </Cluster>
+      <Cluster id="cl-help" title={t("clHelp")} hint={t("clHelpHint")}>
       <Accordion id="manual" icon={<BookOpen className="size-5" />} title={t("mnTitle")} open={open.manual} onToggle={toggle}>
         <ManualSection />
       </Accordion>
@@ -209,6 +197,7 @@ export function SettingsView() {
           <AndroidAppSection es={language === "es"} />
         </Accordion>
       ) : null}
+      </Cluster>
       <p className="px-4 pt-3 text-center text-xs tracking-wide text-dim">{t("footer")}</p>
       <p className="px-4 pb-2 pt-1 text-center text-[11px] tracking-wide text-dim/70">{language === "es" ? "Versión" : "Version"} {APP_VERSION}</p>
     </div>
@@ -277,52 +266,40 @@ function Accordion({
   );
 }
 
-/* A cluster (2.2.9): a named area holding the sections that belong together.
- * Same panel skin as a section, one level up — its state pills are the live
- * state of what is inside (the lock, the account, the cycle), so the closed
- * row still tells the truth at a glance. */
+/* A cluster (2.2.9; a tray since 2.2.19): a named area holding the sections
+ * that belong together. Oscar ordered the Brizna/Faro cluster pattern
+ * brought to Vela: the cluster no longer folds — it is a tray that lives
+ * open, one tone under the page, wearing its name, a line saying what it
+ * holds, and its state pills (the live state of what is inside: the lock,
+ * the account, the cycle), with the sections sitting proud inside. */
 function Cluster({
   id,
-  icon,
   title,
+  hint,
   badges,
-  open,
-  onToggle,
   children,
 }: {
   id: string;
-  icon: ReactNode;
   title: string;
+  hint: string;
   badges?: string[];
-  open?: boolean;
-  onToggle: (id: string) => void;
   children: ReactNode;
 }) {
   const shown = (badges ?? []).filter(Boolean);
-  const ever = useEverOpen(open);
   return (
-    <section className="ag-panel ag-well overflow-hidden rounded-card border border-border">
-      <button
-        type="button"
-        className="flex w-full items-center gap-3 px-4 py-4 text-left"
-        aria-expanded={Boolean(open)}
-        onClick={() => onToggle(id)}
-        data-testid={`cluster-${id}`}
-      >
-        <span className="text-accent">{icon}</span>
-        <span className="min-w-0 flex-1 font-semibold">{title}</span>
-        {shown.map((badge, index) => (
-          <span key={index} className="max-w-36 truncate rounded-full bg-accent-soft px-2 py-1 text-xs font-semibold text-accent">
-            {badge}
-          </span>
-        ))}
-        <ChevronDown className={cn("ag-fold-chev size-4 shrink-0 text-dim", open && "rotate-180")} />
-      </button>
-      <div className="ag-fold" data-open={open ? "true" : "false"}>
-        <div className="ag-fold-in">
-          {ever ? <div className="space-y-3 border-t border-border px-3 py-3">{children}</div> : null}
+    <section className="ag-panel ag-well vl-cluster overflow-hidden rounded-card border border-border" data-testid={`cluster-${id}`}>
+      <header className="vl-cluster-head">
+        <div className="flex items-center gap-2">
+          <h3 className="min-w-0 flex-1 font-display text-xl font-semibold">{title}</h3>
+          {shown.map((badge, index) => (
+            <span key={index} className="max-w-36 truncate rounded-full bg-accent-soft px-2 py-1 text-xs font-semibold text-accent">
+              {badge}
+            </span>
+          ))}
         </div>
-      </div>
+        <p className="mt-0.5 text-[12.5px] leading-snug text-dim">{hint}</p>
+      </header>
+      <div className="space-y-3">{children}</div>
     </section>
   );
 }

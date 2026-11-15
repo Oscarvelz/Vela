@@ -543,6 +543,25 @@ body::-webkit-scrollbar,
   border-radius: 1.5rem;
 }
 
+/* The cluster tray (2.2.19): Oscar ordered the Brizna/Faro cluster pattern
+   brought to Vela — the clusters stop being folding panels and become
+   trays that live open: a face one tone under the page (the page's own
+   background mixed toward the surface), the house stacked edge, and the
+   sections sitting proud inside on the nested-panel recipe above. The
+   tray wears the well's radius (24); its cards keep the card step (20). */
+.vl-cluster {
+  background-color: color-mix(in srgb, var(--ag-bg) 72%, var(--ag-surface));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--ag-text), transparent 94%),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 26px -20px rgba(0, 0, 0, 0.4);
+  padding: 14px 10px 10px;
+}
+
+.vl-cluster-head {
+  padding: 0 6px 10px;
+}
+
 .ag-hero {
   background-image: linear-gradient(
     108deg,
