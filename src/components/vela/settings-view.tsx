@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Archive,
   BookOpen,
@@ -220,6 +220,16 @@ function themeName(theme: string): CopyKey {
   return (found?.name ?? "themeVelvetName") as CopyKey;
 }
 
+/* A fold's children mount on first open and stay mounted after — the
+ * close can only glide if the body still exists while it folds. */
+function useEverOpen(open?: boolean) {
+  const [ever, setEver] = useState(Boolean(open));
+  useEffect(() => {
+    if (open) setEver(true);
+  }, [open ]);
+  return ever;
+}
+
 function Accordion({
   id,
   icon,
@@ -237,6 +247,7 @@ function Accordion({
   onToggle: (id: string) => void;
   children: ReactNode;
 }) {
+  const ever = useEverOpen(open);
   return (
     <section className="ag-panel overflow-hidden rounded-card border border-border">
       <button
@@ -252,9 +263,13 @@ function Accordion({
             {badge}
           </span>
         ) : null}
-        <ChevronDown className={cn("size-4 shrink-0 text-dim transition-transform", open && "rotate-180")} />
+        <ChevronDown className={cn("ag-fold-chev size-4 shrink-0 text-dim", open && "rotate-180")} />
       </button>
-      {open ? <div className="border-t border-border px-4 py-4">{children}</div> : null}
+      <div className="ag-fold" data-open={open ? "true" : "false"}>
+        <div className="ag-fold-in">
+          {ever ? <div className="border-t border-border px-4 py-4">{children}</div> : null}
+        </div>
+      </div>
     </section>
   );
 }
@@ -281,6 +296,7 @@ function Cluster({
   children: ReactNode;
 }) {
   const shown = (badges ?? []).filter(Boolean);
+  const ever = useEverOpen(open);
   return (
     <section className="ag-panel ag-well overflow-hidden rounded-card border border-border">
       <button
@@ -297,9 +313,13 @@ function Cluster({
             {badge}
           </span>
         ))}
-        <ChevronDown className={cn("size-4 shrink-0 text-dim transition-transform", open && "rotate-180")} />
+        <ChevronDown className={cn("ag-fold-chev size-4 shrink-0 text-dim", open && "rotate-180")} />
       </button>
-      {open ? <div className="space-y-3 border-t border-border px-3 py-3">{children}</div> : null}
+      <div className="ag-fold" data-open={open ? "true" : "false"}>
+        <div className="ag-fold-in">
+          {ever ? <div className="space-y-3 border-t border-border px-3 py-3">{children}</div> : null}
+        </div>
+      </div>
     </section>
   );
 }

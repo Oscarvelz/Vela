@@ -463,6 +463,61 @@ body::-webkit-scrollbar,
   border-radius: 1rem;
 }
 
+/* The settings fold (2.2.16): clusters and the sections inside them open
+   and close on the house curve — a glide, never a jump. (Oscar: the old
+   conditional render POPPED the body in; he asked for the unfold and the
+   fold both to be «mucho más suave, delicado».) Grid-rows carries the
+   height, opacity and a 6px settle carry the delicacy, and visibility
+   keeps a closed fold out of the tab order once it has finished. */
+.ag-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 300ms ease,
+    visibility 0s linear 460ms;
+}
+
+.ag-fold[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 360ms ease 70ms,
+    visibility 0s linear 0s;
+}
+
+.ag-fold-in {
+  overflow: hidden;
+  min-height: 0;
+  transform: translateY(6px);
+  transition: transform 460ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ag-fold[data-open="true"] .ag-fold-in {
+  transform: translateY(0);
+}
+
+.ag-fold-chev {
+  transition: rotate 460ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ag-fold,
+  .ag-fold[data-open="true"],
+  .ag-fold-in,
+  .ag-fold-chev {
+    transition: none;
+  }
+
+  .ag-fold-in {
+    transform: none;
+  }
+}
+
 /* Radii shrink as nesting deepens (24 → 20 → 16): the well wears the
    largest radius, its cards the card step, their children one step less.
    The eye separates container from content by that descent too. */
