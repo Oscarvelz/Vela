@@ -474,6 +474,7 @@ body::-webkit-scrollbar,
   grid-template-rows: 0fr;
   opacity: 0;
   visibility: hidden;
+  overflow-anchor: none;
   transition:
     grid-template-rows 460ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 300ms ease,

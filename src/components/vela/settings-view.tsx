@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   Archive,
   BookOpen,
@@ -221,12 +221,15 @@ function themeName(theme: string): CopyKey {
 }
 
 /* A fold's children mount on first open and stay mounted after — the
- * close can only glide if the body still exists while it folds. */
+ * close can only glide if the body still exists while it folds. The latch
+ * is set DURING render, not in an effect: an effect runs a frame late,
+ * so the fold would start toward an empty body and the content would
+ * then pop in at full height — the flicker Oscar caught in 2.2.16. Set
+ * in render, the children are born in the same commit that opens the
+ * fold, and the glide runs whole from the first frame. */
 function useEverOpen(open?: boolean) {
   const [ever, setEver] = useState(Boolean(open));
-  useEffect(() => {
-    if (open) setEver(true);
-  }, [open ]);
+  if (open && !ever) setEver(true);
   return ever;
 }
 
