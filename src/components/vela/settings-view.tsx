@@ -94,7 +94,7 @@ export function SettingsView() {
   const dataBadge = sessionGone && cloudPhase === "signed-out" ? t("signInAgain") : cloudPhase === "saved" || cloudPhase === "saving" || cloudPhase === "offline" ? t("cloudBadge") : t("localBadge");
 
   return (
-    <div className="space-y-3">
+    <div className="ag-settings space-y-3">
       <div className="flex items-start gap-2 px-1 pt-1">
         <Mark className="mt-0.5 size-8" />
         <div>

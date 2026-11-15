@@ -463,32 +463,49 @@ body::-webkit-scrollbar,
   border-radius: 1rem;
 }
 
-/* The settings fold (2.2.16): clusters and the sections inside them open
-   and close on the house curve — a glide, never a jump. (Oscar: the old
-   conditional render POPPED the body in; he asked for the unfold and the
-   fold both to be «mucho más suave, delicado».) Grid-rows carries the
-   height, opacity and a 6px settle carry the delicacy, and visibility
-   keeps a closed fold out of the tab order once it has finished. */
+/* The settings fold (2.2.16, rebuilt 2.2.18): clusters and the sections
+   inside them open and close on the house curve — a glide, never a jump.
+   (Oscar: the old conditional render POPPED the body in; he asked for
+   the unfold and the fold both to be «mucho más suave, delicado».)
+   Grid-rows carries the height and a 6px settle carries the delicacy;
+   visibility keeps a closed fold out of the tab order once it has
+   finished. The 2.2.18 rebuild removed the OPACITY fade Oscar's phone
+   kept blinking on: the frame probe proved the state machine perfect
+   (monotonic height and opacity, node never replaced), so the blink
+   lived in the PAINT — a fade composited over backdrop-blurred glass,
+   re-blurred every frame over the animated background. The fold now
+   stays fully opaque end to end, and Settings panels carry no
+   backdrop-filter at all (the Crystal doctrine: on large windows the
+   alpha does the work). What is left is one layout glide, painted
+   plainly — nothing left to flicker. */
 .ag-fold {
   display: grid;
   grid-template-rows: 0fr;
-  opacity: 0;
   visibility: hidden;
   overflow-anchor: none;
   transition:
     grid-template-rows 460ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 300ms ease,
     visibility 0s linear 460ms;
 }
 
 .ag-fold[data-open="true"] {
   grid-template-rows: 1fr;
-  opacity: 1;
   visibility: visible;
   transition:
     grid-template-rows 460ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 360ms ease 70ms,
     visibility 0s linear 0s;
+}
+
+/* Settings is a work surface of large windows: its panels paint with
+   their alpha face and NO backdrop blur, in every theme — the Crystal
+   rule (2.1.16). The generic Firmament glass rule above hands every
+   .ag-panel a blur(12px); inside Settings that made every fold frame
+   re-blur a wall of glass over the moving fireflies, which is the
+   flicker Oscar saw on his phone in 2.2.16/2.2.17. Faces (colour,
+   shade, the 1px stack) are untouched — only the blur goes. */
+[data-theme][data-mode] .ag-settings .ag-panel {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .ag-fold-in {
