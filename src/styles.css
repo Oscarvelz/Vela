@@ -445,11 +445,29 @@ body::-webkit-scrollbar,
   background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 8%);
   background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 46%);
   border-color: color-mix(in srgb, var(--ag-border), var(--ag-text) 30%);
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* The premium stack (Hark's recipe, distilled in the house study): an
+     inset hairline in the ink at low alpha, the top light, a 1px contact
+     shadow, and a SHORT elevation with negative spread — never one big
+     soft shadow. The edge is built from light, so the card reads as an
+     object even where its background sits close to its container's. */
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--ag-text), transparent 92%),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    0 10px 22px -14px rgba(0, 0, 0, 0.35);
+  border-radius: 1.25rem;
 }
 
 .ag-panel .ag-panel .ag-panel {
   background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 15%);
+  border-radius: 1rem;
+}
+
+/* Radii shrink as nesting deepens (24 → 20 → 16): the well wears the
+   largest radius, its cards the card step, their children one step less.
+   The eye separates container from content by that descent too. */
+.ag-well {
+  border-radius: 1.5rem;
 }
 
 .ag-hero {
@@ -808,7 +826,11 @@ input[type="range"].ag-range::-moz-range-thumb {
   background-color: color-mix(in srgb, var(--ag-surface-2), var(--ag-text) 18%);
   background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 46%);
   border-color: rgba(235, 189, 99, 0.3);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 16px 34px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 10px 22px -14px rgba(0, 0, 0, 0.55);
 }
 
 [data-theme="firmament"][data-mode="night"] .ag-panel .ag-panel .ag-panel {
