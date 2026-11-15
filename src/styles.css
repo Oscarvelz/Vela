@@ -442,8 +442,8 @@ body::-webkit-scrollbar,
    the inner boxes read flattened against their background; a saturated step
    then read as one blue block — "no se lee en contraste ni matices".) */
 .ag-panel .ag-panel {
-  background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 3.5%);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 46%);
+  background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 2.5%);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0) 24%);
   border-color: color-mix(in srgb, var(--ag-border), var(--ag-text) 30%);
   /* The premium stack (Hark's recipe, distilled in the house study): an
      inset hairline in the ink at low alpha, the top light, a 1px contact
@@ -452,14 +452,14 @@ body::-webkit-scrollbar,
      object even where its background sits close to its container's. */
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--ag-text), transparent 92%),
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 1px 2px rgba(0, 0, 0, 0.18),
     0 10px 22px -14px rgba(0, 0, 0, 0.35);
   border-radius: 1.25rem;
 }
 
 .ag-panel .ag-panel .ag-panel {
-  background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 6.5%);
+  background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 5.5%);
   border-radius: 1rem;
 }
 
@@ -818,20 +818,23 @@ input[type="range"].ag-range::-moz-range-thumb {
    the same face melts; a stronger blue blocks; a dark tray with light cards
    turns harsh, black-and-white, and overshadows everything else. The fine
    separation is the 1px stack's work — hairline, top light, gold rim —
-   not the background distance.) */
+   not the background distance. And the last word was his diagnosis of the
+   sheen: the white he kept seeing was the TOP FADE — so the gradient is a
+   whisper that dies in the top quarter, never a wash over half the card.
+   Recipe chosen by Oscar from rendered variants, 2026-11-14 22:38.) */
 [data-theme="firmament"][data-mode="night"] .ag-panel .ag-panel {
-  background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 4.5%);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 46%);
+  background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 2.5%);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0) 22%);
   border-color: rgba(235, 189, 99, 0.22);
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 1px 2px rgba(0, 0, 0, 0.3),
     0 10px 22px -14px rgba(0, 0, 0, 0.5);
 }
 
 [data-theme="firmament"][data-mode="night"] .ag-panel .ag-panel .ag-panel {
-  background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 8%);
+  background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 6%);
 }
 
 /* The blur belongs to the faces that move: the header itself and the dock face. Never put it on the
