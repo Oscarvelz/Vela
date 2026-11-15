@@ -11,7 +11,6 @@ import {
   EyeOff,
   Heart,
   HeartHandshake,
-  LifeBuoy,
   Lock,
   MapPin,
   Moon,
@@ -202,7 +201,6 @@ export function SettingsView() {
         <DataSection />
       </Accordion>
       </Cluster>
-      <Cluster id="cl-help" icon={<LifeBuoy className="size-5" />} title={t("clHelp")} open={openClusters["cl-help"]} onToggle={toggleCluster}>
       <Accordion id="manual" icon={<BookOpen className="size-5" />} title={t("mnTitle")} open={open.manual} onToggle={toggle}>
         <ManualSection />
       </Accordion>
@@ -211,7 +209,6 @@ export function SettingsView() {
           <AndroidAppSection es={language === "es"} />
         </Accordion>
       ) : null}
-      </Cluster>
       <p className="px-4 pt-3 text-center text-xs tracking-wide text-dim">{t("footer")}</p>
       <p className="px-4 pb-2 pt-1 text-center text-[11px] tracking-wide text-dim/70">{language === "es" ? "Versión" : "Version"} {APP_VERSION}</p>
     </div>
@@ -1194,8 +1191,8 @@ function AndroidAppSection({ es }: { es: boolean }) {
       </p>
       <p className="text-sm leading-relaxed text-dim">
         {es
-          ? "La app guarda su diario aparte de Chrome. Antes, revisa en Datos y copias que diga En tu cuenta; en la app entra con tu cuenta y escribe tu frase una vez."
-          : "The app keeps its journal apart from Chrome. First check that Data & Backup says In your account; in the app, sign in and type your passphrase once."}
+          ? "La app guarda su diario aparte de Chrome. Antes, revisa en Datos y copias que diga Respaldo; en la app entra con tu cuenta y escribe tu frase una vez."
+          : "The app keeps its journal apart from Chrome. First check that Data & Backup says Backup; in the app, sign in and type your passphrase once."}
       </p>
       <Button
         className="w-full"

@@ -177,7 +177,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Llegas desde una burbuja (?): el manual abre en esa entrada exacta, iluminada — nunca aterrizas en una portada a cazar.\nLo abres desde Ajustes: abre en la portada, con cada capítulo y el índice A–Z.",
         ],
         related: ["lector-lotes", "dias-quietos"],
-        go: { settings: "manual", where: ["Settings → Help & the app → Manual", "Ajustes → Ayuda y la app → Manual"] },
+        go: { settings: "manual", where: ["Settings → Manual", "Ajustes → Manual"] },
         terms: [["help", "ayuda"], ["guide", "guía"]],
       },
     ],

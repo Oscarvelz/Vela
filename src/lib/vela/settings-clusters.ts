@@ -17,6 +17,4 @@ export const SECTION_CLUSTER: Record<string, string> = {
   cycle: "cl-cycle",
   privacy: "cl-privacy",
   data: "cl-privacy",
-  manual: "cl-help",
-  android: "cl-help",
 };
