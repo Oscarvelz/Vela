@@ -435,14 +435,21 @@ body::-webkit-scrollbar,
   box-shadow: none;
 }
 
-/* A panel inside a panel must not wear its container's face: nested boxes
-   rise one surface step, take a firmer edge and a soft lift, in every theme.
-   (Oscar, 2026-11-14: the inner boxes read flattened because the background
-   is almost the same color as the boxes inside.) */
+/* A panel inside a panel must not wear its container's face — and the cure
+   is light, not more color: each nesting level climbs a shade ladder toward
+   the ink, lit from above, with a firmer edge and a real shadow, so the eye
+   reads separate objects in contrast and nuance. (Oscar, 2026-11-14: first
+   the inner boxes read flattened against their background; a saturated step
+   then read as one blue block — "no se lee en contraste ni matices".) */
 .ag-panel .ag-panel {
-  background-color: var(--ag-surface-2);
-  border-color: color-mix(in srgb, var(--ag-border), var(--ag-text) 20%);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 8%);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 46%);
+  border-color: color-mix(in srgb, var(--ag-border), var(--ag-text) 30%);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.ag-panel .ag-panel .ag-panel {
+  background-color: color-mix(in srgb, var(--ag-surface), var(--ag-text) 15%);
 }
 
 .ag-hero {
@@ -788,11 +795,24 @@ input[type="range"].ag-range::-moz-range-thumb {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 40px rgba(0, 0, 0, 0.28);
 }
 
-/* Nested glass rises toward surface-2 and lifts harder, so a box inside a
-   box never melts into it. */
+/* The well recedes toward the night itself, so what sits in it can be read
+   by light instead of by more blue. */
+[data-theme="firmament"][data-mode="night"] .ag-well {
+  background-color: rgba(8, 12, 30, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 18px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* Nested glass climbs toward the ink — lighter and grayer, never bluer —
+   with the house gold for a rim and a lit top edge. */
 [data-theme="firmament"][data-mode="night"] .ag-panel .ag-panel {
-  background-color: rgba(26, 39, 84, 0.78);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 14px 30px rgba(0, 0, 0, 0.36);
+  background-color: color-mix(in srgb, var(--ag-surface-2), var(--ag-text) 18%);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 46%);
+  border-color: rgba(235, 189, 99, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 16px 34px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="firmament"][data-mode="night"] .ag-panel .ag-panel .ag-panel {
+  background-color: color-mix(in srgb, var(--ag-surface-2), var(--ag-text) 30%);
 }
 
 /* The blur belongs to the faces that move: the header itself and the dock face. Never put it on the

@@ -282,7 +282,7 @@ function Cluster({
 }) {
   const shown = (badges ?? []).filter(Boolean);
   return (
-    <section className="ag-panel overflow-hidden rounded-card border border-border">
+    <section className="ag-panel ag-well overflow-hidden rounded-card border border-border">
       <button
         type="button"
         className="flex w-full items-center gap-3 px-4 py-4 text-left"
