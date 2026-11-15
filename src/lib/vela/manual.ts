@@ -88,7 +88,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Cambias de teléfono: el dispositivo nuevo pide la frase antes que nada — sin ella, el diario sellado permanece sellado.",
         ],
         related: ["bloqueo", "copias"],
-        go: { settings: "privacy", spot: "change-passphrase", where: ["Settings → Privacy", "Ajustes → Privacidad"] },
+        go: { settings: "privacy", spot: "change-passphrase", where: ["Settings → Privacy & data → Privacy", "Ajustes → Privacidad y datos → Privacidad"] },
         terms: [["password", "contraseña"], ["encryption", "cifrado"]],
       },
       {
@@ -119,7 +119,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Cerrar sesión para «probar» la puerta sin conexión. Cerrar sesión olvida el dispositivo a propósito: es la única salida que necesita la red para volver.",
         ],
         related: ["sincronizacion"],
-        go: { settings: "data", spot: "account-door", where: ["Settings → Data & sync", "Ajustes → Datos y sincronización"] },
+        go: { settings: "data", spot: "account-door", where: ["Settings → Privacy & data → Data & sync", "Ajustes → Privacidad y datos → Datos y sincronización"] },
         terms: [["offline", "sin conexión"], ["airplane mode", "modo avión"]],
       },
       {
@@ -150,7 +150,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "El teléfono se actualiza y la huella deja de coincidir: la frase abre Vela como siempre — nada se pierde, y la huella puede configurarse otra vez.",
         ],
         related: ["tu-frase"],
-        go: { settings: "privacy", spot: "lock-now", where: ["Settings → Privacy", "Ajustes → Privacidad"] },
+        go: { settings: "privacy", spot: "lock-now", where: ["Settings → Privacy & data → Privacy", "Ajustes → Privacidad y datos → Privacidad"] },
         terms: [["biometric", "biometría"], ["auto-lock", "bloqueo automático"]],
       },
       {
@@ -177,7 +177,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Llegas desde una burbuja (?): el manual abre en esa entrada exacta, iluminada — nunca aterrizas en una portada a cazar.\nLo abres desde Ajustes: abre en la portada, con cada capítulo y el índice A–Z.",
         ],
         related: ["lector-lotes", "dias-quietos"],
-        go: { settings: "manual", where: ["Settings → Manual", "Ajustes → Manual"] },
+        go: { settings: "manual", where: ["Settings → Help & the app → Manual", "Ajustes → Ayuda y la app → Manual"] },
         terms: [["help", "ayuda"], ["guide", "guía"]],
       },
     ],
@@ -433,7 +433,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Archivar para esconder algo dentro de un diario compartido. En modo pareja no hay rincones privados; archivar es descanso, no secreto.",
         ],
         related: ["activar-pareja", "borrar-todo"],
-        go: { settings: "archive", spot: "archive-section", where: ["Settings → Archive", "Ajustes → Archivo"] },
+        go: { settings: "archive", spot: "archive-section", where: ["Settings → People & places → Archive", "Ajustes → Personas y lugares → Archivo"] },
         terms: [["delete a person", "eliminar a una persona"], ["restore", "restaurar"]],
       },
     ],
@@ -468,6 +468,10 @@ export const MANUAL_CHAPTERS: Chapter[] = [
         example: [
           "Starts on the 2nd, the 30th and the 27th: Vela learns her cycles run about 28 days and expects the next start around the 24th — as an estimate.",
           "Inicios el 2, el 30 y el 27: Vela aprende que sus ciclos duran unos 28 días y espera el próximo inicio hacia el 24 — como estimado.",
+        ],
+        cases: [
+          "A start marked by mistake: the card offers Undo for a few seconds. Later, the start can be removed in [[Settings]] → Cycle & couple diary → Cycle, under Period starts — the estimates re-form from the starts that remain.",
+          "Un inicio marcado por error: la tarjeta ofrece Deshacer durante unos segundos. Después, el inicio se puede quitar en [[Ajustes]] → Ciclo y diario de pareja → Ciclo, en Inicios del periodo: los estimados se rehacen con los inicios que quedan.",
         ],
         related: ["varios-ciclos", "el-ciclo-pregunta"],
         go: { tab: "home", spot: "cycle-card", where: ["Home, the cycle card", "Inicio, la tarjeta del ciclo"] },
@@ -780,7 +784,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Compartes desde una fecha que eliges: los momentos anteriores a esa fecha conservan solo la voz del dueño, aunque ella estuviera ahí — el alcance es una línea que el diario respeta exactamente.\nUna de las dos aún no tiene ciclos atados a su nombre: su ciclo se ata la primera vez que su nombre encuentra una fecha de inicio dentro del diario compartido.",
         ],
         related: ["pines", "su-voz", "salir"],
-        go: { settings: "couple", spot: "couple-section", where: ["Settings → Couple diary", "Ajustes → Diario de pareja"] },
+        go: { settings: "couple", spot: "couple-section", where: ["Settings → Cycle & couple diary → Couple diary", "Ajustes → Ciclo y diario de pareja → Diario de pareja"] },
         terms: [["shared account", "cuenta compartida"], ["partner", "pareja"]],
       },
       {
@@ -811,7 +815,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Tu propia propuesta necesita su firma: el diario rechaza tu PIN en ella, cuantas veces se ingrese — el consentimiento solo viene de la otra silla.",
         ],
         related: ["activar-pareja", "decisiones", "tu-frase"],
-        go: { settings: "couple", spot: "couple-section", where: ["Settings → Couple diary", "Ajustes → Diario de pareja"] },
+        go: { settings: "couple", spot: "couple-section", where: ["Settings → Cycle & couple diary → Couple diary", "Ajustes → Ciclo y diario de pareja → Diario de pareja"] },
         terms: [["signature", "firma"], ["code", "código"]],
       },
       {
@@ -865,7 +869,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Tu propia voz nunca es una decisión compartida: borrarla es solo tuyo, enseguida.",
         ],
         related: ["salir", "borrar-todo", "pines"],
-        go: { settings: "couple", spot: "proposals-inbox", where: ["Settings → Couple diary → Shared decisions", "Ajustes → Diario de pareja → Decisiones compartidas"] },
+        go: { settings: "couple", spot: "proposals-inbox", where: ["Settings → Cycle & couple diary → Couple diary → Shared decisions", "Ajustes → Ciclo y diario de pareja → Diario de pareja → Decisiones compartidas"] },
         terms: [["consent", "consentimiento"], ["proposal", "propuesta"], ["cooling-off", "espera"]],
       },
       {
@@ -896,7 +900,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Salir para eliminar algo. Salir quita el diario solo de este dispositivo; el registro compartido sobrevive entero, por diseño.",
         ],
         related: ["decisiones", "copias"],
-        go: { settings: "couple", spot: "couple-leave", where: ["Settings → Couple diary", "Ajustes → Diario de pareja"] },
+        go: { settings: "couple", spot: "couple-leave", where: ["Settings → Cycle & couple diary → Couple diary", "Ajustes → Ciclo y diario de pareja → Diario de pareja"] },
         terms: [["exit", "salida"], ["breakup", "separación"]],
       },
     ],
@@ -933,7 +937,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "El reloj de tu teléfono está mal por horas: nada cambia — la sincronización nunca lee el reloj, solo la revisión del diario.\nEliges la copia de la nube en un conflicto: la copia de tu dispositivo no se destruye; espera como el respaldo cifrado que el conflicto guardó.",
         ],
         related: ["puerta-sin-conexion", "copias"],
-        go: { settings: "data", spot: "sync-section", where: ["Settings → Data & sync", "Ajustes → Datos y sincronización"] },
+        go: { settings: "data", spot: "sync-section", where: ["Settings → Privacy & data → Data & sync", "Ajustes → Privacidad y datos → Datos y sincronización"] },
         terms: [["conflict", "conflicto"], ["cloud", "nube"]],
       },
       {
@@ -960,7 +964,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Un respaldo guardado solo en el teléfono que protege: guarda contra errores, no contra perder el teléfono — guarda una copia en otro lugar.\nRestaurar un respaldo viejo sobre trabajo más nuevo: la revisión decide, y el estado más nuevo se guarda como respaldo antes de que nada se reemplace.",
         ],
         related: ["sincronizacion", "salir", "tu-frase"],
-        go: { settings: "data", spot: "backup-section", where: ["Settings → Data & sync", "Ajustes → Datos y sincronización"] },
+        go: { settings: "data", spot: "backup-section", where: ["Settings → Privacy & data → Data & sync", "Ajustes → Privacidad y datos → Datos y sincronización"] },
         terms: [["restore", "restaurar"], ["download", "descargar"]],
       },
       {
@@ -987,7 +991,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Solo quieres limpio este dispositivo: cerrar sesión con «olvidar este dispositivo» hace eso sin tocar el diario — borrar todo es para el diario mismo.\nUna exportación hecha el mismo día: sobrevive al borrado, porque ya salió — el borrado alcanza al diario, nunca a las copias que sacaste.",
         ],
         related: ["decisiones", "archivar", "copias"],
-        go: { settings: "data", spot: "erase-all", where: ["Settings → Data & sync", "Ajustes → Datos y sincronización"] },
+        go: { settings: "data", spot: "erase-all", where: ["Settings → Privacy & data → Data & sync", "Ajustes → Privacidad y datos → Datos y sincronización"] },
         terms: [["delete everything", "eliminar todo"], ["wipe", "borrado"]],
       },
     ],

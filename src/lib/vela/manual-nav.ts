@@ -6,6 +6,7 @@
  * the manual is interface, not journal data. */
 import { useJournal } from "./store";
 import { findTopic, type Go } from "./manual";
+import { SECTION_CLUSTER } from "./settings-clusters";
 
 export type SpotRequest = { spot?: string; topicId?: string; at: number };
 let pending: SpotRequest | null = null;
@@ -32,7 +33,13 @@ export function goToGo(go: Go, topicId: string) {
   s.openManual(null);
   if (go.settings !== undefined) {
     s.setSettingsOpen(true);
-    if (go.settings && !s.sections[go.settings]) s.toggleSection(go.settings);
+    if (go.settings) {
+      // Sections live under clusters (2.2.9): the door opens the roof too,
+      // or the section would stay hidden inside its closed cluster.
+      const cluster = SECTION_CLUSTER[go.settings];
+      if (cluster) s.openCluster(cluster);
+      if (!s.sections[go.settings]) s.toggleSection(go.settings);
+    }
   } else if (go.tab) {
     s.setSettingsOpen(false);
     s.setTab(go.tab);

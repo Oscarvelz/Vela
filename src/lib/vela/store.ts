@@ -744,6 +744,8 @@ type Store = {
   confirmErase: boolean;
   composeEncounterId: string | null;
   sections: Record<string, boolean>;
+  /** Settings clusters (2.2.9): which named area is open. UI only — never persisted. */
+  clusters: Record<string, boolean>;
   calY: number;
   calM: number;
   calSel: string;
@@ -798,6 +800,8 @@ type Store = {
   setSettingsOpen: (open: boolean) => void;
   openManual: (id: string | null) => void;
   toggleSection: (id: string) => void;
+  toggleCluster: (id: string) => void;
+  openCluster: (id: string) => void;
   setShowForm: (open: boolean) => void;
   beginSession: (encounterId: string) => void;
   clearCompose: () => void;
@@ -1033,6 +1037,7 @@ export const useJournal = create<Store>((set, get) => {
     composeEncounterId: null,
     cloudPhase: "off",
     sections: openSections,
+    clusters: {},
     calY: now.getFullYear(),
     calM: now.getMonth(),
     calSel: todayStr(now),
@@ -1338,6 +1343,23 @@ export const useJournal = create<Store>((set, get) => {
       for (const key of Object.keys(current)) sections[key] = false;
       sections[id] = next;
       set({ sections });
+    },
+    // Clusters hold the sections' roof: one open at a time, like the
+    // sections themselves. Sections keep their own state underneath, so
+    // returning to a cluster finds the section you left open still open.
+    toggleCluster: (id) => {
+      const current = get().clusters;
+      const next = !current[id];
+      const clusters: Record<string, boolean> = {};
+      for (const key of Object.keys(current)) clusters[key] = false;
+      clusters[id] = next;
+      set({ clusters });
+    },
+    openCluster: (id) => {
+      const clusters: Record<string, boolean> = {};
+      for (const key of Object.keys(get().clusters)) clusters[key] = false;
+      clusters[id] = true;
+      set({ clusters });
     },
     setShowForm: (showForm) => set({ showForm }),
     beginSession: (encounterId) =>

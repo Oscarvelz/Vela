@@ -10,15 +10,19 @@ import {
   Droplets,
   EyeOff,
   Heart,
+  HeartHandshake,
+  LifeBuoy,
   Lock,
   MapPin,
   Moon,
   Palette,
   Settings2,
+  SlidersHorizontal,
   Smartphone,
   Sun,
   Upload,
   UserRound,
+  Users,
   Languages,
   X,
 } from "lucide-react";
@@ -48,6 +52,7 @@ import { CoupleSection } from "./couple-section";
 import { AddTracker } from "./cycle-add";
 import { Button, ConfirmDialog, MenuSelect, Switch, fieldClass, PassphraseInput } from "./ui";
 import { MANUAL_CHAPTERS, MANUAL_TOPICS } from "@/lib/vela/manual";
+import { SECTION_CLUSTER } from "@/lib/vela/settings-clusters";
 import { Hint } from "./hint";
 import { useBackLayer } from "@/lib/vela/back-stack";
 import { APK_URL, androidBrowser } from "@/lib/vela/native";
@@ -57,12 +62,22 @@ export function SettingsView() {
   const t = useT();
   const open = useJournal((s) => s.sections);
   const toggle = useJournal((s) => s.toggleSection);
-  // Back / gesture: an open section folds first, then Settings closes.
-  const openSection = Object.keys(open).find((id) => open[id]) ?? "";
-  useBackLayer(Boolean(openSection), () => {
-    const now = useJournal.getState().sections;
-    const id = Object.keys(now).find((key) => now[key]);
-    if (id) useJournal.getState().toggleSection(id);
+  const openClusters = useJournal((s) => s.clusters);
+  const toggleCluster = useJournal((s) => s.toggleCluster);
+  // Back / gesture: a visible open section folds first, then its cluster,
+  // then Settings closes — one layer at a time. A section left open inside
+  // a closed cluster is not a visible layer and does not eat the gesture.
+  const visibleSection = Object.keys(open).find((id) => open[id] && openClusters[SECTION_CLUSTER[id]]) ?? "";
+  const openClusterId = Object.keys(openClusters).find((id) => openClusters[id]) ?? "";
+  useBackLayer(Boolean(visibleSection || openClusterId), () => {
+    const st = useJournal.getState();
+    const sec = Object.keys(st.sections).find((key) => st.sections[key] && st.clusters[SECTION_CLUSTER[key]]);
+    if (sec) {
+      st.toggleSection(sec);
+      return;
+    }
+    const cl = Object.keys(st.clusters).find((key) => st.clusters[key]);
+    if (cl) st.toggleCluster(cl);
   }, { tier: 4, name: "settings-section" });
   const displayName = useJournal((s) => s.journal.profile?.displayName ?? "");
   const lockBadge = useLockBadge();
@@ -77,6 +92,7 @@ export function SettingsView() {
     return m.people.length + m.days.length;
   });
   const archivedCount = useJournal((s) => cleanArchived(s.journal.settings.archivedPeople).length);
+  const dataBadge = sessionGone && cloudPhase === "signed-out" ? t("signInAgain") : cloudPhase === "saved" || cloudPhase === "saving" || cloudPhase === "offline" ? t("cloudBadge") : t("localBadge");
 
   return (
     <div className="space-y-3">
@@ -87,6 +103,7 @@ export function SettingsView() {
           <p className="mt-1 text-sm leading-relaxed text-dim">{t("settingsSub")}</p>
         </div>
       </div>
+      <Cluster id="cl-personal" icon={<SlidersHorizontal className="size-5" />} title={t("clPersonal")} open={openClusters["cl-personal"]} onToggle={toggleCluster}>
       <Accordion
         id="language"
         icon={<Languages className="size-5" />}
@@ -117,6 +134,11 @@ export function SettingsView() {
       >
         <AppearanceSection />
       </Accordion>
+      <Accordion id="prefs" icon={<Settings2 className="size-5" />} title={t("preferences")} open={open.prefs} onToggle={toggle}>
+        <PrefsSection />
+      </Accordion>
+      </Cluster>
+      <Cluster id="cl-people" icon={<Users className="size-5" />} title={t("clPeople")} open={openClusters["cl-people"]} onToggle={toggleCluster}>
       <Accordion
         id="partners"
         icon={<Heart className="size-5" />}
@@ -129,9 +151,6 @@ export function SettingsView() {
       </Accordion>
       <Accordion id="places" icon={<MapPin className="size-5" />} title={t("placesPositions")} open={open.places} onToggle={toggle}>
         <PlacesSection />
-      </Accordion>
-      <Accordion id="privacy" icon={<Lock className="size-5" />} title={t("privacy")} badge={lockBadge} open={open.privacy} onToggle={toggle}>
-        <PrivacySection />
       </Accordion>
       <Accordion
         id="memories"
@@ -153,6 +172,8 @@ export function SettingsView() {
       >
         <ArchiveSection />
       </Accordion>
+      </Cluster>
+      <Cluster id="cl-cycle" icon={<HeartHandshake className="size-5" />} title={t("clCycleCouple")} badges={[cycleOn ? t("cycleOn") : t("cycleOff")]} open={openClusters["cl-cycle"]} onToggle={toggleCluster}>
       <Accordion
         id="couple"
         icon={<Heart className="size-5" />}
@@ -172,20 +193,25 @@ export function SettingsView() {
       >
         <CycleSection />
       </Accordion>
-      <Accordion id="manual" icon={<BookOpen className="size-5" />} title={t("mnTitle")} open={open.manual} onToggle={toggle}>
-        <ManualSection />
+      </Cluster>
+      <Cluster id="cl-privacy" icon={<ShieldCheck className="size-5" />} title={t("clPrivacyData")} badges={[lockBadge, dataBadge]} open={openClusters["cl-privacy"]} onToggle={toggleCluster}>
+      <Accordion id="privacy" icon={<Lock className="size-5" />} title={t("privacy")} badge={lockBadge} open={open.privacy} onToggle={toggle}>
+        <PrivacySection />
       </Accordion>
-      <Accordion id="data" icon={<Download className="size-5" />} title={t("dataSync")} badge={sessionGone && cloudPhase === "signed-out" ? t("signInAgain") : cloudPhase === "saved" || cloudPhase === "saving" || cloudPhase === "offline" ? t("cloudBadge") : t("localBadge")} open={open.data} onToggle={toggle}>
+      <Accordion id="data" icon={<Download className="size-5" />} title={t("dataSync")} badge={dataBadge} open={open.data} onToggle={toggle}>
         <DataSection />
       </Accordion>
-      <Accordion id="prefs" icon={<Settings2 className="size-5" />} title={t("preferences")} open={open.prefs} onToggle={toggle}>
-        <PrefsSection />
+      </Cluster>
+      <Cluster id="cl-help" icon={<LifeBuoy className="size-5" />} title={t("clHelp")} open={openClusters["cl-help"]} onToggle={toggleCluster}>
+      <Accordion id="manual" icon={<BookOpen className="size-5" />} title={t("mnTitle")} open={open.manual} onToggle={toggle}>
+        <ManualSection />
       </Accordion>
       {androidBrowser() ? (
         <Accordion id="android" icon={<Smartphone className="size-5" />} title={language === "es" ? "Instalar app Android" : "Install the Android app"} badge="APK" open={open.android} onToggle={toggle}>
           <AndroidAppSection es={language === "es"} />
         </Accordion>
       ) : null}
+      </Cluster>
       <p className="px-4 pt-3 text-center text-xs tracking-wide text-dim">{t("footer")}</p>
       <p className="px-4 pb-2 pt-1 text-center text-[11px] tracking-wide text-dim/70">{language === "es" ? "Versión" : "Version"} {APP_VERSION}</p>
     </div>
@@ -232,6 +258,51 @@ function Accordion({
         <ChevronDown className={cn("size-4 shrink-0 text-dim transition-transform", open && "rotate-180")} />
       </button>
       {open ? <div className="border-t border-border px-4 py-4">{children}</div> : null}
+    </section>
+  );
+}
+
+/* A cluster (2.2.9): a named area holding the sections that belong together.
+ * Same panel skin as a section, one level up — its state pills are the live
+ * state of what is inside (the lock, the account, the cycle), so the closed
+ * row still tells the truth at a glance. */
+function Cluster({
+  id,
+  icon,
+  title,
+  badges,
+  open,
+  onToggle,
+  children,
+}: {
+  id: string;
+  icon: ReactNode;
+  title: string;
+  badges?: string[];
+  open?: boolean;
+  onToggle: (id: string) => void;
+  children: ReactNode;
+}) {
+  const shown = (badges ?? []).filter(Boolean);
+  return (
+    <section className="ag-panel overflow-hidden rounded-card border border-border">
+      <button
+        type="button"
+        className="flex w-full items-center gap-3 px-4 py-4 text-left"
+        aria-expanded={Boolean(open)}
+        onClick={() => onToggle(id)}
+        data-testid={`cluster-${id}`}
+      >
+        <span className="text-accent">{icon}</span>
+        <span className="min-w-0 flex-1 font-semibold">{title}</span>
+        {shown.map((badge, index) => (
+          <span key={index} className="max-w-36 truncate rounded-full bg-accent-soft px-2 py-1 text-xs font-semibold text-accent">
+            {badge}
+          </span>
+        ))}
+        <ChevronDown className={cn("size-4 shrink-0 text-dim transition-transform", open && "rotate-180")} />
+      </button>
+      {open ? <div className="space-y-3 border-t border-border px-3 py-3">{children}</div> : null}
     </section>
   );
 }

@@ -266,12 +266,17 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
     secondary = started;
   }
   const idle = confirm ? (
-    <div className="cy-row cy-rise flex h-12 gap-2" data-testid="cycle-confirm">
-      <ActButton act={{ key: "cancel", label: t("cyConfirmNo"), run: () => setConfirm(null) }} ghost testId="cycle-confirm-no" />
-      <ActButton
-        act={{ key: "confirm", label: t(confirm === "start" ? "cyConfirmStart" : "cyConfirmEnd"), icon: "drop", run: confirmRun }}
-        testId="cycle-confirm-yes"
-      />
+    <div className="cy-rise" data-testid="cycle-confirm">
+      {confirm === "start" ? (
+        <p className="mb-2 px-1 text-center text-xs leading-relaxed text-dim">{t("cyStartImply")}</p>
+      ) : null}
+      <div className="cy-row flex h-12 gap-2">
+        <ActButton act={{ key: "cancel", label: t("cyConfirmNo"), run: () => setConfirm(null) }} ghost testId="cycle-confirm-no" />
+        <ActButton
+          act={{ key: "confirm", label: t(confirm === "start" ? "cyConfirmStart" : "cyConfirmEnd"), icon: "drop", run: confirmRun }}
+          testId="cycle-confirm-yes"
+        />
+      </div>
     </div>
   ) : undoer.pending ? (
     <div className="cy-row cy-rise flex h-12 gap-2">
@@ -773,7 +778,7 @@ export function CycleDial({ snap, keyLine, idle, ask, live = true }: { snap: Sna
   }, [sessions, start, length]);
   const [sel, setSel] = useState<number | null>(null);
   // A scrub action asks first (one line in the hint slot), then offers Undo for 8 s.
-  const [scrubAsk, setScrubAsk] = useState<{ q: string; yes: string; run: () => void } | null>(null);
+  const [scrubAsk, setScrubAsk] = useState<{ q: string; yes: string; note?: string; run: () => void } | null>(null);
   const dialUndo = useCycleUndo();
   const selRef = useRef<number | null>(null);
   selRef.current = sel;
@@ -911,10 +916,11 @@ export function CycleDial({ snap, keyLine, idle, ask, live = true }: { snap: Sna
   const scrubDay = addDays(start, lastScrub.current);
   const dayLabel = fmtShort(scrubDay, lang);
   useEffect(() => setScrubAsk(null), [scrubDay, scrubbing]);
-  const askScrub = (q: string, yes: string, change: () => void) =>
+  const askScrub = (q: string, yes: string, change: () => void, note?: string) =>
     setScrubAsk({
       q,
       yes,
+      note,
       run: () => {
         dialUndo.change(change, cycle.id);
         setScrubAsk(null);
@@ -934,10 +940,15 @@ export function CycleDial({ snap, keyLine, idle, ask, live = true }: { snap: Sna
       icon: "drop",
       label: fill(t(startKey), { d: dayLabel, name }),
       run: () =>
-        askScrub(replaceLine(startsReplacedBy(cycle, scrubDay), lang, t) || fill(t("cyStartOnQ"), { d: dayLabel }), t("cyYes"), () => {
-          logPeriodStart(scrubDay);
-          showToast(t("cyStartToast"));
-        }),
+        askScrub(
+          replaceLine(startsReplacedBy(cycle, scrubDay), lang, t) || fill(t("cyStartOnQ"), { d: dayLabel }),
+          t("cyYes"),
+          () => {
+            logPeriodStart(scrubDay);
+            showToast(t("cyStartToast"));
+          },
+          fill(t("cyStartImplyOn"), { d: dayLabel }),
+        ),
     };
     if (!partner) {
       const logAct: Act = { key: "log", icon: "log", label: `${cycle.days[scrubDay] ? t("cyEditDay") : t("cyLogDay")} · ${dayLabel}`, run: () => openCycleDay(scrubDay) };
@@ -968,9 +979,12 @@ export function CycleDial({ snap, keyLine, idle, ask, live = true }: { snap: Sna
     } else scrubAct = startAct;
   }
   const scrubLayer = scrubAsk ? (
-    <div className="cy-row cy-rise flex h-12 gap-2" data-testid="cycle-scrub-confirm">
-      <ActButton act={{ key: "cancel", label: t("cyConfirmNo"), run: () => setScrubAsk(null) }} ghost testId="cycle-scrub-no" />
-      <ActButton act={{ key: "confirm", label: scrubAsk.yes, icon: "drop", run: scrubAsk.run }} testId="cycle-scrub-yes" />
+    <div className="cy-rise" data-testid="cycle-scrub-confirm">
+      {scrubAsk.note ? <p className="mb-2 px-1 text-center text-xs leading-relaxed text-dim">{scrubAsk.note}</p> : null}
+      <div className="cy-row flex h-12 gap-2">
+        <ActButton act={{ key: "cancel", label: t("cyConfirmNo"), run: () => setScrubAsk(null) }} ghost testId="cycle-scrub-no" />
+        <ActButton act={{ key: "confirm", label: scrubAsk.yes, icon: "drop", run: scrubAsk.run }} testId="cycle-scrub-yes" />
+      </div>
     </div>
   ) : (
     <div className="cy-row flex h-12 gap-2">
@@ -1241,7 +1255,7 @@ export function PeriodDateActions({ date, compact = false }: { date: string; com
   const showToast = useJournal((s) => s.showToast);
   const undoer = useCycleUndo();
   // Start/end taps change the forecast (and a start can replace a nearby one), so they ask first.
-  const [ask, setAsk] = useState<{ q: string; yes: string; run: () => void } | null>(null);
+  const [ask, setAsk] = useState<{ q: string; yes: string; note?: string; run: () => void } | null>(null);
   useBackLayer(ask !== null, () => setAsk(null), { name: "period-confirm" });
   useEffect(() => {
     setAsk(null);
@@ -1260,10 +1274,11 @@ export function PeriodDateActions({ date, compact = false }: { date: string; com
   const insidePeriod = Boolean(container && date > container.start && date <= (container.end ?? container.estimatedEnd));
   if (date > today) return null;
   const day = fmtShort(date, lang);
-  const confirm = (q: string, yes: string, change: () => void) =>
+  const confirm = (q: string, yes: string, change: () => void, note?: string) =>
     setAsk({
       q,
       yes,
+      note,
       run: () => {
         undoer.change(change, cycle.id);
         setAsk(null);
@@ -1275,6 +1290,11 @@ export function PeriodDateActions({ date, compact = false }: { date: string; com
         <p className="mb-2 truncate text-sm font-semibold" data-testid="period-confirm-q">
           {ask.q}
         </p>
+        {ask.note ? (
+          <p className="-mt-1 mb-2 text-xs leading-relaxed text-dim" data-testid="period-confirm-note">
+            {ask.note}
+          </p>
+        ) : null}
         <div className="cy-row flex h-11 gap-2">
           <ActButton act={{ key: "cancel", label: t("cyConfirmNo"), run: () => setAsk(null) }} ghost testId="period-confirm-no" />
           <ActButton act={{ key: "confirm", label: ask.yes, icon: "drop", run: ask.run }} testId="period-confirm-yes" />
@@ -1290,10 +1310,15 @@ export function PeriodDateActions({ date, compact = false }: { date: string; com
         onClick={() => {
           if (isStart) confirm(fill(t("cyUnstartQ"), { d: day }), t("cyRemoveYes"), () => removePeriodStart(date));
           else
-            confirm(replaceLine(startsReplacedBy(cycle, date), lang, t) || fill(t("cyStartOnQ"), { d: day }), t("cyYes"), () => {
-              logPeriodStart(date);
-              showToast(t("cyStartToast"));
-            });
+            confirm(
+              replaceLine(startsReplacedBy(cycle, date), lang, t) || fill(t("cyStartOnQ"), { d: day }),
+              t("cyYes"),
+              () => {
+                logPeriodStart(date);
+                showToast(t("cyStartToast"));
+              },
+              fill(t("cyStartImplyOn"), { d: day }),
+            );
         }}
       >
         {w("cyMarkStart")}
