@@ -14,6 +14,7 @@ import { cleanQuietMarks, newQuietId } from "./quiet";
 import { cleanPregnancyTests, newTestId } from "./pregnancy";
 import { runMigrations } from "./migrations";
 import type { Anniversary, ChildEntry, Draft, Encounter, Journal, JournalWipe, Person, PregnancyTestEvent, Profile, Proposal, QuietMark, Session, Settings, SpeakAs, TabId } from "./types";
+import { wipedJournal } from "./wipe";
 import { STR, type Lang } from "./copy";
 import { claimGrace, dropGrace, parkKey } from "./grace";
 import { appLockOn, clearSeen, gateAsking, gateReady, gateUnavailable, lockAfterMs, markSeen, migrateLock, pickerJustOpened, quietResume } from "./app-lock";
@@ -1321,6 +1322,11 @@ export const useJournal = create<Store>((set, get) => {
       set({ legacy: null });
     },
     forgetDevice: async () => {
+      // Every copy of the diary leaves the device — the encrypted vault
+      // below AND the pre-vault plaintext journal, which is the most
+      // sensitive copy that exists. (RT-V1 B-5: this call was missing,
+      // and the plaintext diary survived the forget byte-identical.)
+      removeLegacyJournal();
       clearSeen();
       sessionKey = null;
       vaultIdMem = "";
@@ -1758,6 +1764,21 @@ export const useJournal = create<Store>((set, get) => {
       // Consent comes from the other person — never from the proposer.
       if (!proposal || proposal.state !== "pending" || proposal.proposedBy === by) return;
       const now = Date.now();
+      // Caducity is enforced at the act too, not only at the load gate: a
+      // proposal whose week lapsed inside a live session dies here,
+      // silently, exactly as the gate would kill it at the next unlock.
+      if (now > proposal.expiresAt) {
+        commit({
+          ...journal,
+          proposals: (journal.proposals ?? []).filter((p) => p.id !== id),
+          deleted: { ...journal.deleted, [id]: now },
+        });
+        return;
+      }
+      // Consent comes from a person of the diary: when the diary has
+      // people, a decider who is none of them signs nothing.
+      const people = journal.people ?? [];
+      if (people.length > 0 && !people.some((person) => person.id === by)) return;
       if (approve && proposal.kind === "wipe-vault") {
         // The second consent starts the cooling-off; the wipe itself is a
         // separate, later act either partner can still cancel.
@@ -1797,9 +1818,23 @@ export const useJournal = create<Store>((set, get) => {
       const journal = get().journal;
       const proposal = (journal.proposals ?? []).find((p) => p.id === id);
       if (!proposal || proposal.kind !== "wipe-vault" || proposal.state !== "approved" || !proposal.decidedAt) return;
+      // The government of two is enforced at the act itself, not only in
+      // the inbox that displays it: an approval the proposer gave himself,
+      // or one from outside the diary's people, is void — the proposal is
+      // cancelled (tombstoned, so it cannot resurface as approved) and
+      // nothing burns.
+      const people = journal.people ?? [];
+      if (!proposal.decidedBy || proposal.decidedBy === proposal.proposedBy || (people.length > 0 && !people.some((person) => person.id === proposal.decidedBy))) {
+        get().cancelProposal(id);
+        return;
+      }
       if (Date.now() < proposal.decidedAt + WIPE_COOLING_MS) return;
-      get().cancelProposal(id);
-      get().eraseAll({ sessions: true, encounters: true, partners: true, places: true, positions: true, problems: true });
+      // "Erase the whole diary" erases the whole diary: the inventory in
+      // wipe.ts, not the category eraser's six flags. The commit seals the
+      // emptied journal; the lock then flushes that seal before the key
+      // drops, and the diary wakes to its door, empty.
+      commit(wipedJournal(journal, Date.now()));
+      get().lock();
     },
     addPregnancyTests: (events) => {
       if (!events.length) return;

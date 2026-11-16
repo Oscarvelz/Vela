@@ -143,6 +143,12 @@ export function cleanProposals(raw: unknown): Proposal[] {
     // A pending proposal whose week has lapsed caduces silently (the law):
     // it is dropped here, at the gate, and never resurfaces.
     if (p.state !== "approved" && p.expiresAt < now) continue;
+    // An approval is only as real as its second signature: an "approved"
+    // proposal whose decider is missing, or is the proposer himself, is
+    // void — the gate drops it like a lapsed one, so no ingress (sync,
+    // backup restore, a tampered client) can smuggle a one-person
+    // consent past the government of two.
+    if (p.state === "approved" && (typeof p.decidedBy !== "string" || !p.decidedBy || p.decidedBy === p.proposedBy || typeof p.decidedAt !== "number")) continue;
     out.push({
       id: p.id,
       kind: p.kind as Proposal["kind"],
