@@ -66,7 +66,7 @@ export function cleanTracker(raw: unknown, fallbackId = FIRST_TRACKER_ID): Cycle
   if (value.stamps && typeof value.stamps === "object") {
     // Sorted so equal trackers serialise identically (merges compare by content).
     for (const [key, at] of Object.entries(value.stamps as Record<string, unknown>).sort(([x], [y]) => (x < y ? -1 : 1))) {
-      if (/^[sed]:\d{4}-\d{2}-\d{2}$/.test(key) && num(at)) stamps[key] = at as number;
+      if (/^[sedr]:\d{4}-\d{2}-\d{2}$/.test(key) && num(at)) stamps[key] = at as number;
     }
   }
   const partnerLink = cycle.perspective === "partner" && typeof value.partnerLink === "string" ? value.partnerLink.trim().slice(0, 60) : "";
@@ -107,7 +107,12 @@ export function cleanTrackers(rawCycles: unknown, rawLegacy: unknown): CycleTrac
     seen.add(tracker.id);
     out.push(tracker);
   });
-  return out.slice(0, MAX_TRACKERS);
+  // No slice here: the gate carries what it is given. The cap is a product
+  // rule enforced where data is written (the store refuses a 9th tracker)
+  // and where two devices merge (mergeJournals resolves the overflow with
+  // tombstones and a notice) — never by silent amputation at load, which
+  // cost real histories their trackers (prejudice hunt V3-10).
+  return out;
 }
 
 /** Valid selection: the remembered id if it still exists, else the first visible tracker, else the first. */

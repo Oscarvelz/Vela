@@ -739,15 +739,23 @@ export function startsReplacedBy(cycle: Pick<CycleSettings, "starts" | "ends">, 
 
 export function withStart(cycle: CycleSettings, date: string): CycleSettings {
   const ends = { ...cycle.ends };
+  const reasons = { ...(cycle.reasons ?? {}) };
   const near = startsReplacedBy(cycle, date);
   let carried: string | undefined;
+  let carriedReason: CycleReason | undefined;
   for (const old of near) {
     if (ends[old] && ends[old] >= date) carried = ends[old];
     delete ends[old];
+    // Her testimony travels with its period, like the end already did: the
+    // reason (or dismissal) saved for the replaced start belongs to the
+    // period, not to the mistyped date (prejudice hunt V3-02/03).
+    if (reasons[old] && !carriedReason) carriedReason = reasons[old];
+    delete reasons[old];
   }
   if (carried && !ends[date]) ends[date] = carried;
+  if (carriedReason && !reasons[date]) reasons[date] = carriedReason;
   const starts = cycle.starts.filter((item) => !near.includes(item));
-  return cleanCycle({ ...cycle, enabled: true, starts: sortedStarts([...starts, date]), ends });
+  return cleanCycle({ ...cycle, enabled: true, starts: sortedStarts([...starts, date]), ends, reasons });
 }
 
 export function withoutStart(cycle: CycleSettings, date: string): CycleSettings {

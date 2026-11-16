@@ -15,6 +15,7 @@ import {
   pregnancyNoted,
   startsReplacedBy,
   type CyclePhase,
+  type CycleReason,
   type CycleStage,
   type DayMark,
 } from "@/lib/vela/cycle";
@@ -115,12 +116,12 @@ function nearPeriod(snap: Snap, date: string) {
 
 /* ── Confirm + undo for start/end changes ───────────────────────────────── */
 
-type CycleDates = { id: string; starts: string[]; ends: Record<string, string> };
+type CycleDates = { id: string; starts: string[]; ends: Record<string, string>; reasons: Record<string, CycleReason> };
 
 function datesOf(id?: string): CycleDates {
   const state = useJournal.getState();
   const tracker = (id && state.journal.settings.cycles.find((item) => item.id === id)) || selectActiveCycle(state);
-  return { id: tracker.id, starts: tracker.starts.slice(), ends: { ...tracker.ends } };
+  return { id: tracker.id, starts: tracker.starts.slice(), ends: { ...tracker.ends }, reasons: { ...(tracker.reasons ?? {}) } };
 }
 
 /**
@@ -155,11 +156,15 @@ export function useCycleUndo() {
   };
 }
 
-/** One short line naming the start(s) a new start would replace, or "" when nothing is replaced. */
-export function replaceLine(replaced: string[], lang: Lang, t: (key: CopyKey) => string) {
+/** One short line naming the start(s) a new start would replace, or "" when nothing is replaced.
+ *  When a replaced start carries a saved answer (a reason or a dismissal),
+ *  the line says so — the answer moves with its period (prejudice hunt V3-02). */
+export function replaceLine(replaced: string[], reasons: Record<string, CycleReason> | undefined, lang: Lang, t: (key: CopyKey) => string) {
   if (!replaced.length) return "";
   const days = replaced.map((ds) => fmtShort(ds, lang)).join(", ");
-  return fill(t(replaced.length > 1 ? "cyReplacesStarts" : "cyReplacesStart"), { d: days });
+  const noted = replaced.some((ds) => reasons?.[ds]);
+  const key = replaced.length > 1 ? (noted ? "cyReplacesStartsReason" : "cyReplacesStarts") : noted ? "cyReplacesStartReason" : "cyReplacesStart";
+  return fill(t(key), { d: days });
 }
 
 export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onClose?: () => void }) {
@@ -297,7 +302,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
   const folded = fold.folded;
   const body = (
     <>
-      <CycleDial live={!folded} snap={snap} keyLine={keyLine} idle={idle} ask={confirm ? (confirm === "start" && replaceLine(startsReplacedBy(cycle, today), lang, t)) || w(confirm === "start" ? "cyConfirmStartQ" : "cyConfirmEndQ") : undefined} />
+      <CycleDial live={!folded} snap={snap} keyLine={keyLine} idle={idle} ask={confirm ? (confirm === "start" && replaceLine(startsReplacedBy(cycle, today), cycle.reasons, lang, t)) || w(confirm === "start" ? "cyConfirmStartQ" : "cyConfirmEndQ") : undefined} />
       <WeekStrip
         picked={picked}
         onPick={(ds) => {
@@ -941,7 +946,7 @@ export function CycleDial({ snap, keyLine, idle, ask, live = true }: { snap: Sna
       label: fill(t(startKey), { d: dayLabel, name }),
       run: () =>
         askScrub(
-          replaceLine(startsReplacedBy(cycle, scrubDay), lang, t) || fill(t("cyStartOnQ"), { d: dayLabel }),
+          replaceLine(startsReplacedBy(cycle, scrubDay), cycle.reasons, lang, t) || fill(t("cyStartOnQ"), { d: dayLabel }),
           t("cyYes"),
           () => {
             logPeriodStart(scrubDay);
@@ -1311,7 +1316,7 @@ export function PeriodDateActions({ date, compact = false }: { date: string; com
           if (isStart) confirm(fill(t("cyUnstartQ"), { d: day }), t("cyRemoveYes"), () => removePeriodStart(date));
           else
             confirm(
-              replaceLine(startsReplacedBy(cycle, date), lang, t) || fill(t("cyStartOnQ"), { d: day }),
+              replaceLine(startsReplacedBy(cycle, date), cycle.reasons, lang, t) || fill(t("cyStartOnQ"), { d: day }),
               t("cyYes"),
               () => {
                 logPeriodStart(date);

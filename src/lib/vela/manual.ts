@@ -520,8 +520,8 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "La pregunta llega solo después de que el ciclo se cerró, y pregunta qué pasó — nunca sugiere una causa. La respuesta es una nota en ese ciclo, y nunca cambia ningún estimado.",
         ],
         how: [
-          "The question shows the measured fact: how long this cycle ran, and what her recent ones ran.\nChoose a reason, write your own, or tap ‘Not now’ — that cycle will never be asked about again, on any device.\nAfter two changed cycles asked in a row, the asking rests until a usual cycle passes.\nThe questions can be turned off entirely in the cycle's tuning.",
-          "La pregunta muestra el hecho medido: cuánto duró este ciclo, y lo que duraron sus recientes.\nElige una razón, escribe la tuya, o toca «Ahora no»: por ese ciclo nunca se volverá a preguntar, en ningún dispositivo.\nTras dos ciclos cambiados preguntados seguidos, la pregunta descansa hasta que pase un ciclo usual.\nLas preguntas pueden apagarse por completo en el ajuste del ciclo.",
+          "The question shows the measured fact: how long this cycle ran, and what her recent ones ran.\nChoose a reason, write your own, or tap ‘Not now’ — that cycle will never be asked about again, on any device.\nIf the start date is corrected later, the answer moves with it.\nAfter two changed cycles asked in a row, the asking rests until a usual cycle passes.\nThe questions can be turned off entirely in the cycle's tuning.",
+          "La pregunta muestra el hecho medido: cuánto duró este ciclo, y lo que duraron sus recientes.\nElige una razón, escribe la tuya, o toca «Ahora no»: por ese ciclo nunca se volverá a preguntar, en ningún dispositivo.\nSi la fecha de inicio se corrige después, la respuesta se mueve con ella.\nTras dos ciclos cambiados preguntados seguidos, la pregunta descansa hasta que pase un ciclo usual.\nLas preguntas pueden apagarse por completo en el ajuste del ciclo.",
         ],
         example: [
           "A cycle of 42 days after months of 28: Vela asks, and ‘Morning-after pill’ becomes the note that Statistics later counts — as a note, never as a cause.",

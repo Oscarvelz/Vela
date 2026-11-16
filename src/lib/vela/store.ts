@@ -19,7 +19,7 @@ import { STR, type Lang } from "./copy";
 import { claimGrace, dropGrace, parkKey } from "./grace";
 import { appLockOn, clearSeen, gateAsking, gateReady, gateUnavailable, lockAfterMs, markSeen, migrateLock, pickerJustOpened, quietResume } from "./app-lock";
 import { lastUser } from "./cloud";
-import { cleanCycle, withDayLog, withEnd, withStart, withoutStart, type CycleSettings, type DayLog } from "./cycle";
+import { cleanCycle, withDayLog, withEnd, withStart, withoutStart, type CycleReason, type CycleSettings, type DayLog } from "./cycle";
 import {
   MAX_TRACKERS,
   activeTracker,
@@ -279,6 +279,20 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       typeof data.clearedAt === "number" ? data.clearedAt : 0,
     );
     const housed = attachOrphans(sessions, encounters, encounterCut);
+    const deletedMap = cleanDeleted(data.deleted);
+    // A tombstoned person never takes a seat at the gate: the filter runs
+    // BEFORE cleanPeople resolves the couple, so the next person in
+    // ceremony order takes the seat instead (wave 1 re-hunt R2).
+    const peopleRaw = Array.isArray(data.people)
+      ? data.people.filter((item) => {
+          if (!item || typeof item !== "object") return true;
+          const p = item as { id?: unknown; updatedAt?: unknown };
+          if (typeof p.id !== "string") return true;
+          const at = deletedMap[p.id] ?? 0;
+          const upd = typeof p.updatedAt === "number" ? p.updatedAt : 0;
+          return !(at > 0 && at >= upd);
+        })
+      : data.people;
     return {
       profile,
       settings,
@@ -290,9 +304,9 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       sessionsClearedAt: typeof data.sessionsClearedAt === "number" ? data.sessionsClearedAt : 0,
       encountersClearedAt: typeof data.encountersClearedAt === "number" ? data.encountersClearedAt : 0,
       partnersClearedAt: typeof data.partnersClearedAt === "number" ? data.partnersClearedAt : 0,
-      deleted: cleanDeleted(data.deleted),
+      deleted: deletedMap,
       migrations: Array.isArray(data.migrations) ? data.migrations.filter((m): m is string => typeof m === "string") : [],
-      ...(cleanPeople(data.people).length ? { people: cleanPeople(data.people) } : {}),
+      ...(cleanPeople(peopleRaw).length ? { people: cleanPeople(peopleRaw) } : {}),
       ...(cleanProposals(data.proposals).length ? { proposals: cleanProposals(data.proposals) } : {}),
       ...(cleanQuietMarks(data.quietDays).length ? { quietDays: cleanQuietMarks(data.quietDays) } : {}),
       ...(cleanPregnancyTests(data.pregnancyTests).length ? { pregnancyTests: cleanPregnancyTests(data.pregnancyTests) } : {}),
@@ -315,9 +329,26 @@ function stamp(item: { createdAt: number; updatedAt?: number }) {
   return item.updatedAt ?? item.createdAt;
 }
 
+/**
+ * The next stamp this journal may mint: never older than one it has already
+ * seen. A device whose clock was set back must not mint a removal older
+ * than the addition it removes — stamp merges would resurrect the entry
+ * (prejudice hunt V3-08). Every stamp the store writes goes through here.
+ */
+export function stampNow(journal: Journal): number {
+  let max = journal.updatedAt ?? 0;
+  for (const at of Object.values(journal.deleted ?? {})) if (at > max) max = at;
+  for (const tracker of journal.settings.cycles) {
+    if (tracker.updatedAt > max) max = tracker.updatedAt;
+    if (tracker.metaAt > max) max = tracker.metaAt;
+    for (const at of Object.values(tracker.stamps)) if (at > max) max = at;
+  }
+  return Math.max(Date.now(), max + 1);
+}
+
 function tombstone(journal: Journal, ids: string[]) {
   const deleted = { ...(journal.deleted ?? {}) };
-  const at = Date.now();
+  const at = stampNow(journal);
   for (const id of ids) deleted[id] = at;
   return deleted;
 }
@@ -352,8 +383,9 @@ export function mergeDroppedCycles(a: Journal, b: Journal, merged: Journal): num
 export function mergeJournals(local: Journal, remote: Journal): Journal {
   const older = local.updatedAt >= remote.updatedAt ? remote : local;
   const newer = older === local ? remote : local;
-  if (!local.profile && remote.profile) return remote;
-  if (local.profile && !remote.profile) return local;
+  // No early returns: a profile-less side still contributes its sessions,
+  // partners and classes, and the merged profile is whichever side has one
+  // (prejudice hunt V1 B-2 — the unguarded call site was passphrase adoption).
   const sessionCut = Math.max(local.sessionsClearedAt ?? 0, remote.sessionsClearedAt ?? 0, local.clearedAt ?? 0, remote.clearedAt ?? 0);
   const encounterCut = Math.max(local.encountersClearedAt ?? 0, remote.encountersClearedAt ?? 0, local.clearedAt ?? 0, remote.clearedAt ?? 0);
   const partnerCut = Math.max(local.partnersClearedAt ?? 0, remote.partnersClearedAt ?? 0, local.clearedAt ?? 0, remote.clearedAt ?? 0);
@@ -386,14 +418,74 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
   }
   for (const name of [...livePartners]) if (partnerRemoved(name, deleted)) livePartners.delete(name);
   const cycles = mergeTrackerLists(newer.settings.cycles, older.settings.cycles, deleted);
+  // Trackers the cap left behind are tombstoned, never silently vanished:
+  // the other device resolves the same way next merge, and the call sites
+  // surface the count (mergeDroppedCycles → the cyMergeFull notice).
+  {
+    const keptIds = new Set(cycles.map((tracker) => tracker.id));
+    const stamp = Math.max(local.updatedAt, remote.updatedAt);
+    for (const tracker of [...local.settings.cycles, ...remote.settings.cycles]) {
+      if (!keptIds.has(tracker.id)) {
+        const key = trackerTombstone(tracker.id);
+        deleted[key] = Math.max(deleted[key] ?? 0, stamp, tracker.updatedAt);
+      }
+    }
+  }
+  // Settings-borne data classes merge per item, like journal data — they
+  // are data, not furniture (prejudice hunt V1 B-4). Stated scalars (theme,
+  // defaultPartner…) still ride the newer settings wholesale.
+  const byId = <T extends { id: string; createdAt?: number }>(a: T[] | undefined, b: T[] | undefined): T[] => {
+    const map = new Map<string, T>();
+    for (const item of [...(a ?? []), ...(b ?? [])]) {
+      // A tombstoned item never resurfaces through the union (re-hunt R1).
+      const goneAt = deleted[item.id] ?? 0;
+      if (goneAt > 0 && goneAt >= (item.createdAt ?? 0)) continue;
+      map.set(item.id, item);
+    }
+    return [...map.values()];
+  };
+  const unionList = (a: string[] | undefined, b: string[] | undefined) => [...new Set([...(b ?? []), ...(a ?? [])])];
+  const archivedByKey = new Map<string, NonNullable<Settings["archivedPeople"]>[number]>();
+  for (const person of [...(older.settings.archivedPeople ?? []), ...(newer.settings.archivedPeople ?? [])]) {
+    const goneAt = deleted[`archived:${partnerKey(person.name)}`] ?? 0;
+    if (goneAt > 0 && goneAt >= person.archivedAt) continue;
+    const prev = archivedByKey.get(partnerKey(person.name));
+    if (!prev || person.archivedAt >= prev.archivedAt) archivedByKey.set(partnerKey(person.name), person);
+  }
+  const mutedOlder = cleanMuted(older.settings.storiesMuted);
+  const mutedNewer = cleanMuted(newer.settings.storiesMuted);
+  const draftOlder = older.settings.batchDraft;
+  const draftNewer = newer.settings.batchDraft;
   const settings: Settings = {
     ...newer.settings,
     cycles,
     cycle: asLegacyCycle(cycles[0]),
     cycleSelected: selectedId(cycles, newer.settings.cycleSelected),
+    anniversaries: byId(older.settings.anniversaries, newer.settings.anniversaries),
+    children: byId(older.settings.children, newer.settings.children),
+    customPlaces: unionList(older.settings.customPlaces, newer.settings.customPlaces),
+    customPositions: unionList(older.settings.customPositions, newer.settings.customPositions),
+    customProblems: unionList(older.settings.customProblems, newer.settings.customProblems),
+    archivedPeople: [...archivedByKey.values()],
+    storiesMuted: { people: unionList(mutedOlder.people, mutedNewer.people), days: unionList(mutedOlder.days, mutedNewer.days) },
+    ...(draftOlder || draftNewer
+      ? { batchDraft: draftOlder && draftNewer ? (draftNewer.at >= draftOlder.at ? draftNewer : draftOlder) : (draftNewer ?? draftOlder) }
+      : {}),
+    ...(newer.settings.coupleMode ? {} : older.settings.coupleMode ? { coupleMode: older.settings.coupleMode } : {}),
   };
+  // People resolve through mergePeople; whoever the resolution displaces is
+  // tombstoned so the other device resolves identically (V4 B7).
+  const people = mergePeople(local.people, remote.people, deleted);
+  if (people) {
+    const keptIds = new Set(people.map((person) => person.id));
+    const stamp = Math.max(local.updatedAt, remote.updatedAt);
+    for (const person of [...(local.people ?? []), ...(remote.people ?? [])]) {
+      if (!keptIds.has(person.id)) deleted[person.id] = Math.max(deleted[person.id] ?? 0, stamp, person.updatedAt);
+    }
+  }
   return {
     ...newer,
+    profile: newer.profile ?? older.profile,
     settings,
     partners: [...livePartners],
     sessions: renumber(sessions),
@@ -405,7 +497,7 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     deleted,
     migrations: [...new Set([...(local.migrations ?? []), ...(remote.migrations ?? [])])],
     // People merge by id, per person (2.2) — never wholesale like settings.
-    ...(mergePeople(local.people, remote.people) ? { people: mergePeople(local.people, remote.people) } : {}),
+    ...(people ? { people } : {}),
     // Proposals union by id (2.2.3): the copy that knows more about a
     // proposal (decided beats proposed) wins; a tombstoned proposal — one
     // already decided, declined, cancelled or executed — never resurfaces.
@@ -872,7 +964,7 @@ type Store = {
   removeTracker: (id: string) => void;
   logPeriodStart: (date: string) => void;
   removePeriodStart: (date: string, id?: string) => void;
-  restoreCycleDates: (snap: { id: string; starts: string[]; ends: Record<string, string> }) => void;
+  restoreCycleDates: (snap: { id: string; starts: string[]; ends: Record<string, string>; reasons?: Record<string, CycleReason> }) => void;
   setPeriodEnd: (start: string, end: string | null) => void;
   logCycleDay: (date: string, log: Partial<DayLog> | null) => void;
   /** Date whose cycle day log sheet is open. */
@@ -976,7 +1068,7 @@ export const useJournal = create<Store>((set, get) => {
   const patchTracker = (change: (cycle: CycleTracker) => CycleSettings, id?: string, extra?: Partial<CycleTracker>) => {
     const settings = get().journal.settings;
     const target = id ?? activeTracker(settings.cycles, settings.cycleSelected).id;
-    const now = Date.now();
+    const now = stampNow(get().journal);
     const cycles = settings.cycles.map((tracker) => {
       if (tracker.id !== target) return tracker;
       const link = extra && "partnerLink" in extra ? { partnerLink: extra.partnerLink ?? "" } : {};
@@ -1914,31 +2006,68 @@ export const useJournal = create<Store>((set, get) => {
       const sessions = journal.sessions.filter((s) => !match(s.partnerName) && !goneEncIds.has(s.encounterId));
       const removedSessionIds = journal.sessions.filter((s) => !sessions.includes(s)).map((s) => s.id);
       const settings = journal.settings;
+      // Her identity lives in the diary by id as much as by name, and the
+      // cascade follows both (prejudice hunt V4 B3/B10/B11, V3-11).
+      const person = (journal.people ?? []).find((p) => match(p.name));
+      const herId = person?.id;
       const removedTrackers = settings.cycles.filter(
-        (tr) => followsPartner(tr, name) || (tr.partnerName ?? "").trim().toLowerCase() === key,
+        (tr) =>
+          followsPartner(tr, name) ||
+          (tr.partnerName ?? "").trim().toLowerCase() === key ||
+          (herId !== undefined && tr.ownerId === herId),
       );
       const keptCycles = settings.cycles.filter((tr) => !removedTrackers.includes(tr));
       const cycles = keptCycles.length ? keptCycles : [defaultTracker()];
       const muted = cleanMuted(settings.storiesMuted);
+      // Her words come off other people's sessions too: a partnerVoice she
+      // authored does not survive her on anyone's session.
+      const keptSessions = sessions.map((s) =>
+        herId && s.partnerVoice?.by === herId ? { ...s, partnerVoice: undefined } : s,
+      );
+      // Her pending proposals die with her — and are tombstoned below, so a
+      // merge cannot bring them (or her) back.
+      const herProposals = (journal.proposals ?? []).filter(
+        (p) => p.state === "pending" && herId !== undefined && p.proposedBy === herId,
+      );
+      // Her anniversaries and her archive entry go too — tombstoned below,
+      // because the settings unions would otherwise resurrect them from a
+      // stale device (wave 1 re-hunt R1).
+      const allAnniversaries = cleanAnniversaries(settings.anniversaries);
+      const goneAnniversaries = allAnniversaries.filter((a) => a.personName && match(a.personName));
+      const keptAnniversaries = allAnniversaries.filter((a) => !goneAnniversaries.includes(a));
+      const allArchived = cleanArchived(settings.archivedPeople);
+      const goneArchived = allArchived.filter((p) => match(p.name));
+      const keptArchived = allArchived.filter((p) => !goneArchived.includes(p));
       commit({
         ...journal,
-        sessions: renumber(sessions),
+        sessions: renumber(keptSessions),
         encounters: journal.encounters.filter((e) => !goneEncIds.has(e.id)),
         partners: journal.partners.filter((p) => !match(p)),
+        ...(journal.people ? { people: journal.people.filter((p) => p.id !== herId) } : {}),
+        ...(journal.proposals ? { proposals: journal.proposals.filter((p) => !herProposals.includes(p)) } : {}),
         settings: {
           ...settings,
           cycles,
           cycle: asLegacyCycle(cycles[0]),
           cycleSelected: selectedId(cycles, settings.cycleSelected),
           defaultPartner: match(settings.defaultPartner) ? "" : settings.defaultPartner,
-          anniversaries: cleanAnniversaries(settings.anniversaries).filter((a) => !(a.personName && match(a.personName))),
-          archivedPeople: cleanArchived(settings.archivedPeople).filter((p) => !match(p.name)),
+          anniversaries: keptAnniversaries,
+          archivedPeople: keptArchived,
           storiesMuted: { ...muted, people: muted.people.filter((p) => !match(p)) },
         },
         deleted: tombstone(journal, [
           ...removedSessionIds,
           ...goneEncounters.map((e) => e.id),
           ...removedTrackers.map((tr) => trackerTombstone(tr.id)),
+          ...herProposals.map((p) => p.id),
+          ...goneAnniversaries.map((a) => a.id),
+          ...goneArchived.map((p) => `archived:${partnerKey(p.name)}`),
+          // The partner-off tombstone: without it, the next merge with a
+          // device that still lists her brings her straight back (V4 B4).
+          // Her person id is tombstoned too, so her record (and PIN) can
+          // never merge back either (V4 B3).
+          PARTNER_OFF + partnerKey(name),
+          ...(herId ? [herId] : []),
         ]),
       });
     },
@@ -1957,9 +2086,13 @@ export const useJournal = create<Store>((set, get) => {
       patchTracker((cycle) => withoutStart(cycle, date), id);
     },
     restoreCycleDates: (snap) => {
-      // Undo: put back exactly the starts and ends the tracker had before the change.
+      // Undo: put back exactly the starts, ends and reasons the tracker had
+      // before the change — testimony is part of the dates (V3-04).
       if (!get().journal.settings.cycles.some((tracker) => tracker.id === snap.id)) return;
-      patchTracker((cycle) => cleanCycle({ ...cycle, starts: snap.starts.slice(), ends: { ...snap.ends } }), snap.id);
+      patchTracker(
+        (cycle) => cleanCycle({ ...cycle, starts: snap.starts.slice(), ends: { ...snap.ends }, reasons: { ...(snap.reasons ?? {}) } }),
+        snap.id,
+      );
     },
     setPeriodEnd: (start, end) => {
       patchTracker((cycle) => withEnd(cycle, start, end));
@@ -1975,7 +2108,7 @@ export const useJournal = create<Store>((set, get) => {
     addTracker: (spec) => {
       const settings = get().journal.settings;
       if (settings.cycles.length >= MAX_TRACKERS) return "";
-      const now = Date.now();
+      const now = stampNow(get().journal);
       const id = newTrackerId();
       const tracker = cleanTracker(
         {
@@ -2024,7 +2157,7 @@ export const useJournal = create<Store>((set, get) => {
         ...journal,
         settings,
         partners: journal.partners.filter((p) => !samePartner(p, name)),
-        deleted: { ...(journal.deleted ?? {}), [PARTNER_OFF + partnerKey(name)]: Date.now() },
+        deleted: { ...(journal.deleted ?? {}), [PARTNER_OFF + partnerKey(name)]: stampNow(journal) },
       });
     },
     addCustom: (kind, value) => {
@@ -2216,7 +2349,13 @@ export const useJournal = create<Store>((set, get) => {
       const current = get().journal;
       const before = new Set(current.sessions.map((s) => s.id));
       const merged = mergeJournals(current, { ...restored, profile: current.profile });
-      commit({ ...merged, profile: current.profile, settings: current.settings });
+      const droppedCycles = mergeDroppedCycles(current, restored, merged);
+      // The restore commits the MERGED journal — settings included. Only the
+      // profile is forced from the current journal (prejudice hunt V1 B-4-M:
+      // the old settings override silently discarded everything the merge
+      // had just rescued from the backup).
+      commit({ ...merged, profile: current.profile });
+      if (droppedCycles > 0) get().showToast(STR[get().journal.settings.language].cyMergeFull);
       return { ok: true, n: get().journal.sessions.filter((s) => !before.has(s.id)).length };
     },
     shiftMonth: (delta) => {

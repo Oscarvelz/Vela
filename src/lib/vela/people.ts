@@ -89,7 +89,20 @@ export function cleanPeople(raw: unknown): Person[] {
       updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : 0,
     });
   }
-  return out.slice(0, 2);
+  return resolvePeople(out);
+}
+
+/**
+ * The couple is two people. When more than two records compete (two devices
+ * each paired with someone, a tampered blob), the resolution is the same on
+ * every device and never depends on array order: the owner first, then the
+ * earliest ceremony (createdAt), then id (prejudice hunt V4 B7).
+ */
+export function resolvePeople(people: Person[]): Person[] {
+  const rank = (p: Person) => (p.role === "owner" ? 0 : 1);
+  return [...people]
+    .sort((x, y) => rank(x) - rank(y) || x.createdAt - y.createdAt || (x.id < y.id ? -1 : 1))
+    .slice(0, 2);
 }
 
 export function ownerPerson(people: Person[] | undefined): Person | undefined {
@@ -100,17 +113,25 @@ export function partnerPerson(people: Person[] | undefined): Person | undefined 
   return (people ?? []).find((p) => p.role === "partner");
 }
 
-/** People merge by id (2.2): for the same person, the newer record wins. */
-export function mergePeople(local: Person[] | undefined, remote: Person[] | undefined): Person[] | undefined {
+/** People merge by id (2.2): for the same person, the newer record wins.
+ *  A tombstoned record (deleted at or after its last change) never
+ *  resurfaces, and a union over the couple's two seats resolves through
+ *  resolvePeople — deterministically, identically on every device. */
+export function mergePeople(
+  local: Person[] | undefined,
+  remote: Person[] | undefined,
+  deleted?: Record<string, number>,
+): Person[] | undefined {
   const a = local ?? [];
   const b = remote ?? [];
   if (!a.length && !b.length) return undefined;
   const byId = new Map<string, Person>();
   for (const p of [...a, ...b]) {
+    if (deleted && (deleted[p.id] ?? 0) > 0 && (deleted[p.id] ?? 0) >= p.updatedAt) continue;
     const prev = byId.get(p.id);
     if (!prev || p.updatedAt >= prev.updatedAt) byId.set(p.id, p);
   }
-  return [...byId.values()];
+  return resolvePeople([...byId.values()]);
 }
 
 export function newPersonId(): string {
