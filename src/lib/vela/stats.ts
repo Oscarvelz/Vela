@@ -31,7 +31,10 @@ export function renumber(sessions: Session[]): Session[] {
 
 export function weekCount(sessions: Session[], weekStart: WeekStart) {
   const start = startOfWeek(todayStr(), weekStart);
-  return sessions.filter((s) => s.date >= start).length;
+  const today = todayStr();
+  // "This week" has an upper bound too: a session dated tomorrow is
+  // not in it yet (RT-V3 L-6).
+  return sessions.filter((s) => s.date >= start && s.date <= today).length;
 }
 
 export function monthCount(sessions: Session[]) {

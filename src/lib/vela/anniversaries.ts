@@ -4,8 +4,9 @@
    a counter in the biggest honest unit, and sorts by what comes next.
    The Archive law lives here too: an archived person is honored and kept,
    and the user alone decides where their traces still appear. */
+import type { CycleTracker } from "./cycle-trackers";
 import { iso, parseDate, todayStr } from "./dates";
-import type { Anniversary, AnniversaryKind, ArchivedPerson, ChildEntry, ChildRef, Settings } from "./types";
+import type { Anniversary, AnniversaryKind, ArchivedPerson, ChildEntry, ChildRef, Encounter, Journal, Session, Settings } from "./types";
 
 const KINDS: AnniversaryKind[] = ["met", "married", "first", "custom"];
 const REFS: ChildRef[] = ["son", "daughter", "child"];
@@ -207,6 +208,36 @@ export function hiddenIn(rawArchived: unknown, name: string, surface: ArchiveSur
   const a = archivedIn(rawArchived, name);
   if (!a) return false;
   return surface === "history" ? !a.showInHistory : surface === "stats" ? !a.countInStats : !a.resurface;
+}
+
+/* The Archive law, resolved in exactly one place (Wave 4, RT-V4 B8/B9):
+ * every surface that shows the diary's record reads its sessions and
+ * encounters through these selectors, so a person archived with a
+ * surface's switch off is quiet there — History's own glance card,
+ * Home's recent list and the Calendar included. The manual's sentence
+ * is the spec: with every switch off, the diary goes quiet about her. */
+export function visibleSessions(journal: Journal, surface: ArchiveSurface): Session[] {
+  const archived = journal.settings.archivedPeople;
+  return journal.sessions.filter((s) => !hiddenIn(archived, s.partnerName, surface));
+}
+
+export function visibleEncounters(journal: Journal, surface: ArchiveSurface): Encounter[] {
+  const archived = journal.settings.archivedPeople;
+  return journal.encounters.filter((e) => !hiddenIn(archived, e.partnerName, surface));
+}
+
+/** The trackers a counting surface may count (Decision 2, RT-V3 L-4):
+ * an archived person's cycle tracker follows her Statistics switch —
+ * off, and the Advisor and Statistics stop counting her cycle. The
+ * tracker itself is untouched: it stays in Settings, selectable, and
+ * switching Statistics back on counts it again. */
+export function countedTrackers(journal: Journal): CycleTracker[] {
+  const archived = journal.settings.archivedPeople;
+  return (journal.settings.cycles ?? []).filter(
+    (tr) =>
+      !(tr.partnerName && hiddenIn(archived, tr.partnerName, "stats")) &&
+      !(tr.partnerLink && hiddenIn(archived, tr.partnerLink, "stats")),
+  );
 }
 
 export function newDateId(prefix: string): string {

@@ -10,7 +10,7 @@ import { fill, trackerLabel } from "@/lib/vela/cycle-words";
 import { fmtDate, fmtDuration, fmtShort, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { readAdvisor, type AdvisorLine } from "@/lib/vela/advisor";
-import { hiddenIn, upcomingDates, type UpcomingDate } from "@/lib/vela/anniversaries";
+import { countedTrackers, upcomingDates, visibleSessions, type UpcomingDate } from "@/lib/vela/anniversaries";
 import { partnerPerson } from "@/lib/vela/people";
 import { QUIET_REASON_KEY } from "./quiet-sheet";
 import { REASON_KEY } from "./cycle-reason";
@@ -44,20 +44,16 @@ function DialRow({ label, value, style }: { label: string; value: number; style:
 export function AdvisorCard() {
   const t = useT();
   const lang = useLang();
-  const allSessions = useJournal((s) => s.journal.sessions);
-  const allCycles = useJournal((s) => s.journal.settings.cycles);
   const archivedPeople = useJournal((s) => s.journal.settings.archivedPeople);
   const ratingStyle = useJournal((s) => s.journal.settings.ratingStyle);
   const openRange = useJournal((s) => s.openHistRange);
   const selectCycle = useJournal((s) => s.selectCycle);
   const setCycleSheet = useJournal((s) => s.setCycleSheet);
-  // The Archive law: the Advisor reads only what the user lets it count.
-  const sessions = allSessions.filter((s) => !hiddenIn(archivedPeople, s.partnerName, "stats"));
-  const cycles = allCycles.filter(
-    (tr) =>
-      !(tr.partnerName && hiddenIn(archivedPeople, tr.partnerName, "stats")) &&
-      !(tr.partnerLink && hiddenIn(archivedPeople, tr.partnerLink, "stats")),
-  );
+  // The Archive law: the Advisor reads only what the user lets it
+  // count — resolved in the shared selectors (Wave 4).
+  const journal = useJournal((s) => s.journal);
+  const sessions = visibleSessions(journal, "stats");
+  const cycles = countedTrackers(journal);
   const anniversariesRaw = useJournal((s) => s.journal.settings.anniversaries);
   const childrenRaw = useJournal((s) => s.journal.settings.children);
   const upcoming = useMemo(

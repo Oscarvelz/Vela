@@ -1022,6 +1022,77 @@ export type CloudPhase =
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** The CSV export, as a pure function of the journal. Her voice has
+ * its own columns (Decision 3): her five dials, her own words and her
+ * note sit beside his, so the export stops being a one-voice record
+ * of a two-voice diary. */
+export function csvText(journal: Journal): string {
+  const rows: string[][] = [
+    [
+      "date",
+      "time",
+      "partner",
+      "place",
+      "duration_mins",
+      "positions",
+      "intensity",
+      "connection",
+      "satisfaction",
+      "energy",
+      "overall",
+      "session_number",
+      "encounter",
+      "notes",
+      "own_words",
+      "partner_intensity",
+      "partner_connection",
+      "partner_satisfaction",
+      "partner_energy",
+      "partner_overall",
+      "partner_own_words",
+      "partner_notes",
+      "contraception",
+      "problems",
+    ],
+  ];
+  const nameOf = new Map(journal.encounters.map((encounter) => [encounter.id, encounter.title]));
+  sessionsSorted(journal.sessions)
+    .slice()
+    .reverse()
+    .forEach((s) => {
+      const v = s.partnerVoice;
+      rows.push([
+        s.date,
+        s.time,
+        s.partnerName,
+        s.place,
+        String(s.durationMins),
+        s.positions.join("; "),
+        String(s.intensity),
+        String(s.connection),
+        String(s.satisfaction),
+        String(s.energy),
+        String(s.overall),
+        String(s.sessionNumber),
+        nameOf.get(s.encounterId) || "",
+        s.notes,
+        s.ownWords,
+        v ? String(v.intensity) : "",
+        v ? String(v.connection) : "",
+        v ? String(v.satisfaction) : "",
+        v ? String(v.energy) : "",
+        v ? String(v.overall) : "",
+        v?.ownWords ?? "",
+        v?.notes ?? "",
+        (s.contraception ?? []).join("; "),
+        (s.problems ?? []).join("; "),
+      ]);
+    });
+  return rows
+    .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+}
+
 function download(name: string, text: string, type: string) {
   const blob = new Blob([text], { type });
   const a = document.createElement("a");
@@ -1842,9 +1913,15 @@ export const useJournal = create<Store>((set, get) => {
     },
     proposeDeletion: (input, by) => {
       const journal = get().journal;
-      const existing = (journal.proposals ?? []).find(
-        (p) => p.state === "pending" && p.kind === input.kind && p.targetId === input.targetId && p.targetLabel === input.targetLabel,
-      );
+      // A duplicate ask is the same ask. For a person, sameness is the
+      // person, not the label's casing (Decision 4): "Lucía" and
+      // "lucía" are one pending question, not two.
+      const existing = (journal.proposals ?? []).find((p) => {
+        if (p.state !== "pending" || p.kind !== input.kind) return false;
+        if (input.kind === "delete-person" && input.targetLabel && p.targetLabel)
+          return partnerKey(p.targetLabel) === partnerKey(input.targetLabel);
+        return p.targetId === input.targetId && p.targetLabel === input.targetLabel;
+      });
       if (existing) return existing.id;
       const now = Date.now();
       const proposal: Proposal = {
@@ -2117,6 +2194,16 @@ export const useJournal = create<Store>((set, get) => {
     },
     addTracker: (spec) => {
       const settings = get().journal.settings;
+      // One tracker per person, enforced at the door (RT-V3 L-1): a
+      // second tracker for someone already followed would shadow the
+      // first in every resolver. The answer is the existing tracker —
+      // the caller surfaces it, which is the redirect the plan asks
+      // for, never a silent twin.
+      const existing =
+        spec.perspective === "self"
+          ? settings.cycles.find((tracker) => tracker.perspective === "self")
+          : settings.cycles.find((tracker) => followsPartner(tracker, spec.partnerLink || spec.partnerName || ""));
+      if (existing) return existing.id;
       if (settings.cycles.length >= MAX_TRACKERS) return "";
       const now = stampNow(get().journal);
       const id = newTrackerId();
@@ -2159,8 +2246,10 @@ export const useJournal = create<Store>((set, get) => {
     },
     removePartner: (name) => {
       const journal = get().journal;
+      // The default clears by the same comparison the roster uses:
+      // removing "lucía" removes the default "Lucía" (RT-V4 B14).
       const settings =
-        journal.settings.defaultPartner === name
+        journal.settings.defaultPartner && samePartner(journal.settings.defaultPartner, name)
           ? { ...journal.settings, defaultPartner: "" }
           : journal.settings;
       commit({
@@ -2229,57 +2318,7 @@ export const useJournal = create<Store>((set, get) => {
       download(`vela-backup-${todayStr()}.json`, JSON.stringify(file), "application/json");
     },
     exportCSV: () => {
-      const rows = [
-        [
-          "date",
-          "time",
-          "partner",
-          "place",
-          "duration_mins",
-          "positions",
-          "intensity",
-          "connection",
-          "satisfaction",
-          "energy",
-          "overall",
-          "session_number",
-          "encounter",
-          "notes",
-          "own_words",
-          "contraception",
-          "problems",
-        ],
-      ];
-      const { journal } = get();
-      const nameOf = new Map(journal.encounters.map((encounter) => [encounter.id, encounter.title]));
-      sessionsSorted(journal.sessions)
-        .slice()
-        .reverse()
-        .forEach((s) =>
-          rows.push([
-            s.date,
-            s.time,
-            s.partnerName,
-            s.place,
-            String(s.durationMins),
-            s.positions.join("; "),
-            String(s.intensity),
-            String(s.connection),
-            String(s.satisfaction),
-            String(s.energy),
-            String(s.overall),
-            String(s.sessionNumber),
-            nameOf.get(s.encounterId) || "",
-            s.notes,
-            s.ownWords,
-            (s.contraception ?? []).join("; "),
-            (s.problems ?? []).join("; "),
-          ]),
-        );
-      const csv = rows
-        .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
-        .join("\n");
-      download(`vela-${todayStr()}.csv`, csv, "text/csv");
+      download(`vela-${todayStr()}.csv`, csvText(get().journal), "text/csv");
     },
     importJSON: (text) => {
       try {

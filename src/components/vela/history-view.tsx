@@ -12,7 +12,7 @@ import { ownerPerson, partnerPerson } from "@/lib/vela/people";
 import type { Encounter, Session } from "@/lib/vela/types";
 import { GlanceCard } from "./glance-card";
 import { AnniversariesCard } from "./anniversaries-card";
-import { hiddenIn } from "@/lib/vela/anniversaries";
+import { visibleEncounters, visibleSessions } from "@/lib/vela/anniversaries";
 import { cn } from "@/lib/cn";
 import { phaseOn } from "@/lib/vela/cycle";
 import { Sparkle } from "./mark";
@@ -26,7 +26,7 @@ export function HistoryView() {
   const t = useT();
   const lang = useLang();
   const sessions = useJournal((s) => s.journal.sessions);
-  const encounters = useJournal((s) => s.journal.encounters);
+  const journal = useJournal((s) => s.journal);
   const partners = useJournal((s) => s.journal.partners);
   const query = useJournal((s) => s.histQ);
   const partner = useJournal((s) => s.histPartner);
@@ -39,7 +39,6 @@ export function HistoryView() {
   const to = useJournal((s) => s.histTo);
   const phase = useJournal((s) => s.histPhase);
   const cycles = useJournal((s) => s.journal.settings.cycles);
-  const archivedPeople = useJournal((s) => s.journal.settings.archivedPeople);
   const clearRange = useJournal((s) => s.clearHistRange);
   const [mode, setMode] = useState<"sessions" | "encounters">("sessions");
   // History renders in growing tranches (the audit, Nov 14 2026): a lifetime journal mounted every
@@ -55,19 +54,18 @@ export function HistoryView() {
     setQuery("");
     setPartner("");
   }, { tier: 2, name: "history-filter" });
-  const list = sessionsSorted(sessions);
+  // The Archive law resolves in the shared selector (Wave 4): a resting
+  // person's moments stay out of History only where the user decided
+  // so — the record itself is untouched.
+  const list = sessionsSorted(visibleSessions(journal, "history"));
   const q = query.trim().toLowerCase();
   const filtered = list.filter(
     (session) =>
       inRange(session.date, from, to) &&
       matchesPhase(session, phase, cycles) &&
-      matchesSession(session, partner, q, lang) &&
-      // The Archive law: a resting person's moments stay out of History only
-      // where the user decided so — the record itself is untouched.
-      !hiddenIn(archivedPeople, session.partnerName, "history"),
+      matchesSession(session, partner, q, lang),
   );
-  const filteredEncounters = encounters
-    .filter((encounter) => !hiddenIn(archivedPeople, encounter.partnerName, "history"))
+  const filteredEncounters = visibleEncounters(journal, "history")
     .slice()
     .sort((a, b) => b.endDate.localeCompare(a.endDate) || b.createdAt - a.createdAt)
     .filter((encounter) => {

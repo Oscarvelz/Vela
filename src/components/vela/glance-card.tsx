@@ -1,14 +1,18 @@
+import { visibleSessions } from "@/lib/vela/anniversaries";
 import { placeLabel } from "@/lib/vela/catalog";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { longestStreak, monthCount, sessionsSorted, topCounts, weekCount } from "@/lib/vela/stats";
 import { useJournal } from "@/lib/vela/store";
 import { Card } from "./ui";
 
-/** "At a glance" summary, shown at the top of History (moved from Home, Nov 1 2026). */
+/** "At a glance" summary, shown at the top of History (moved from Home, Nov 1 2026).
+ * It reads History's visible sessions, like the list below it: the
+ * Archive law governs the view's own summary too (RT-V4 B8). */
 export function GlanceCard() {
   const t = useT();
   const lang = useLang();
-  const sessions = useJournal((s) => s.journal.sessions);
+  const journal = useJournal((s) => s.journal);
+  const sessions = visibleSessions(journal, "history");
   const weekStart = useJournal((s) => s.journal.settings.weekStart);
   const setTab = useJournal((s) => s.setTab);
   const list = sessionsSorted(sessions);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, CircleHelp, Layers, PenLine, Plus, Repeat2, X } from "lucide-react";
+import { visibleSessions } from "@/lib/vela/anniversaries";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { sessionsSorted } from "@/lib/vela/stats";
 import { blankDraft, sessionToDraft, useJournal } from "@/lib/vela/store";
@@ -39,7 +40,10 @@ export function HomeView() {
   const [help, setHelp] = useState(false);
   const [preset, setPreset] = useState<Draft | undefined>(undefined);
   const customPlaces = useJournal((s) => s.journal.settings.customPlaces);
-  const list = sessionsSorted(sessions);
+  const journal = useJournal((s) => s.journal);
+  // Recent is a diary surface: it reads History's visible sessions, so
+  // a person archived out of History goes quiet here too (RT-V4 B9).
+  const list = sessionsSorted(visibleSessions(journal, "history"));
   // Back / gesture: the open tooltip first, then a Repeat form or Batch closes (what was typed stays, just
   // hidden). The plain Details form is Home's resting state (open by default), so it is not a back step.
   useBackLayer(showForm && Boolean(preset), () => {

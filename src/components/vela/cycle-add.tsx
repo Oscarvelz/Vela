@@ -1,6 +1,7 @@
 // "Follow another cycle": add a person's cycle (yours, or a partner's). Used in Settings and on the cycle card.
 import { useState } from "react";
 import { X } from "lucide-react";
+import { fill } from "@/lib/vela/cycle-words";
 import { useT } from "@/lib/vela/i18n";
 import { useJournal } from "@/lib/vela/store";
 import { MAX_TRACKERS, followsPartner } from "@/lib/vela/cycle-trackers";
@@ -31,6 +32,21 @@ export function AddTracker({ onAdded, startOpen = false, onClose, bare = false }
   const dormant = cycles.find((tracker) => !tracker.enabled && tracker.starts.length === 0 && Object.keys(tracker.days).length === 0);
   const atCap = cycles.length >= MAX_TRACKERS && !dormant;
   const add = (perspective: "self" | "partner", partnerName = "", partnerLink = "") => {
+    // Already followed: the door redirects to her tracker and says so
+    // out loud, naming it — never a silent twin (RT-V3 L-1).
+    const dup =
+      perspective === "partner"
+        ? cycles.find((tracker) => followsPartner(tracker, partnerLink || partnerName))
+        : cycles.find((tracker) => tracker.perspective === "self");
+    if (dup) {
+      useJournal.getState().showToast(
+        perspective === "self" ? t("cyAlreadyFollowingSelf") : fill(t("cyAlreadyFollowing"), { name: partnerName || partnerLink }),
+      );
+      onAdded(dup.id);
+      setOpen(false);
+      setName("");
+      return;
+    }
     let id: string;
     if (dormant) {
       // An unused, switched-off cycle is simply reused instead of leaving an empty one behind.

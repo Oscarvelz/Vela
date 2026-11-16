@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { visibleSessions } from "@/lib/vela/anniversaries";
 import { fmtDate, iso, monthHeading, todayStr } from "@/lib/vela/dates";
 import { cycleMarks } from "@/lib/vela/cycle";
 import { useLang, useT } from "@/lib/vela/i18n";
@@ -25,7 +26,10 @@ export function CalendarView() {
   const selected = useJournal((s) => s.calSel);
   const weekStart = useJournal((s) => s.journal.settings.weekStart);
   const ratingStyle = useJournal((s) => s.journal.settings.ratingStyle);
-  const sessions = useJournal((s) => s.journal.sessions);
+  const journal = useJournal((s) => s.journal);
+  // The Calendar is a diary surface: day counts and the day panel read
+  // History's visible sessions (RT-V4 B9).
+  const sessions = visibleSessions(journal, "history");
   const cycle = useJournal(selectActiveCycle);
   const shift = useJournal((s) => s.shiftMonth);
   const goToToday = useJournal((s) => s.goToToday);

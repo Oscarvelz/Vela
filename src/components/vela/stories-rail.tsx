@@ -9,7 +9,7 @@ import { fill } from "@/lib/vela/cycle-words";
 import { fmtDate, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { findStories, type Story } from "@/lib/vela/stories";
-import { hiddenIn, upcomingDates } from "@/lib/vela/anniversaries";
+import { upcomingDates, visibleSessions } from "@/lib/vela/anniversaries";
 import { useJournal } from "@/lib/vela/store";
 import { cn } from "@/lib/cn";
 import { Sparkle } from "./mark";
@@ -24,7 +24,7 @@ function distanceLabel(t: ReturnType<typeof useT>, story: Story) {
 export function StoriesRail() {
   const t = useT();
   const lang = useLang();
-  const allSessions = useJournal((s) => s.journal.sessions);
+  const journal = useJournal((s) => s.journal);
   const settings = useJournal((s) => s.journal.settings);
   const muted = useJournal((s) => s.journal.settings.storiesMuted);
   const style = useJournal((s) => s.journal.settings.ratingStyle);
@@ -37,7 +37,7 @@ export function StoriesRail() {
 
   // The Archive law: a resting person's moments resurface only where the user
   // decided so — their sessions simply do not feed the rail.
-  const sessions = allSessions.filter((s) => !hiddenIn(settings.archivedPeople, s.partnerName, "resurface"));
+  const sessions = visibleSessions(journal, "resurface");
   const stories = useMemo(() => findStories(sessions, todayStr(), muted), [sessions, muted]);
   // Anniversary and birthday days bloom here too (2.1.24): management lives in
   // History, but the day itself is a memory surfacing on Home.

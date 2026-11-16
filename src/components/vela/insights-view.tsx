@@ -18,7 +18,7 @@ import {
   yearCount,
 } from "@/lib/vela/stats";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
-import { hiddenIn } from "@/lib/vela/anniversaries";
+import { countedTrackers, visibleSessions } from "@/lib/vela/anniversaries";
 import { ownerPerson, partnerPerson } from "@/lib/vela/people";
 import type { Session } from "@/lib/vela/types";
 import { voiceReading } from "@/lib/vela/voices";
@@ -147,13 +147,11 @@ function QuietCard({ sessions }: { sessions: Session[] }) {
  *  unadorned sentence. "I don't know" and dismissals are the absence of a
  *  note and appear nowhere. */
 function CycleReasonsCards() {
-  const cycles = useJournal((s) => s.journal.settings.cycles);
-  const archivedPeople = useJournal((s) => s.journal.settings.archivedPeople);
-  const trackers = (cycles ?? []).filter(
-    (tr) =>
-      !(tr.partnerName && hiddenIn(archivedPeople, tr.partnerName, "stats")) &&
-      !(tr.partnerLink && hiddenIn(archivedPeople, tr.partnerLink, "stats")),
-  );
+  const journal = useJournal((s) => s.journal);
+  // The counted trackers resolve in the shared selector (Wave 4,
+  // Decision 2): an archived person's cycle counts only where her
+  // Statistics switch lets it.
+  const trackers = countedTrackers(journal);
   return (
     <>
       {trackers.map((tr) => (
@@ -259,11 +257,10 @@ function CycleTestsCard() {
 export function InsightsView() {
   const t = useT();
   const lang = useLang();
-  const allSessions = useJournal((s) => s.journal.sessions);
-  const archivedPeople = useJournal((s) => s.journal.settings.archivedPeople);
+  const journal = useJournal((s) => s.journal);
   // The Archive law: a resting person counts in the statistics only where the
   // user decided so. The record itself is never touched.
-  const sessions = allSessions.filter((s) => !hiddenIn(archivedPeople, s.partnerName, "stats"));
+  const sessions = visibleSessions(journal, "stats");
   const encounters = useJournal((s) => s.journal.encounters);
   const weekStart = useJournal((s) => s.journal.settings.weekStart);
   const ratingStyle = useJournal((s) => s.journal.settings.ratingStyle);
