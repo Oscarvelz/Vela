@@ -28,20 +28,20 @@ export const PLACE_RULES: Rule[] = [
   { kind: "place", value: "Shower", re: r("showers?|bathtub|bath tub|jacuzzi|ducha|duchandonos|banera|regadera|shower sex") },
   { kind: "place", value: "Car", re: r("car|truck|back ?seat|carro|coche|auto|camioneta") },
   { kind: "place", value: "Hotel", re: r("hotel|motel|airbnb|resort|hostal") },
-  { kind: "place", value: "Outdoors", re: r("outdoors|beach|park|woods|forest|camping|tent|pool|lake|river|in the sea|in the ocean|playa|parque|bosque|al aire libre|en el mar|piscina|alberca|lago|rio|outside") },
+  { kind: "place", value: "Outdoors", re: r("outdoors|beach|park|woods|forest|camping|tent|pool(?! (?:table|hall))|lake|river|in the sea|in the ocean|playa|parque|bosque|al aire libre|en el mar|piscina|alberca|lago|rio|outside") },
   { kind: "place", value: "Office", re: r("office|at work|oficina|en el trabajo|desk|escritorio") },
 ];
 
 // ---------------------------------------------------------------- positions
 export const POSITION_RULES: Rule[] = [
-  { kind: "position", value: "Reverse Cowgirl", prio: 2, re: r("reverse cowgirl|reverse riding|vaquera (?:invertida|al reves|de espaldas)|reversa") },
-  { kind: "position", value: "Missionary", re: r("missionary|misionero|misionera|man on top") },
-  { kind: "position", value: "Doggy", re: r("doggy ?style|doggystyle|doggy|doggie|dog ?style|from behind|on all fours|de (?:a )?perrito|perrito|en cuatro|a cuatro patas|cuatro patas|a gatas|en 4|por detras") },
-  { kind: "position", value: "Cowgirl", re: r("cowgirl|she (?:was|got|climbed) on top|she rode me|she was riding me|riding me|rode me|on top of me|she rode|on top(?=\\s*(?:,|;|\\.|and\\b|y\\b|then\\b|luego\\b|$))|vaquera|ella (?:arriba|encima)|(?:me|lo) (?:monto|cabalgo)|cabalgando|montandome") },
-  { kind: "position", value: "Spooning", re: r("spooning|spoon|cucharita|cuchara|de lado|side by side|on our sides") },
-  { kind: "position", value: "Standing", re: r("standing(?: up)?|stood|against the wall|up against|de pie|parados|paraditos|contra la pared") },
-  { kind: "position", value: "69", prio: 2, re: /(?<![\d/:.,])\b(?:69|sixty[- ]?nine|sesenta y nueve)\b(?![\d/:])/g },
-  { kind: "position", value: "Oral", re: r("oral|blow ?jobs?|bj|went down on|go(?:ing)? down on|eat(?:ing)? (?:her|him|me) out|ate (?:her|him|me) out|cunnilingus|fellatio|mamadas?|felacion|sexo oral|se la chupe|me la chupo|le hice oral|me hizo oral") },
+  { kind: "position", value: "Reverse Cowgirl", prio: 2, re: r("reverse cowgirl|reverse riding|vaquera (?:invertida|al reves|de espaldas)") },
+  { kind: "position", value: "Missionary", re: r("missionary(?! (?:work|trips?|school|projects?|church|position statement))|misionero|misionera|man on top") },
+  { kind: "position", value: "Doggy", re: r("doggy ?style|doggystyle|doggy|doggie|dog ?style|from behind|on all fours|de (?:a )?perrito|en cuatro|a cuatro patas|cuatro patas|a gatas|en 4|por detras") },
+  { kind: "position", value: "Cowgirl", re: r("cowgirl|she (?:was|got|climbed) on top|she rode me|she was riding me|riding me|rode me|on top of me|she rode|(?<!(?:cherry|cake|cream|icing|dessert|pizza|burger) )on top(?=\\s*(?:,|;|\\.|and\\b|y\\b|then\\b|luego\\b|$))|vaquera|ella (?:arriba|encima)|(?:me|lo) (?:monto|cabalgo)|cabalgando|montandome") },
+  { kind: "position", value: "Spooning", re: r("spooning|spooned|cucharita|cuchara|de lado|side by side|on our sides") },
+  { kind: "position", value: "Standing", re: r("standing(?: up)?(?!\\s+in (?:line|the queue|queue)|\\s+on line)|stood|against the wall|up against|de pie|parados|paraditos|contra la pared") },
+  { kind: "position", value: "69", prio: 2, re: /(?<![\d/:.,]|room |habitacion |cuarto |suite )\b(?:69|sixty[- ]?nine|sesenta y nueve)\b(?![\d/:])/g },
+  { kind: "position", value: "Oral", re: r("oral|blow ?jobs?|bj|went down on (?:me|her|him|us)|go(?:ing)? down on (?:me|her|him|us)|eat(?:ing)? (?:her|him|me) out|ate (?:her|him|me) out|cunnilingus|fellatio|mamadas?|felacion|sexo oral|se la chupe|me la chupo|le hice oral|me hizo oral") },
   { kind: "position", value: "Lotus", re: r("lotus|flor de loto|loto|sitting face to face|face to face sitting|sentados frente a frente") },
 ];
 
@@ -49,26 +49,48 @@ export const POSITION_RULES: Rule[] = [
 export const METHOD_RULES: Rule[] = [
   // Emergency contraception is not "the pill": claim it so it maps to nothing.
   { kind: "block", value: "", prio: 9, re: r("plan b|morning after pill|day after pill|pastilla del dia despues|pildora del dia despues|pastilla de emergencia") },
-  { kind: "method", value: "pullout", prio: 3, re: r("pull(?:ed|ing)? ?-?out|withdrawal|withdrew|came (?:outside|on (?:her|his|my) (?:stomach|belly|back|chest))|finished (?:outside|on (?:her|his) (?:stomach|belly|back|chest))|marcha atras|coito interrumpido|(?:me|lo|la) (?:saque|saco)|(?:termine|acabe|me vine|se vino|termino|acabo) (?:afuera|fuera)") },
-  { kind: "method", value: "condom", re: r("condoms?|condon(?:es)?|rubbers?|preservativos?|condum") },
-  { kind: "method", value: "pill", re: r("(?:the |birth control |contraceptive )?pills?(?! for)|pastillas? anticonceptivas?|anticonceptivos? orales|(?:la )?pastilla(?! para)|pastillas(?! para)|pildora") },
-  { kind: "method", value: "iud", re: r("iud|diu|coil|mirena|kyleena|copper t|t de cobre|dispositivo intrauterino") },
-  { kind: "method", value: "implant", re: r("implant|implante|nexplanon|implanon") },
+  { kind: "method", value: "pullout", prio: 3, re: r("pull(?:ed|ing)? ?-?out|withdrawal|withdrew(?! (?:cash|money|from the (?:atm|bank)))|came (?:outside(?!\\s+(?:to|for|onto|into))|on (?:her|his|my) (?:stomach|belly|back|chest))|finished (?:outside|on (?:her|his) (?:stomach|belly|back|chest))|marcha atras|coito interrumpido|(?:me|lo|la) (?:saque|saco)|(?:termine|acabe|me vine|se vino|termino|acabo) (?:afuera|fuera)") },
+  { kind: "method", value: "condom", re: r("condoms?|condon(?:es)?|rubbers?(?! (?:boots|gloves|bands))|preservativos?|condum") },
+  { kind: "method", value: "pill", re: r("(?:the |birth control |contraceptive )?pills?(?!\\s*,?\\s*(?:for|para|contra)\\b)|pastillas? anticonceptivas?|anticonceptivos? orales|(?:la )?pastilla(?!\\s*,?\\s*(?:para|contra|for)\\b)|pastillas(?!\\s*,?\\s*(?:para|contra|for)\\b)|pildora") },
+  { kind: "method", value: "iud", re: r("iud|diu|coil(?! spring)|mirena|kyleena|copper t|t de cobre|dispositivo intrauterino") },
+  { kind: "method", value: "implant", re: r("(?<!dental )implants?|implante(?! dental)|nexplanon|implanon") },
   {
     kind: "method",
     value: "none",
     prio: 3,
     selfNeg: true,
-    re: r("no protection|unprotected|without protection|used nothing|no birth control|no contraception|no method|nothing at all|sin proteccion|sin cuidarnos|sin nada|no usamos nada|nada de proteccion|ningun metodo|no nos cuidamos"),
+    re: r("no protection|unprotected|without protection|used nothing|no birth control|no contraception|no method|nothing at all|sin proteccion|sin cuidarnos|sin nada(?! de (?:ropa|puesto))|no usamos nada|nada de proteccion|ningun metodo|no nos cuidamos"),
   },
+  // "We had eaten nothing at all" is about dinner, not contraception (RT-V2M M20).
+  { kind: "block", value: "", prio: 4, re: r("(?:eaten|ate|had|have|comido|comi|comimos) nothing") },
   // Slang that only says "no condom": claim it so it maps to nothing.
-  { kind: "block", value: "", prio: 3, re: r("raw|bareback|a pelo") },
+  // "Raw desire" is not slang — it is the intensity rule's own word
+  // (RT-V2 B18), so the block steps aside in front of a feeling noun.
+  { kind: "block", value: "", prio: 3, re: r("raw(?! (?:desire|lust|passion|hunger|emotion))|bareback|a pelo") },
+  // Climax frames whose object is not a body (RT-V2M M21): finishing a
+  // film, a report, or never arriving at a party file no climax problem.
+  { kind: "block", value: "", prio: 3, re: r("(?:didn'?t|did not|never|no) (?:finish(?:ed)?|termine|termino|acabe|acabo|came|come) (?:the |el |la )?(?:movie|film|show|pelicula|informe|report|reporte)|never came to (?:the |a )?(?:party|fiesta|wedding|boda|dinner|cena|event|evento)") },
+  // Pain named as the PURPOSE of a pill is the ailment being treated,
+  // not a problem of the encounter (RT-V2M M20).
+  { kind: "block", value: "", prio: 3, re: r("(?:para|for|contra) (?:el |la |the |her |his )?(?:dolor|pain|headache)") },
+  // "Romper la regla" of the house is rule-breaking, not menstruation (RT-V2M M21).
+  { kind: "block", value: "", prio: 3, re: r("(?:romp\\w+|romper|quebr\\w+) la regla|la regla de la casa") },
+  // A period of time is not a period (RT-V2 B13): span frames claim the word.
+  { kind: "block", value: "", prio: 3, re: r("(?:during|in|through|over|after|before) (?:that|this|the|a) (?:\\w+ )?period\\b|in a (?:rough|hard|tough|difficult|busy|bad|dark) period\\b") },
+  // The network being down is not a mood (RT-V2M M21).
+  { kind: "block", value: "", prio: 3, re: r("(?:wifi|internet|router|server|the power|electricity|signal) (?:was|is|went|estaba) down") },
+  // The idiom is about the landlord, not the body (RT-V2M M21).
+  { kind: "block", value: "", prio: 3, re: r("sick and tired") },
+  // A network reconnecting is not two people connecting (RT-V2M M22).
+  { kind: "block", value: "", prio: 5, re: r("(?:wifi|internet|router|signal|bluetooth|phone) (?:finally |finally |al fin )?(?:connected|reconnected|conect\\w*|reconect\\w*)") },
+  // Pool the game is not the pool the place (RT-V2M M24).
+  { kind: "block", value: "", prio: 4, re: r("(?:played|playing|play|jugando|jugamos|jugaron) pool") },
 ];
 
 // ---------------------------------------------------------------- problems
 export const PROBLEM_RULES: Rule[] = [
   { kind: "problem", value: "erection", prio: 2, selfNeg: true, re: r("couldn'?t get (?:it )?(?:hard|up)|could not get (?:it )?(?:hard|up)|lost (?:my|the|his) erection|went soft|got soft|wasn'?t (?:fully )?hard|no erection(?! (?:problems?|issues?|trouble))|no se me (?:paro|levanto|puso dura)|se me bajo|perdi la ereccion|no se le (?:paro|levanto)|couldn'?t (?:stay|keep it) hard|could not (?:stay|keep it) hard|couldn'?t keep (?:an|my|the|his) erection|no (?:pude|pudo) (?:mantener|tener) (?:la |una )?ereccion|se me (?:fue|cayo) la ereccion") },
-  { kind: "problem", value: "erection", re: r("erections? (?:problems?|issues?|trouble|difficult(?:y|ies))|erectile|erection trouble|(?:difficult(?:y|ies)|trouble|problems?|issues?|a hard time|struggled?|struggling)(?: (?:to get|getting|to keep|keeping|with|to have|having|for))? (?:an |my |the |his |a )?(?:erection|it up|hard)|hard to (?:get|stay|keep it) hard|(?:problemas?|dificultad(?:es)?|fallas?|lios?)(?: (?:de|con|para|en))? (?:la |una |tener |lograr |mantener |tener una |mantener la )?(?:ereccion|erecto|parado)|(?:me|le) costo (?:tener |lograr |mantener )?(?:la |una )?(?:ereccion|que se me parara|que se le parara|pararse)|disfuncion erectil|ed") },
+  { kind: "problem", value: "erection", re: r("erections? (?:problems?|issues?|trouble|difficult(?:y|ies))|erectile|erection trouble|(?:difficult(?:y|ies)|trouble|problems?|issues?|a hard time|struggled?|struggling)(?: (?:to get|getting|to keep|keeping|with|to have|having|for))? (?:an |my |the |his |a )?(?:erection|it up|hard)|hard to (?:get|stay|keep it) hard|(?:problemas?|dificultad(?:es)?|fallas?|lios?)(?: (?:de|con|para|en))? (?:la |una |tener |lograr |mantener |tener una |mantener la )?(?:ereccion|erecto|parado)|(?:me|le) costo (?:tener |lograr |mantener )?(?:la |una )?(?:ereccion|que se me parara|que se le parara|pararse)|disfuncion erectil") },
   { kind: "problem", value: "climax", prio: 2, selfNeg: true, re: r("couldn'?t (?:finish|come|cum|climax|orgasm)|could not (?:finish|come|climax)|didn'?t (?:finish|come|cum|climax)|did not (?:finish|come|climax)|never (?:finished|came)|not able to finish|no (?:orgasm|climax)|without (?:an )?orgasm|no (?:pude|pudo|pudimos) (?:terminar|acabar|venirme|venirse|llegar)|no (?:termine|acabe|llegue|me vine|se vino|termino|acabo|llego)|sin (?:orgasmo|terminar|acabar)|didn'?t (?:have|get|reach) (?:an |any |the |my |her |his )?(?:orgasm|climax)s?|(?:she|he|i) didn'?t (?:the (?:first|second|third|last) (?:time|round)|this time|that time)|(?:ella|el|yo) no (?:la (?:primera|segunda|tercera|ultima) vez|esa vez)|no (?:tuve|tuvo|tuvimos|alcance|alcanzo|logre|logro) (?:un |ningun |el |mi |su )?(?:orgasmo|climax)") },
   // The PATTERN under most problem reports, stated once instead of phrase by phrase (Oscar,
   // Nov 9 2026: "teach it to catch the pattern instead of just giving it the examples").
@@ -82,25 +104,25 @@ export const PROBLEM_RULES: Rule[] = [
   { kind: "problem", value: "erection", prio: 2, selfNeg: true, re: r("(?:couldn'?t|could not|can'?t|cannot|wasn'?t able to|were not able to|not able to|unable to|failed to) (?:get|keep|stay|become|have|maintain) (?:an? |my |the |his )?(?:erections?|it up|hard)|(?:no (?:pude|pudo|pudimos|podia|pudieron)|nunca (?:pude|pudo)) (?:tener|mantener|lograr|conseguir) (?:la |una )?(?:ereccion)|(?:kept (?:going|turning)|went|gone) (?:soft|limp|flaccid)|(?:the |my |his )?erections? (?:kept|keeps) (?:fading|dying|wilting|disappearing)") },
   { kind: "problem", value: "erection", re: r("(?:difficult(?:y)?|trouble|problems?|issues?|struggl\\w+|a hard time|hard to)(?: (?:to|get|getting|keep|keeping|have|having|stay|staying|maintain|maintaining|with|for|was))* (?:an? |my |the |his )?(?:erections?|it up|hard)|(?:the |my |his |la )?erections? (?:was|felt|got|became|stayed|seemed|went) (?:really |very |so |too |nearly |almost )?(?:difficult|slow|weak|soft|limp|brief|impossible(?! to (?:ignore|miss|hide|conceal)))|(?:la )?ereccion (?:fue|estuvo|se puso|quedo|salio) (?:dificil|complicada|lenta|debil|floja|blanda|corta|imposible)") },
   { kind: "problem", value: "climax", re: r("hard to (?:finish|climax|come)|cuesta terminar|(?:me|le) costo (?:terminar|acabar|venirme|venirse|llegar)") },
-  { kind: "problem", value: "timing", re: r("(?:came|finished|cum|acabe|termine|me vine|se vino) (?:way |too |really |muy |super |demasiado )?(?:fast|quick(?:ly)?|early|soon|rapido|pronto)|too (?:soon|fast|quick)|premature(?:ly)?|eyaculacion precoz|precoz|muy pronto|demasiado rapido") },
+  { kind: "problem", value: "timing", re: r("(?:came|finished|cum|acabe|termine|me vine|se vino) (?:way |too |really |muy |super |demasiado )?(?:fast|quick(?:ly)?|early(?! to (?:help|work|set up|prepare|cook|clean|assist|babysit|volunteer))|soon|rapido|pronto)|too (?:soon|fast|quick)|premature(?:ly)?|eyaculacion precoz|precoz|muy pronto|demasiado rapido") },
   { kind: "problem", value: "pain", re: r("pain|painful|hurt|hurts|hurting|sore|soreness|discomfort|ouch|dolor(?:oso|osa)?|dolio|duele|dolia|molestias?|me molesto") },
   { kind: "problem", value: "dryness", prio: 2, selfNeg: true, re: r("not wet(?: enough)?|wasn'?t wet(?: enough)?|needed (?:more |some |extra )?lube|no estaba (?:mojada|lubricada)|poca lubricacion|falta de lubricacion") },
-  { kind: "problem", value: "dryness", re: r("dryness|too dry|dry(?! humor| hump)|sequedad|resequedad|reseca|seca") },
-  { kind: "problem", value: "fatigue", re: r("fatigue|tired|exhausted|worn out|drained|sleep deprived|cansancio|cansad[oa]s?|agotad[oa]s?|rendid[oa]s?") },
+  { kind: "problem", value: "dryness", re: r("dryness|too dry|dry(?! (?:humor|hump|wine|martini|shampoo|january|wit))|sequedad|resequedad|reseca|seca") },
+  { kind: "problem", value: "fatigue", re: r("fatigue|tired|exhausted|worn out|drained(?! (?:the )?(?:pasta|water|sink|tank|pool|swamp|batteries))|sleep deprived|cansancio|cansad[oa]s?|agotad[oa]s?|rendid[oa]s?") },
   { kind: "problem", value: "connection", prio: 2, selfNeg: true, re: r("weak connection|no connection(?! (?:problems?|issues?))|disconnected|felt distant|poca conexion|sin conexion|desconectad[oa]s?") },
-  { kind: "problem", value: "connection", re: r("distant|distantes?") },
-  { kind: "problem", value: "mood", re: r("bad mood|low mood|in a mood|grumpy|sad|upset|depressed|feeling down|felt down|was down|mal humor|de malas|mal animo|tristes?|bajon|deprimid[oa]s?|enojad[oa]s?") },
+  { kind: "problem", value: "connection", re: r("distant(?! (?:cousin|relative|relatives|uncle|aunt|family|primo|prima|parientes))|distantes?(?! (?:primos?|parientes|familiares))") },
+  { kind: "problem", value: "mood", re: r("bad mood|low mood|in a mood|grumpy|sad(?! (?:movie|film|song|story|book|ending|news))|upset|depressed|feeling down|felt down|was down|mal humor|de malas|mal animo|tristes?|bajon|deprimid[oa]s?|enojad[oa]s?") },
   { kind: "problem", value: "stress", re: r("stress|stressed|stressful|estres|estresad[oa]s?|estresante") },
   { kind: "problem", value: "distraction", re: r("distract(?:ed|ion|ing)?|on (?:my|her|his) phone|mind (?:was )?elsewhere|distraccion|distraid[oa]s?|la mente en otro lado") },
   { kind: "problem", value: "privacy", prio: 2, selfNeg: true, re: r("(?:no|little|not much|lack of|zero) privacy|privacy (?:issues?|problems?)|thin walls|could hear us|might hear us|(?:sin|poca|falta de|nada de) privacidad|paredes delgadas|nos (?:podian|iban a|pudieron) (?:oir|escuchar)") },
-  { kind: "problem", value: "desire", prio: 2, selfNeg: true, re: r("low (?:desire|libido|sex drive)|no (?:desire|libido)(?! (?:problems?|issues?))|not in the mood|wasn'?t in the mood|didn'?t feel like it|poco deseo|bajo deseo|sin deseo|sin ganas|no tenia ganas|pocas ganas|libido baja|no estaba de humor|no estaba con ganas") },
+  { kind: "problem", value: "desire", prio: 2, selfNeg: true, re: r("low (?:desire|libido|sex drive)|no (?:desire|libido)(?! (?:problems?|issues?))|not in the mood(?! for (?:cooking|cleaning|working|driving|shopping|eating|studying|exercising))|wasn'?t in the mood|didn'?t feel like it|poco deseo|bajo deseo|sin deseo|sin ganas(?! de (?:cocinar|limpiar|trabajar|manejar|conducir|comprar|comer|estudiar|salir))|no tenia ganas(?! de (?:cocinar|limpiar|trabajar|manejar|conducir|comprar|comer|estudiar|salir))|pocas ganas|libido baja|no estaba de humor|no estaba con ganas") },
   { kind: "problem", value: "period", re: r("period(?! of)|menstruat\\w*|menstruacion|menstruando|(?:la|su|mi) regla|con la regla|reglando|periodo(?! de)|en (?:sus|mis) dias|that time of the month") },
   { kind: "problem", value: "anxiety", re: r("anxiety|anxious|nervous|nerves|panic|ansiedad|ansios[oa]s?|nervios[oa]s?|nervios") },
-  { kind: "problem", value: "alcohol", re: r("alcohol|drunk|tipsy|buzzed|wasted|hammered|(?:a few|some|couple(?: of)?|too many) drinks|drinking|drank|wine|beers?|tequila|vodka|whiskey|borrach[oa]s?|tomad[oa]s|tragos|copas|cervezas?|pasad[oa]s? de copas|ebri[oa]s?|(?:copas?|botella) de vino|vino (?:tinto|blanco)") },
-  { kind: "problem", value: "medication", re: r("medications?|meds|medicine|antidepressants?|ssris?|viagra|cialis|sildenafil|medicacion|medicamentos?|medicina|antidepresivos?|pastillas para") },
+  { kind: "problem", value: "alcohol", re: r("alcohol|drunk|tipsy|buzzed|wasted|hammered|(?:a few|some|couple(?: of)?|too many) drinks|drinking|drank (?:wine|beer|tequila|vodka|whiskey|rum|gin|bourbon|mezcal|champagne|alcohol|too much|a lot|shots?)|wine|beers?|tequila|vodka|whiskey|borrach[oa]s?|tomad[oa]s|tragos|copas|cervezas?|pasad[oa]s? de copas|ebri[oa]s?|(?:copas?|botella) de vino|vino (?:tinto|blanco)") },
+  { kind: "problem", value: "medication", re: r("medications?|meds|medicine|antidepressants?|ssris?|viagra|cialis|sildenafil|medicacion|medicamentos?|medicina|antidepresivos?|pastillas para(?! (?:la |el )?(?:garganta|tos|resfriado|gripe|alergia|fiebre))") },
   { kind: "problem", value: "interruption", re: r("interrupt\\w*|knock(?:ed|ing)? on the door|walked in on us|someone (?:came|walked) in|(?:kids?|baby) (?:woke|came in|knocked)|phone rang|interrump\\w*|interrupcion|tocaron (?:a )?la puerta|se desperto (?:el|la) (?:bebe|nino|nina)") },
-  { kind: "problem", value: "bleeding", re: r("bleeding|bled|blood|spotting|sangr\\w*|manchado") },
-  { kind: "problem", value: "irritation", re: r("irritat\\w*|burning(?! (?:desire|passion|need|want|lust|hunger|for))|burned(?! with)|burn(?! (?:with|for))|itch(?:y|ing)?|rash|chafing|irritacion|irritad[oa]s?|ardor|ardia|arde|picazon|comezon|escozor|rozadura|rozad[oa]s?") },
+  { kind: "problem", value: "bleeding", re: r("bleeding|bled|blood(?! (?:pressure|test|work|sugar|sample|donation|type|results?))|spotting|sangr\\w*|manchado") },
+  { kind: "problem", value: "irritation", re: r("irritat\\w*|burning(?! (?:desire|passion|need|want|lust|hunger|for|candles?|incense|wood|firewood))|burned(?! with)|burn(?! (?:with|for))|itch(?:y|ing)?|rash|chafing|irritacion|irritad[oa]s?|(?:tuvo|tiene|sintio|siento|sentia) ardor|ardor (?:al|cuando|en|entre)|(?:me|le) (?:arde|ardia)|picazon|comezon|escozor|rozadura|rozad[oa]s?") },
 ];
 
 // ---------------------------------------------------------------- feelings (rating dims)
@@ -117,26 +139,26 @@ const dim = (d: Rule["dim"], level: number, source: string, prio = 1): Rule => (
 export const RATING_RULES: Rule[] = [
   // intensity: 1 Gentle · 2 Warm · 3 Passionate · 4 Electric · 5 Consuming
   dim("intensity", 5, "full (?:in |of )?intensity|full intensity|(?:max|maximum|top|pure|total) intensity|intensidad (?:maxima|total|plena|pura)|llen[oa] de intensidad|con toda la intensidad|consuming|lost track of time|perdimos (?:la nocion|la cuenta) del tiempo|absorbente|overwhelming|intensisimo|intensisima|insanely intense", 2),
-  dim("intensity", 4, `${INTENSIFIER}? ?intens[oa]s?|${INTENSIFIER}? ?intense|electric|electrico|electrica|rough|urgent|aggressive|rudo|ruda`),
+  dim("intensity", 4, `${INTENSIFIER}? ?intens[oa]s?|${INTENSIFIER}? ?intense|electric|electrico|electrica|rough(?! (?:day|week|patch|period|time|shift))|urgent|aggressive|rudo|ruda`),
   dim("intensity", 4, "burning (?:desire|passion|lust)|deseo ardiente|ardiente deseo|pasion ardiente|(?:full of|so much|lots of|a lot of|strong|huge|intense|high|raw) (?:desire|lust|passion)|(?:mucho|tanto|un gran|gran|puro|intenso) deseo|llen[oa] de (?:deseo|pasion|ganas)|(?:con )?(?:muchas|tantas) ganas|so horny|super horny|really horny|muy cachond[oa]s?|bien cachond[oa]s?|bien arrech[oa]s?|muy arrech[oa]s?", 2),
-  dim("intensity", 3, "horny|cachond[oa]s?|arrech[oa]s?|aroused|turned on|excitad[oa]s?|desire|deseo|lust|ganas|passionate|passion|steamy|heated|hot and heavy|hot(?! (?:shower|tub|water|bath|day|weather))|apasionad[oa]s?|con pasion|pasional|caliente(?!s? (?:la ducha|el agua))|calientes"),
+  dim("intensity", 3, "horny|cachond[oa]s?|arrech[oa]s?|aroused|turned on|excitad[oa]s?|desire|deseo|lust|ganas|passionate|passion|steamy|heated|hot and heavy|hot(?! (?:shower|tub|water|bath|day|weather|chocolate|coffee|tea|soup|pizza|food|sauce|wings))|apasionad[oa]s?|con pasion|pasional|(?<!chocolate )caliente(?!s? (?:la ducha|el agua))|(?<!chocolate )calientes"),
   dim("intensity", 2, "warm|steady|calido|calida|constante"),
   dim("intensity", 1, "gentle|soft|slow|tender|suave|lento|lenta|despacio|despacito|tiern[oa]s?|delicad[oa]s?"),
   // connection: 1 Distant · 2 Sweet · 3 Close · 4 Soulful · 5 Profound
   dim("connection", 5, "profound|profoundly|felt like one|como uno solo|nothing else existed|no existia nada mas|soul connection|(?:amazing|incredible|insane|unreal) connection|conexion (?:increible|brutal|unica)|profundamente conectad[oa]s?", 3),
   dim("connection", 4, `deeply connected|${INTENSIFIER} (?:connected|close|conectad[oa]s?|cercan[oa]s?|unid[oa]s?)|soulful|intimate|intim[oa]s?|tuned in|great connection|mucha conexion`, 2),
-  dim("connection", 3, "connected|conectad[oa]s?|close|cercan[oa]s?|eye contact|in sync|en sintonia|good connection|buena conexion"),
+  dim("connection", 3, "connected|conectad[oa]s?|close(?! to (?:her|his|my|the|our) (?:office|house|home|work|school|apartment|place|flat))|cercan[oa]s?|eye contact|in sync|en sintonia|good connection|buena conexion"),
   dim("connection", 2, "sweet|cute|dulce|dulces"),
-  dim("connection", 1, "distant|disconnected|felt far|distantes?|desconectad[oa]s?"),
+  dim("connection", 1, "distant(?! (?:cousin|relative|relatives|uncle|aunt|family|primo|prima|parientes))|disconnected|felt far|distantes?(?! (?:primos?|parientes|familiares))|desconectad[oa]s?"),
   // satisfaction: 1 Light · 2 Pleasant · 3 Great · 4 Deep · 5 Unforgettable
   dim("satisfaction", 5, "(?:completely|totally|fully|so|super) satisfied|completamente satisfech[oa]s?|multiple orgasms|varios orgasmos|squirted", 2),
-  dim("satisfaction", 4, `(?:deeply|strongly) satisfying|${INTENSIFIER} satisfied|(?:we )?both (?:came|finished)|los dos (?:terminamos|acabamos|llegamos)|ambos (?:terminamos|acabamos|llegamos)|(?:so much|lots of|a lot of) pleasure|mucho placer|muy satisfech[oa]s?`, 2),
+  dim("satisfaction", 4, `(?:deeply|strongly) satisfying|${INTENSIFIER} satisfied|(?:we )?both (?:came|finished)(?! (?:work|the|our|dinner|cooking|cleaning|eating|school|class|homework|chores))|los dos (?:terminamos|acabamos|llegamos)|ambos (?:terminamos|acabamos|llegamos)|(?:so much|lots of|a lot of) pleasure|mucho placer|muy satisfech[oa]s?`, 2),
   dim("satisfaction", 4, "(?:very|so|really|more|most|super|extremely|muy|bien|mas|super|tan) (?:pleasurable|placenter[oa]s?|enjoyable)|delightful|delighted|(?:intense|strong|huge|powerful|great|amazing|incredible|deep|big) orgasms?|orgasmos? (?:intensos?|fuertes?|brutal(?:es)?|increibles?|profundos?|riquisimos?)|came hard|(?:me|se) vino (?:rico|delicioso|fuerte)", 2),
-  dim("satisfaction", 3, "pleasurable|placenter[oa]s?|enjoyable|disfrute|disfrutamos|disfruto|orgasms?|orgasmos?|climax(?:ed)?|orgasmed|(?:i|he|she|we) came|me vine|se vino|me corri|se corrio|llegue al (?:orgasmo|climax)|llego al (?:orgasmo|climax)|satisfied|satisfying|satisfech[oa]s?|satisfactori[oa]|really satisfying"),
+  dim("satisfaction", 3, "pleasurable|placenter[oa]s?|enjoyable|disfrute|disfrutamos|disfruto|orgasms?|orgasmos?|climax(?:ed)?|orgasmed|(?:i|he|she|we) came(?!\\s+(?:home|over|early|late|back|here|there|in|out|down|up|to|from|inside|outside|around|by|through|across)\\b)|me vine|se vino|me corri|se corrio|llegue al (?:orgasmo|climax)|llego al (?:orgasmo|climax)|satisfied|satisfying|satisfech[oa]s?|satisfactori[oa]|really satisfying"),
   dim("satisfaction", 2, "pleasant|agradable|(?:some|a little) pleasure|poco placer|little pleasure|not much pleasure"),
   dim("satisfaction", 1, "unsatisfied|unsatisfying|not satisfied|insatisfech[oa]s?|me quede con ganas|left wanting more|frustrated"),
   // energy: 1 Languid · 2 Relaxed · 3 Playful · 4 High · 5 Wild
-  dim("energy", 5, "wild|crazy|unstoppable|like animals|salvajes?|locos?|locas?|como animales|locura", 1),
+  dim("energy", 5, "wild(?! (?:rice|salmon|berries|mushrooms|turkey|duck|honey))|crazy|unstoppable|like animals|salvajes?|locos?|locas?|como animales|locura", 1),
   dim("energy", 4, "energetic|high energy|lots of energy|adventurous|bold|energic[oa]s?|mucha energia|atrevid[oa]s?|aventurer[oa]s?"),
   dim("energy", 3, "playful|fun|jugueton(?:a|es)?|juguetones|divertid[oa]s?"),
   dim("energy", 2, "relaxed|chill|calm|mellow|easy going|relajad[oa]s?|tranquil[oa]s?|calmad[oa]s?"),
@@ -158,7 +180,7 @@ export const MULTI_RULES: Rule[] = [
 // ---------------------------------------------------------------- overall (1–5)
 const ov = (level: number, source: string, prio = 0): Rule => ({ kind: "overall", value: String(level), level, prio, re: r(source) });
 export const OVERALL_RULES: Rule[] = [
-  ov(2, "not great|not good|not the best|not (?:our|my|her|his|their) best|no fue (?:nuestro|nuestra|el|la|su) mejor(?: vez| noche)?|not amazing|not that good|no fue lo mejor|no tan buen[oa]|no muy buen[oa]|no estuvo tan bien|could have been better|pudo (?:ser|haber sido) mejor", 2),
+  ov(2, "not great|not good|not the best|not (?:our|my|her|his|their) best|no fue (?:nuestro|nuestra|el|la|su) mejor(?: vez| noche)?|not that good|no fue lo mejor|no tan buen[oa]|no muy buen[oa]|no estuvo tan bien|could have been better|pudo (?:ser|haber sido) mejor", 2),
   ov(3, "not bad|nada mal|no estuvo mal|no fue malo", 2),
   ov(5, "best (?:sex|night|time|session|one)? ?ever|best \\w+ of (?:my|her|his|our) li(?:fe|ves)|the best|amazing|amaizing|incredible|unbelievable|insane|mind ?-?blowing|unforgettable|perfect|out of this world|phenomenal|epic|spectacular|increible|espectacular|brutal|buenisim[oa]|riquisim[oa]|de lo mejor|lo mejor|lo maximo|fenomenal|inolvidable|perfect[oa]|la mejor|el mejor|10 de 10"),
   ov(4, "great|awesome|fantastic|wonderful|lovely|so good|really good|very good|super good|pretty good|good|enjoyed it|loved it|really enjoyed|(?:muy|super|bien|que) ric[oa]|ric[oa]|muy buen[oa]|bien buen[oa]|super buen[oa]|muy bien|genial|delicios[oa]|sabros[oa]|chevere|chido|bacano|hermos[oa]|precios[oa]"),

@@ -64,6 +64,13 @@ export type BatchEntry = {
   endDate: string;
   /** The text says it was a solo moment (solo, alone, por mi cuenta…): never given the batch partner. */
   solo: boolean;
+  /** The text stated a count of zero ("0 times, we just talked"): no
+   * session happened, and parseBatch drops the entry (RT-V2 B7). */
+  zero?: boolean;
+  /** A date was stated but cannot exist ("Feb 30", "13/13/2026"): the
+   * entry is clamped or left undated, the typed words stay in the
+   * note, and this flag says the date needs the reader's eye (B5). */
+  dateUnreadable?: boolean;
   /** Other people the text names (offered as chips in the preview). */
   partnerAlts?: string[];
   /** Two names were about equally likely: the preview asks for a check. */
@@ -162,15 +169,34 @@ function negatedAt(folded: string, start: number, end: number) {
   let lastBreak = -1;
   for (const m of matches(SCOPE_BREAK, clause)) lastBreak = (m.index ?? 0) + m[0].length;
   if (lastBreak >= 0) scope = clause.slice(lastBreak);
-  const words = scope.split(/[^a-z0-9'/]+/).filter(Boolean).slice(-5);
-  if (words.some((w) => NEGATORS.has(w))) return true;
+  // Composed negation resolves positive: "never … without a condom",
+  // "not without a condom", "nunca … sin condón" state the method WAS
+  // used — two negators in one scope cancel (RT-V2 B17, RT-V2M M14).
+  if (/\b(?:never|not|no|nunca|jamas)\b[^.;]{0,40}?\b(?:without|sin)\b/.test(scope)) return false;
+  // The whole scope speaks, not its last five words: a denial stretched
+  // over a long clause ("we did not at any point during the night use…")
+  // denies just the same (RT-V2M M11).
+  const words = scope.split(/[^a-z0-9'/]+/).filter(Boolean);
+  const negators = words.filter((w) => NEGATORS.has(w));
+  if (negators.length) {
+    // A near-miss "forgot" is a rescue, not a denial: "she almost forgot
+    // the condom but grabbed one" — the condom was used (RT-V2M M13).
+    const forgotOnly = negators.every((w) => w === "forgot" || w === "olvido" || w === "olvidamos" || w === "olvide");
+    if (!(forgotOnly && /\b(?:almost|nearly|casi)\b/.test(scope))) return true;
+  }
   // "condom: no", "pain? none"
-  return /^\s*[:\-=?]+\s*(?:no|none|nope|nada|ninguno|ninguna|0)\b/.test(folded.slice(end, end + 14));
+  if (/^\s*[:\-=?]+\s*(?:no|none|nope|nada|ninguno|ninguna|0)\b/.test(folded.slice(end, end + 14))) return true;
+  // A denial in ordinary sentence position after the word: "a condom was
+  // there but not used" (RT-V2M M12).
+  const after = folded.slice(end, end + 48).split(/[.;\n]/)[0];
+  if (/\b(?:but|pero)\s+(?:not|no|nunca|never)\s+(?:used|usad\w+|se\s+uso|fue\s+usado)(?!\s+to\b)/.test(after)) return true;
+  if (/^\s*(?:was|were|is|fue|quedo|estaba)?\s*(?:not|never|no|nunca)\s+(?:used|usad\w+|se\s+uso)(?!\s+to\b)/.test(after)) return true;
+  return false;
 }
 
 // ------------------------------------------------------------------ dates & times
 
-type Anchor = Span & { date: string; stated: "explicit" | "relative"; year?: number; yearGiven?: boolean; to?: string; weak?: boolean };
+type Anchor = Span & { date: string; stated: "explicit" | "relative"; year?: number; yearGiven?: boolean; to?: string; weak?: boolean; invalid?: boolean };
 
 /** Longest stated range read as one encounter (days). */
 const MAX_RANGE_DAYS = 14;
@@ -191,7 +217,7 @@ function validDay(year: number, month: number, day: number) {
   return day <= new Date(year, month, 0).getDate();
 }
 
-type YearState = { carried: number | null; dayFirst?: boolean };
+type YearState = { carried: number | null; dayFirst?: boolean; lastDate?: string };
 
 const ES_WORDS = /\b(?:con|ayer|anoche|antier|hoy|veces|vez|noche|semana|finde|despues|fue|fuimos|hicimos|estuvo|muy|pero|cama|sofa|ducha|carro|coche|sin|el dia|la|las|los|del|al|en la|en el|mi|nos|que|y)\b/g;
 const EN_WORDS = /\b(?:with|yesterday|last|night|today|times|twice|once|week|weekend|after|was|we|very|but|bed|couch|shower|car|without|the|and|on|in|at|my|her|his|that)\b/g;
@@ -316,6 +342,11 @@ function findAnchors(folded: string, now: Date, state: YearState, blocked: Span[
       (m) => [MONTHS[m[3]], Number(m[1]), MONTHS[m[3]], Number(m[2])]],
     [/\bdel\s+(\d{1,2})\s+al\s+(\d{1,2})\b(?!\s*(?:de|of)\b)/g,
       (m) => { const b = recentDay(Number(m[2]), now); return [b.month, Number(m[1]), b.month, Number(m[2])]; }],
+    // "between Oct 25 and Oct 27" / "entre el 25 y el 27 de octubre" (RT-V2M M30).
+    [new RegExp(`\\bbetween\\s+(${MONTH_RE})\\b\\.?\\s*(\\d{1,2})(?:st|nd|rd|th)?\\s+and\\s+(?:(${MONTH_RE})\\b\\.?\\s*)?(\\d{1,2})(?:st|nd|rd|th)?\\b`, "g"),
+      (m) => [MONTHS[m[1]], Number(m[2]), m[3] ? MONTHS[m[3]] : MONTHS[m[1]], Number(m[4])]],
+    [new RegExp(`\\bentre\\s+el\\s+(\\d{1,2})\\s+y\\s+el\\s+(\\d{1,2})\\s+de\\s+(${MONTH_RE})\\b`, "g"),
+      (m) => [MONTHS[m[3]], Number(m[1]), MONTHS[m[3]], Number(m[2])]],
   ];
   for (const [re, read] of ranges) {
     for (const m of matches(re, folded)) {
@@ -356,6 +387,13 @@ function findAnchors(folded: string, now: Date, state: YearState, blocked: Span[
     return -back;
   });
   rel(/\b(?:a|one) week ago\b|\bhace una semana\b/g, () => -7);
+  // Plural weeks are dates too: "two weeks ago" is a fortnight back,
+  // not today (RT-V2M M29).
+  rel(new RegExp(`\\b(${NUM_WORD_RE}) weeks? ago\\b|\\bhace (${NUM_WORD_RE}) semanas?\\b`, "g"), (m) => {
+    const word = m[1] || m[2];
+    const n = /^\d+$/.test(word) ? Number(word) : NUMBER_WORDS[word] ?? null;
+    return n && n < 60 ? -7 * n : null;
+  });
   rel(new RegExp(`\\b(?:(?:last|this past|past|on|el|este)\\s+)?(${WEEKDAY_FULL})(?:\\s+pasado)?\\b`, "g"), (m) => {
     const target = WEEKDAYS[m[1]];
     let back = (now.getDay() - target + 7) % 7;
@@ -390,8 +428,38 @@ function findAnchors(folded: string, now: Date, state: YearState, blocked: Span[
         continue;
       }
       const settled = settleYear(month, day, now, state, year);
-      if (!validDay(settled, month, day)) continue;
+      if (!validDay(settled, month, day)) {
+        // A stated date that cannot exist is the reader's loudest
+        // signal, not a reason to file the session under today
+        // (RT-V2 B5): a day past the month's end clamps to its last
+        // day and is flagged; a month that does not exist leaves the
+        // entry undated and flagged, its typed words kept in the note.
+        const daysIn = month >= 1 && month <= 12 ? new Date(settled, month, 0).getDate() : 0;
+        if (daysIn && day > daysIn) {
+          item.date = `${settled}-${pad(month)}-${pad(daysIn)}`;
+          kept.push({ start: item.start, end: item.end, date: item.date, stated: item.stated, invalid: true });
+          end = item.end;
+        } else if (!daysIn) {
+          kept.push({ start: item.start, end: item.end, date: "", stated: item.stated, invalid: true });
+          end = item.end;
+        }
+        continue;
+      }
       item.date = `${settled}-${pad(month)}-${pad(day)}`;
+      // A carried year never moves an entry to before the entry that
+      // carried it: a December paste naming 2023 makes its January
+      // 2024's (RT-V2 B3).
+      if (!year && state.carried && state.lastDate && item.date < state.lastDate) {
+        for (let y = settled + 1; y <= settled + 3; y += 1) {
+          if (!validDay(y, month, day)) continue;
+          const cand = `${y}-${pad(month)}-${pad(day)}`;
+          if (cand >= state.lastDate) {
+            item.date = cand;
+            break;
+          }
+        }
+      }
+      if (item.date) state.lastDate = item.date;
     }
     kept.push({ start: item.start, end: item.end, date: item.date, stated: item.stated, weak: item.weak });
     end = item.end;
@@ -502,8 +570,9 @@ function numberValue(word: string) {
 }
 
 const DUR_NUM = "\\d+(?:[.,]\\d+)?|one|two|three|four|five|ten|fifteen|twenty|thirty|forty[- ]five|forty|sixty|ninety|un|una|uno|dos|tres|cuatro|cinco|diez|quince|veinte|treinta|cuarenta y cinco|cuarenta|sesenta|noventa|a couple of|a couple|couple of|un par de|an|a";
-const NOT_DURATION_AFTER = /^\s*(?:later|after|afterwards|before|ago|earlier|despues|antes|mas tarde|from now|de distancia|away)\b/;
-const NOT_DURATION_BEFORE = /\b(?:hace|after|within|every|cada|despues de)\s*$/;
+const NOT_DURATION_AFTER = /^\s*(?:later|after|afterwards|before|ago|earlier|despues|antes|mas tarde|from now|de distancia|away|a day|per day|each day|al dia|por dia)\b/;
+const NOT_DURATION_BEFORE = /\b(?:hace|after|following|within|every|cada|despues de|tras)\s+(?:(?:a|an|the|un|una|el|la)\s+)?$/;
+const WORK_BEFORE = /\b(?:works?|worked|working|trabaj\w+|shift|turno)\s*$/;
 
 function findDuration(folded: string, blocked: Span[]): (Span & { mins: number }) | null {
   const candidates: (Span & { mins: number })[] = [];
@@ -512,7 +581,9 @@ function findDuration(folded: string, blocked: Span[]): (Span & { mins: number }
     const end = start + m[0].length;
     if (!mins || !freeOf(blocked, { start, end })) return;
     if (NOT_DURATION_AFTER.test(folded.slice(end, end + 16))) return;
-    if (NOT_DURATION_BEFORE.test(folded.slice(Math.max(0, start - 14), start))) return;
+    if (NOT_DURATION_BEFORE.test(folded.slice(Math.max(0, start - 24), start))) return;
+    // "She works 8 hours a day" is a shift, not a session (RT-V2M M25).
+    if (WORK_BEFORE.test(folded.slice(Math.max(0, start - 14), start))) return;
     candidates.push({ start, end, mins });
   };
   for (const m of matches(/\b(?:an |one |1 |una |1 )?hour and a half\b|\b(?:una )?hora y media\b|\b1\.5 ?(?:hours?|hrs?|horas?)\b/g, folded)) add(m, 90);
@@ -535,6 +606,18 @@ function findDuration(folded: string, blocked: Span[]): (Span & { mins: number }
   return { ...first, mins: Math.min(240, Math.max(5, first.mins)) };
 }
 
+const VERDICT_OBJECT_AFTER = /^\s+(?:traffic|pizza|weather|dinner|food|movie|film|room|car|dress|condom|quality|service|hotel|flight|trip|game|show|book|song)\b/;
+function verdictAboutOtherThing(folded: string, h: Hit) {
+  const before = folded.slice(Math.max(0, h.start - 20), h.start);
+  const after = folded.slice(h.end, h.end + 24);
+  const word = folded.slice(h.start, h.end);
+  if ((word === "good" || word.startsWith("good ")) && /^\s+(?:night|morning|afternoon)\b/.test(after)) return true;
+  if (VERDICT_OBJECT_AFTER.test(after)) return true;
+  if (/\bback to\s*$/.test(before)) return true;
+  if (/\b(?:looked|looks|looking|se veia?|parec\w+|lucia)\s*$/.test(before)) return true;
+  return false;
+}
+
 const COUNT_WORDS: [RegExp, number][] = [
   [/\b(?:once|one time|una vez|1 vez|un round|one round|una ronda)\b/g, 1],
   [/\b(?:a couple (?:of )?times|un par de (?:veces|rounds|rondas)|two veces|dos (?:times|rounds))\b/g, 2],
@@ -546,7 +629,7 @@ const COUNT_WORDS: [RegExp, number][] = [
   [/\b(?:five times|cinco veces)\b/g, 5],
   [/\b(?:six times|seis veces)\b/g, 6],
 ];
-const AGAIN = /\b(?:round (?:two|2)|second round|another round|one more round|(?:did it|do it|went at it|had sex|made love|fucked|we went) again|again (?:later|after|that night|in the morning|(?:the )?(?:next|following) (?:day|morning|night|afternoon))|otra ronda|segunda ronda|lo hicimos (?:otra vez|de nuevo)|otra vez mas tarde|una vez mas|(?:otra vez|de nuevo) (?:al dia siguiente|el dia siguiente|a la manana siguiente|la manana siguiente|al otro dia|en la manana|por la manana))\b/g;
+const AGAIN = /\b(?:round (?:two|2)|second round|another round|one more round|(?:did it|do it|went at it|had sex|made love|fucked|we went) again|again (?:later|after|that night|in the morning|(?:the )?(?:next|following) (?:day|morning|night|afternoon))|otra ronda|segunda ronda|lo hicimos (?:otra vez|de nuevo)|otra vez mas tarde|una vez mas|volvimos a hacerlo|volvimos a hacer|lo volvimos a hacer|repetimos|lo repetimos|(?:otra vez|de nuevo) (?:al dia siguiente|el dia siguiente|a la manana siguiente|la manana siguiente|al otro dia|en la manana|por la manana))\b/g;
 /** "again at 1am" / "otra vez a las 2": a second round at a stated time. */
 const AGAIN_AT = /\b(?:again|otra vez|de nuevo)\s+(?:at|around|a las?|como a las?|sobre las?)\s+\d/g;
 
@@ -574,21 +657,118 @@ function ordinalRounds(folded: string, blocked: Span[]) {
   return { n, spans };
 }
 
-function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[]; again: boolean } {
+/* A sentence that talks about something else — a pregnancy test, a
+ * third person, a meal — never lends its numbers to the encounter
+ * (RT-V2 B1, RT-V2M M8). A meal sentence that also carries the
+ * encounter (its place, its method, its verb) is the encounter's own. */
+const FOREIGN_SUBJECT = /\b(her sister|his sister|her brother|his brother|her friend|his friend|her cousin|his cousin|su hermana|su hermano|la hermana|el hermano|su prima|su amiga|her mother|his mother)\b/;
+const FOREIGN_FOOD = /\b(eaten|ate|eating|dinner|lunch|breakfast|brunch|comimos|cenamos|almorzamos|comiendo|cenando|comer|comida|restaurant|restaurante)\b/;
+const ENCOUNTER_SIGNAL = /\b(condom|condon|pill|pastilla|hotel|motel|bed|cama|shower|ducha|car|carro|couch|sofa|sex|sexo|love|hicimos|fuimos|tuvimos|did it|made love|hooked up|solo|alone)\b/;
+const TEST_WORDS = /\b(pregnancy tests?|pruebas? de embarazo|tests? de embarazo)\b/;
+
+function sentenceSpans(folded: string): Span[] {
+  const out: Span[] = [];
+  for (const m of folded.matchAll(/[^.!?;\n]+[.!?;\n]*/g)) out.push({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length });
+  return out;
+}
+
+function foreignSentence(sentence: string) {
+  if (TEST_WORDS.test(sentence) || FOREIGN_SUBJECT.test(sentence)) return true;
+  return FOREIGN_FOOD.test(sentence) && !ENCOUNTER_SIGNAL.test(sentence);
+}
+
+/* An again/second-round phrase raises the count only when its own
+ * sentence says the round HAPPENED — not when it was denied, nearly
+ * happened, wanted, planned, or slept through (RT-V2 B2, RT-V2M M15). */
+const UNHAPPENED = /\b(never|didn'?t|did not|was no|there was no|no hubo|almost|casi|nearly|wanted|queria|quiso|quisimos|were going to|was going to|going to|ibamos a|pensamos|planned|too tired|cansad\w+|agotad\w+|fell asleep|se durmio|nos dormimos|quedamos dormidos|no pudimos|no se pudo)\b/;
+function roundHappened(folded: string, start: number, end: number) {
+  const from = Math.max(folded.lastIndexOf(".", start - 1), folded.lastIndexOf(";", start - 1), folded.lastIndexOf("\n", start - 1), folded.lastIndexOf("!", start - 1), folded.lastIndexOf("?", start - 1)) + 1;
+  const rest = folded.slice(end);
+  const nextStop = rest.search(/[.!?;\n]/);
+  const segment = folded.slice(from, nextStop < 0 ? folded.length : end + nextStop);
+  return !UNHAPPENED.test(segment);
+}
+
+const COUNT_NUMBER_RE = (() => {
+  const words = Object.keys(NUMBER_WORDS).sort((a, b) => b.length - a.length).map((w) => escapeRe(w).replace(/\s+/g, "\\s+"));
+  return new RegExp(`\\b(${words.join("|")}|\\d{1,3})\\s*(times|veces|rounds|rondas)\\b`, "g");
+})();
+
+function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[]; again: boolean; zero: boolean } {
   const spans: Span[] = [];
   let n = 0;
-  for (const m of matches(/\b(\d{1,2})\s*(?:times|veces|x|rounds|rondas)\b|\bx\s?(\d)\b/g, folded)) {
+  let zero = false;
+  const sentences = sentenceSpans(folded);
+  const foreign = (at: number) => {
+    const s = sentences.find((x) => at >= x.start && at < x.end);
+    return s ? foreignSentence(folded.slice(s.start, s.end)) : false;
+  };
+  // A self-correction replaces, never competes: everything counted
+  // before the last "no wait" / "mejor dicho" is the discarded draft
+  // (RT-V2 B1).
+  let correctionAt = -1;
+  for (const m of matches(/\b(?:no wait|mejor dicho|correction|en realidad)\b/g, folded)) correctionAt = m.index ?? 0;
+  const usable = (span: Span) => freeOf(blocked, span) && !foreign(span.start) && span.start > correctionAt;
+  for (const m of matches(/\b(\d{1,3})\s*(?:times|veces|x|rounds|rondas)\b|\bx\s?(\d)\b/g, folded)) {
     const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
-    if (!freeOf(blocked, span)) continue;
+    if (!freeOf(blocked, span) || foreign(span.start)) continue;
     spans.push(span);
-    n = Math.max(n, Number(m[1] || m[2]));
+    const value = Number(m[1] || m[2]);
+    if (span.start <= correctionAt) continue;
+    if (value === 0) zero = true;
+    n = Math.max(n, value);
   }
   for (const [re, value] of COUNT_WORDS) {
     for (const m of matches(re, folded)) {
       const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
-      if (!freeOf(blocked, span) || !freeOf(spans, span)) continue;
+      if (!freeOf(blocked, span) || !freeOf(spans, span) || !usable(span)) continue;
       // "una vez" inside "una vez mas" is the again-rule's job
       if (/^\s*mas\b/.test(folded.slice(span.end, span.end + 5))) continue;
+      spans.push(span);
+      n = Math.max(n, value);
+    }
+  }
+  // The general number path: any number word the lexicon knows, in
+  // either language, with any count unit — "eleven times", "five
+  // rounds", "once veces" (RT-V2 B6).
+  for (const m of matches(COUNT_NUMBER_RE, folded)) {
+    const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
+    if (!freeOf(blocked, span) || !freeOf(spans, span) || !usable(span)) continue;
+    spans.push(span);
+    const value = /^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1].replace(/\s+/g, " ")] ?? 0;
+    if (value === 0) zero = true;
+    n = Math.max(n, value);
+  }
+  // Stated zeroes in words ("cero veces", "zero times") (RT-V2 B7).
+  for (const m of matches(/\b(?:cero|zero)\s+(?:veces|times|rounds|rondas)\b/g, folded)) {
+    const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
+    if (!freeOf(blocked, span) || foreign(span.start)) continue;
+    spans.push(span);
+    zero = true;
+  }
+  // One typo away still counts ("twcie", "trhee times", "tres vecse").
+  for (const m of matches(/[a-z]{4,}/g, folded)) {
+    const word = m[0];
+    const span = { start: m.index ?? 0, end: (m.index ?? 0) + word.length };
+    if (!freeOf(blocked, span) || !freeOf(spans, span) || !usable(span)) continue;
+    const tail = folded.slice(span.end, span.end + 14);
+    const unit = tail.match(/^\s+(times|veces|rounds|rondas)\b/);
+    const fuzzyUnit = tail.match(/^\s+([a-z]{4,})\b/);
+    let value = 0;
+    if (unit) {
+      for (const key of Object.keys(NUMBER_WORDS)) {
+        if (key.length < 3 || key.includes(" ") || key[0] !== word[0]) continue;
+        if (editDistance(word, key) === 1) { value = NUMBER_WORDS[key]; break; }
+      }
+    } else if (fuzzyUnit && (editDistance(fuzzyUnit[1], "times") === 1 || editDistance(fuzzyUnit[1], "veces") === 1)) {
+      value = NUMBER_WORDS[word] ?? 0;
+      if (value) spans.push({ start: span.end + 1, end: span.end + 1 + fuzzyUnit[1].length });
+    } else {
+      for (const key of ["once", "twice", "thrice"]) {
+        if (key[0] === word[0] && editDistance(word, key) === 1) { value = NUMBER_WORDS[key === "once" ? "one" : key === "twice" ? "two" : "three"]; break; }
+      }
+    }
+    if (value) {
       spans.push(span);
       n = Math.max(n, value);
     }
@@ -599,27 +779,36 @@ function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[];
     spans.push(...ordinal.spans);
     if (!n) n = ordinal.n;
   }
+  // …except an ADDITIVE ordinal after a stated one: "once, and a second
+  // time" is the second round being added, not a restatement (M18).
+  if (n === 1) {
+    const add = folded.match(/\b(?:and|y|then|luego|despues),?\s+(?:a\s+|una\s+)?(?:second|segunda)\s+(?:time|vez|round|ronda)\b/);
+    if (add && !foreign(add.index ?? 0)) n = 2;
+  }
   let again = false;
   for (const m of matches(AGAIN_AT, folded)) {
     const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length - 1 };
     if (!freeOf(blocked, { start: span.start, end: span.start + 5 })) continue;
+    if (!roundHappened(folded, span.start, span.end) || foreign(span.start)) continue;
     again = true;
   }
   for (const m of matches(AGAIN, folded)) {
     const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
     // "again the next morning": the time-of-day word inside is fine, only the start must be free
     if (!freeOf(blocked, { start: span.start, end: Math.min(span.end, span.start + 5) })) continue;
+    if (!roundHappened(folded, span.start, span.end) || foreign(span.start)) continue;
     spans.push(span);
     again = true;
   }
   // An explicit total outranks an inferred extra round: "we did it only once … too tired to
   // attempt a second round" is ONE encounter — the second round was mentioned to say it never
-  // happened (Oscar's item 37, Nov 9 2026).
-  if (/\b(?:only|just) (?:once|one (?:time|round))\b|\buna sola vez\b|\bsolo una vez\b/.test(folded)) {
+  // happened (Oscar's item 37, Nov 9 2026). The guard knows the MEANING
+  // now, not one wording: a single time / una única vez say it too (M16).
+  if (/\b(?:only|just) (?:once|one (?:time|round))\b|\ba single time\b|\bone single time\b|\buna sola vez\b|\bsolo una vez\b|\buna unica vez\b|\bsolamente una vez\b|\buna vez nada mas\b/.test(folded)) {
     again = false;
     if (n > 1) n = 1;
   }
-  return { n: Math.min(12, n), spans, again };
+  return { n: Math.min(12, n), spans, again, zero };
 }
 
 type Numeric = Span & { level: number; dim: keyof typeof DIM_WORDS | "overall" };
@@ -648,6 +837,8 @@ function findNumericRatings(folded: string): Numeric[] {
     add(m.index ?? 0, (m.index ?? 0) + m[0].length, value, scale);
   }
   for (const m of matches(/\b([1-5](?:[.,]5)?)\s*(?:stars?|estrellas?|flames?|llamas?|hearts?|corazones)\b/g, folded)) {
+    // A five-star hotel is a building's rating, not the night's (RT-V2 B12).
+    if (/^\s+(?:hotel|motel|resort|restaurant|room|place|bar|hostel|airbnb)\b/.test(folded.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 16))) continue;
     add(m.index ?? 0, (m.index ?? 0) + m[0].length, Number(m[1].replace(",", ".")), 5);
   }
   for (const m of matches(/\b(?:rated?(?: it)?|rating|score|le doy|le di|un)\s+(10|[1-9])\b(?!\s*(?:\/|de|out|times|veces|min|hours?|horas?|am|pm|:|dias?|days?))/g, folded)) {
@@ -754,8 +945,15 @@ function fuzzyHits(folded: string, fuzzy: ReturnType<typeof buildRules>["fuzzy"]
 
 // ------------------------------------------------------------------ partner
 
-/** A solo moment, said in the text. Bare "solo" counts only on its own ("Oct 30 solo"), never "solo una vez"/"solo con". */
-const SOLO_RE = /\b(?:masturbat\w*|masturb\w*|jerk(?:ed|ing)? off|jack(?:ed|ing)? off|by myself|on my own|just me|solo (?:session|moment|time)|me toque|me hice una paja|una paja|por mi cuenta|yo sol[oa]|a solas|solit[oa]|en solitario|momento en solitario)\b|\bsol[oa]\b(?=\s*(?:[,.;:!?)]|$|\b(?:tonight|today|yesterday|last night|this morning|hoy|ayer|anoche|en casa|at home|in bed|en la cama|in the shower|en la ducha)\b))|\balone\b(?=\s*(?:[,.;:!?)]|$|\b(?:at home|in bed|tonight|today|en casa)\b))/;
+/** A solo moment, said in the text. Bare "solo"/"alone" brand the
+ * encounter wherever they stand as its marker — "solo night", "alone
+ * at the cabin", "solo en el hotel" (RT-V2M M26) — except the phrases
+ * where the word does another job ("solo una vez" is a count, "solo
+ * con…" is company, "solo quiero…" is "I only want"). Whether the
+ * brand survives company elsewhere in the entry is judged in
+ * readEntry, inside the marker's own clause (RT-V2 B10, RT-V2M M27). */
+const SOLO_STRONG = /\b(?:masturbat\w*|masturb\w*|jerk(?:ed|ing)? off|jack(?:ed|ing)? off|by myself|on my own|just me|solo (?:session|moment|time)|me toque|me hice una paja|una paja|por mi cuenta|yo sol[oa]|a solas|solit[oa]|en solitario|momento en solitario)\b/;
+const SOLO_RE = /\b(?:masturbat\w*|masturb\w*|jerk(?:ed|ing)? off|jack(?:ed|ing)? off|by myself|on my own|just me|solo (?:session|moment|time)|me toque|me hice una paja|una paja|por mi cuenta|yo sol[oa]|a solas|solit[oa]|en solitario|momento en solitario)\b|\bsol[oa]\b(?!\s*(?:una vez|con\b|quiero|queria|fue\b|era\b|para\b|porque\b|eso\b))|\balone\b/;
 const WE_RE = /\b(?:we|us|our|together|nosotros|juntos|lo hicimos|hicimos|fuimos|estuvimos)\b/;
 /** Another person taking part, named or not: in a first-person encounter log, a she/her/he/him
  * on stage IS the partner ("she stimulated me", "I made her finish"). Solo is a conclusion of
@@ -795,15 +993,24 @@ function partnerCandidates(text: string, folded: string, partners: string[], bub
     const prev = seen.get(key);
     if (!prev || score > prev.score) seen.set(key, { start: prev && prev.start < start && prev.score >= score ? prev.start : start, end, name, score });
   };
+  // A saved name that is also an ordinary word ("May", "Una") is only
+  // the partner when the text capitalises it or a cue carries it —
+  // the modal verb and the article are not people (RT-V2 B11).
+  const FUNCTION_NAMES = new Set(["may", "una", "un", "uno", "sol", "mar", "el", "la", "los", "las", "mi", "su", "con", "por", "para", "sin", "son", "era", "fue", "paz", "luz", "sal", "fe"]);
   for (const name of partners) {
     const f = fold(name).trim();
     if (f.length < 2) continue;
     const re = new RegExp(`(?<![a-z0-9])${escapeRe(f).replace(/\s+/g, "\\s+")}(?![a-z0-9])`, "g");
     for (const m of matches(re, folded)) {
       const start = m.index ?? 0;
+      if (FUNCTION_NAMES.has(f)) {
+        const capitalised = /^[A-ZÁÉÍÓÚÑÜ]/.test(text.slice(start, start + 1));
+        if (!capitalised && scoreAt(start, start + m[0].length) < 3) continue;
+      }
       offer(name, start, start + m[0].length, scoreAt(start, start + m[0].length));
     }
   }
+  const savedFound = seen.size > 0;
   // A capitalised name nobody saved yet: only after a partner cue, an arrival, or a "met X" remark.
   for (const m of matches(NAME_TOKEN, text)) {
     const raw = m[0].split(/\s+/)[0];
@@ -814,7 +1021,13 @@ function partnerCandidates(text: string, folded: string, partners: string[], bub
     if (!freeOf(bubbleTaken, span)) continue;
     const before = folded.slice(Math.max(0, start - 30), start);
     const after = folded.slice(span.end, span.end + 40);
-    const cued = PARTNER_CUE.test(before) || ARRIVAL_AFTER.test(after);
+    // A name standing in subject position right after the date, with
+    // the encounter on its heels ("Oct 25 Diego twice…", "Diego y yo")
+    // is offered too — the cue is the grammar, not a preposition
+    // (RT-V2M M28).
+    const subject = /^(?:\s*(?:[a-z]{3,9}\.?\s+\d{1,2}|\d{1,2}\s+(?:de\s+)?[a-z]{3,9}|\d{1,2}[/.]\d{1,2}(?:[/.]\d{2,4})?)\s*,?\s*)?$/.test(before) &&
+      /^\s+(?:twice|once|dos veces|una vez|veces|y yo|and i|and me)\b/.test(after);
+    const cued = PARTNER_CUE.test(before) || ARRIVAL_AFTER.test(after) || subject;
     const remark = PAST_REMARK_BEFORE.test(before);
     if (!cued && !remark) continue;
     // a nickname or typo of someone already saved ("Sofi" → Sofía, "Ana" ← "Anna")
@@ -823,6 +1036,48 @@ function partnerCandidates(text: string, folded: string, partners: string[], bub
       return (fRaw.length >= 3 && f.startsWith(fRaw)) || (fRaw.length >= 4 && editDistance(fRaw, f) <= 1);
     });
     offer(known ?? raw, span.start, span.end, scoreAt(span.start, span.end));
+  }
+  // A cued name in any case: everything else in the reader is folded,
+  // so "with diego" and "WITH DIEGO" name the partner too — the cue
+  // does the disambiguating the capital letter used to do (RT-V2 B14).
+  // Only when no saved partner appears at all: with one present, a
+  // cued common word ("with candles") is not a rival candidate.
+  const CUE_G = new RegExp(PARTNER_CUE.source.replace(/\$$/, ""), "g");
+  const anyCandidate = seen.size > 0;
+  for (const m of matches(CUE_G, folded)) {
+    if (savedFound) break;
+    const at = (m.index ?? 0) + m[0].length;
+    const tok = text.slice(at).match(/^[A-Za-zÁÉÍÓÚÑÜáéíóúñü]+/);
+    if (!tok) continue;
+    const raw = tok[0];
+    const fRaw = fold(raw);
+    if (NAME_STOP.has(fRaw) || fRaw.length < 2 || MONTHS[fRaw] || WEEKDAYS[fRaw] !== undefined) continue;
+    // A lowercase cued word only names someone when the text offers
+    // no capitalised candidate at all (the all-lowercase log line);
+    // beside a real candidate it is a common word ("with candles").
+    if (anyCandidate && !/^[A-ZÁÉÍÓÚÑÜ]/.test(raw)) continue;
+    const span = { start: at, end: at + raw.length };
+    if (!freeOf(bubbleTaken, span)) continue;
+    const known = partners.find((name) => {
+      const f = fold(name).trim();
+      return (fRaw.length >= 3 && f.startsWith(fRaw)) || (fRaw.length >= 4 && editDistance(fRaw, f) <= 1);
+    });
+    offer(known ?? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase(), span.start, span.end, 2);
+  }
+  // Subject position in any case, when nothing saved and nothing
+  // capitalised was found: "oct 25 diego twice…" (RT-V2 B14).
+  if (!savedFound && !anyCandidate) {
+    const lead = folded.match(/^\s*(?:[a-z]{3,9}\.?\s+\d{1,2}|\d{1,2}\s+(?:de\s+)?[a-z]{3,9}|\d{1,2}[/.]\d{1,2}(?:[/.]\d{2,4})?)?\s*,?\s*([a-z]+)/);
+    if (lead) {
+      const at = (lead.index ?? 0) + lead[0].length - lead[1].length;
+      const raw = text.slice(at, at + lead[1].length);
+      const fRaw = fold(raw);
+      const after = folded.slice(at + lead[1].length, at + lead[1].length + 24);
+      if (!NAME_STOP.has(fRaw) && fRaw.length >= 2 && !MONTHS[fRaw] && WEEKDAYS[fRaw] === undefined &&
+        /^\s+(?:twice|once|dos veces|una vez|veces|y yo|and i|and me)\b/.test(after) && freeOf(bubbleTaken, { start: at, end: at + raw.length })) {
+        offer(raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase(), at, at + raw.length, 2);
+      }
+    }
   }
   return [...seen.values()].sort((a, b) => b.score - a.score || a.start - b.start);
 }
@@ -977,9 +1232,15 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
   const placeHits = positive("place");
   const cameFrom = (h: Hit) => {
     const clause = clauseBefore(folded, h.start).slice(-48);
+    // A place word naming an event ("the office party") is where the
+    // evening started, not where it happened (RT-V2M M24).
+    if (/^\s+(?:party|fiesta)\b/.test(folded.slice(h.end, h.end + 10))) return true;
     return /\b(?:after|despues de|from|back from|coming back from|on the way (?:back )?from|left|leaving|de vuelta de|volviendo de|volvimos de|regrese de|regresamos de|saliendo de|salimos de|day|dia|shift|turno|jornada)\b/.test(clause);
   };
-  const placeHit = placeHits.find((h) => !cameFrom(h)) ?? placeHits[0];
+  // A place the text only came FROM files no place at all: falling
+  // back to it put the encounter at the office after "a rough day at
+  // work" (RT-V2M M22). No scene named, no scene filed.
+  const placeHit = placeHits.find((h) => !cameFrom(h));
   const positions = unique(positive("position").map((h) => h.rule.value));
   let contraception = unique(positive("method").map((h) => h.rule.value));
   if (contraception.length > 1) contraception = contraception.filter((id) => id !== "none");
@@ -992,6 +1253,13 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     const rule = hit.rule;
     if ((rule.kind === "rating" || rule.kind === "multi") && rule.dim && rule.level) {
       if (hit.negated) continue;
+      // A multi-orgasm claim inside someone else's sentence — "her
+      // sister came twice that week to visit" — is not this
+      // encounter's rating (RT-V2M M22).
+      if (rule.kind === "multi") {
+        const s = sentenceSpans(folded).find((sp) => hit.start >= sp.start && hit.start < sp.end);
+        if (s && foreignSentence(folded.slice(s.start, s.end))) continue;
+      }
       levels[rule.dim] = Math.max(levels[rule.dim], rule.level);
     }
   }
@@ -1002,9 +1270,17 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
   for (const hit of feelings) {
     const rule = hit.rule;
     if (rule.kind !== "overall" || !rule.level) continue;
-    let level = rule.level;
-    if (hit.negated) level = level >= 4 ? 2 : level <= 2 ? 3 : 2;
-    overall = level; // the last verdict in the text wins ("meh at first, then amazing")
+    // A negated verdict is the text declining to score the night; it
+    // files nothing. (It used to be flipped into a number — "not
+    // amazing" became a two-star night. RT-V2M M31: a field the text
+    // speaks against stays empty, like one it never mentions.)
+    if (hit.negated) continue;
+    // A verdict word aimed at something else — insane traffic, the
+    // best pizza, perfect weather, a regular condom, "back to
+    // normal", how she looked, a said good night — scores that thing,
+    // not the encounter (RT-V2 B12, RT-V2M M23).
+    if (verdictAboutOtherThing(folded, hit)) continue;
+    overall = rule.level; // the last verdict in the text wins ("meh at first, then amazing")
   }
   for (const n of numeric) {
     if (n.dim === "overall") {
@@ -1016,6 +1292,39 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
 
   const pick = pickPartner(text, folded, ctx.partners ?? [], bubbleHits);
   const partner = pick.best;
+  // Solo is judged inside the marker's own clause: an absent partner
+  // named in another clause ("solo, Ana was out of town"), a "we" from
+  // a phone call, a "her" that owns a book — none of them were there
+  // (RT-V2 B10, RT-V2M M27). Company inside the clause, or a cued
+  // partner for the strong forms, still vetoes.
+  let solo = false;
+  const soloAt = folded.search(SOLO_RE);
+  if (SOLO_STRONG.test(folded)) {
+    // A strong form (masturbation, by myself, por mi cuenta) brands
+    // the encounter only when nobody else takes part anywhere in it:
+    // a preliminary solo act never outvotes the encounter itself.
+    solo = !partner && !WE_RE.test(folded) && !PARTNER_SIGNS.test(folded);
+  } else if (soloAt >= 0) {
+    const from = Math.max(folded.lastIndexOf(",", soloAt - 1), folded.lastIndexOf(".", soloAt - 1), folded.lastIndexOf(";", soloAt - 1), folded.lastIndexOf("\n", soloAt - 1)) + 1;
+    const rest = folded.slice(soloAt);
+    const stop = rest.search(/[,.;\n]/);
+    const clauseEnd = stop < 0 ? folded.length : soloAt + stop;
+    const clause = folded.slice(from, clauseEnd);
+    const leaveIt = /(?:leave|left|dejame|dejo)\s+(?:me\s+)?$/.test(folded.slice(Math.max(0, soloAt - 10), soloAt));
+    const clausePartner = pickPartner(text.slice(from, clauseEnd), clause, ctx.partners ?? [], []).best;
+    const strong = SOLO_STRONG.test(folded.slice(soloAt, soloAt + 24));
+    const partnerCued = partner
+      ? PARTNER_CUE.test(folded.slice(Math.max(0, partner.start - 30), partner.start)) || ARRIVAL_AFTER.test(folded.slice(partner.end, partner.end + 40))
+      : false;
+    // A partner who ARRIVES after the marker and acts ("then Ana came
+    // over and we did it twice") was there for the encounter the entry
+    // files; the solo moment is its prelude, not its brand (Wave 3
+    // re-hunt RH8). A partner merely mentioned — out of town, on the
+    // phone — still does not veto.
+    const partnerActs = Boolean(partner && partnerCued && partner.start > clauseEnd &&
+      (ARRIVAL_AFTER.test(folded.slice(partner.end, partner.end + 40)) || WE_RE.test(folded.slice(partner.end))));
+    solo = !leaveIt && !clausePartner && !WE_RE.test(clause) && !PARTNER_SIGNS.test(clause) && !(strong && partnerCued) && !partnerActs;
+  }
   // The note strips only what the entry actually captured: the FIRST anchor is the date and
   // placeHit is the place. Any other date or place the text mentions is ambiguous — it was not
   // turned into a field — so its words stay in the note (Oscar's exception, Nov 9 2026).
@@ -1025,23 +1334,34 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     ...fuzzy.filter((h) => !h.negated && (h.rule.kind !== "place" || h === placeHit)),
     ...feelingHits.filter((h) => !h.negated && h.rule.kind !== "multi"),
   ];
-  if (partner) claimed.push(partner);
+  if (partner && !solo) claimed.push(partner);
 
   const firstAnchor = anchors[0];
-  const endDate = firstAnchor?.to ?? firstAnchor?.date ?? isoOf(now);
+  const endDate = firstAnchor?.to || firstAnchor?.date || isoOf(now);
+  const dateUnreadable = anchors.some((a) => a.invalid);
+  let notes = noteFor(text, remainder(text, folded, claimed));
+  if (dateUnreadable) {
+    // The typed date stays visible in the note — never masked away
+    // (RT-V2 B5: the numeric form used to erase the evidence entirely).
+    const bad = anchors.find((a) => a.invalid);
+    const typed = bad ? text.slice(bad.start, bad.end).trim() : "";
+    if (typed && !notes.includes(typed)) notes = notes ? `${typed}. ${notes}` : typed;
+  }
   const rangeDays = firstAnchor?.to ? Math.round((new Date(`${firstAnchor.to}T12:00`).getTime() - new Date(`${firstAnchor.date}T12:00`).getTime()) / 86_400_000) + 1 : 1;
-  const solo = !partner && SOLO_RE.test(folded) && !WE_RE.test(folded) && !PARTNER_SIGNS.test(folded);
   const exactTimes = times.filter((t) => t.exact).map((t) => t.time);
   // A later round at an earlier clock time ("10pm and again at 1am") ran past midnight.
   const pastMidnight = (count.again || /\b(?:until|till|hasta)\b/.test(folded)) && exactTimes.length >= 2 && exactTimes[exactTimes.length - 1] < exactTimes[0];
   const exact = times.find((t) => t.exact);
   const slot = times.find((t) => !t.exact);
   const time = exact?.time ?? slot?.time ?? "21:00";
-  const baseCount = count.n || (rangeDays > 1 ? rangeDays : 1);
+  // A stated range is ONE encounter spanning it — its days are not a
+  // daily count the text never gave (RT-V2 B8).
+  const baseCount = count.n || 1;
 
   return {
     title,
-    date: firstAnchor?.date ?? isoOf(now),
+    date: firstAnchor?.date || isoOf(now),
+    dateUnreadable: dateUnreadable || undefined,
     dateStated: Boolean(firstAnchor),
     time,
     timeStated: Boolean(exact || slot),
@@ -1049,10 +1369,10 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     place: placeHit?.rule.value ?? "",
     count: count.again ? Math.max(baseCount, 2) : baseCount,
     nextDay: rangeDays === 1 && (nextSpans.length > 0 || pastMidnight),
-    notes: noteFor(text, remainder(text, folded, claimed)),
+    notes,
     contraception,
     problems,
-    partnerName: partner?.name ?? "",
+    partnerName: solo ? "" : partner?.name ?? "",
     durationMins: duration?.mins ?? 0,
     positions,
     ...levels,
@@ -1060,6 +1380,7 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     source: text.trim(),
     endDate,
     solo,
+    zero: count.zero || undefined,
     partnerAlts: pick.alts,
     partnerUnsure: Boolean(partner) && pick.unsure,
   };
@@ -1157,6 +1478,14 @@ function cutAtPartners(sentence: string, partners: string[]) {
   }
   parts.push(sentence.slice(cursor).replace(/^\s*(?:,|and\b|y\b|then\b|luego\b)\s*/i, "").trim());
   return parts.filter(Boolean);
+}
+
+/** Does a piece carry an encounter of its own — a partner, a count, a
+ * method, a place, a solo mark, an encounter verb? */
+const SEGMENT_SIGNAL = /\b(condom|condon|pill|pastilla|hotel|motel|bed|cama|shower|ducha|carro|coche|couch|sofa|twice|once|veces|vez|rounds|rondas|times|solo|alone|sex|sexo|hicimos|fuimos|tuvimos|did it|made love)\b/;
+function segmentSignal(piece: string, partners: string[]) {
+  const folded = fold(piece);
+  return SEGMENT_SIGNAL.test(folded) || findPartner(piece, folded, partners, []) !== null;
 }
 
 /** "1." "2)" "(3)" "#4" "5 -" at the start of a line: a numbered list item. */
@@ -1338,21 +1667,48 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
         join(open);
         continue;
       }
+      // A dated sentence with no encounter in it is a note on the open
+      // encounter, not an encounter of its own: "Her period started
+      // Nov 1" rides the Nov 10 entry instead of becoming a phantom
+      // session on Nov 1 (RT-V2M M10). A different partner, a count, a
+      // method, a place or a solo mark would make it its own.
+      if (!segmentSignal(piece, known)) {
+        join(open);
+        continue;
+      }
       startNew();
     }
   }
 
-  return drafts.map((draft) => {
-    state.dayFirst = draft.dayFirst;
-    const entry = readEntry(draft.parts.join(" "), draft.title, now, ctx, state, rules);
-    if (!entry.partnerName && !entry.solo && draft.hint) entry.partnerName = draft.hint;
-    // Split off for another partner without repeating the date: same day as the entry it came from.
-    if (!entry.dateStated && draft.date) {
-      entry.date = draft.date;
-      entry.endDate = draft.date;
-      entry.dateStated = true;
-    }
-    entry.notes = dropEchoes(entry.notes, rules, entry, now, state);
-    return entry;
-  });
+  return drafts
+    .map((draft) => {
+      state.dayFirst = draft.dayFirst;
+      const entry = readEntry(draft.parts.join(" "), draft.title, now, ctx, state, rules);
+      if (!entry.partnerName && !entry.solo && draft.hint) entry.partnerName = draft.hint;
+      // Split off for another partner without repeating the date: same day as the entry it came from.
+      if (!entry.dateStated && draft.date) {
+        entry.date = draft.date;
+        entry.endDate = draft.date;
+        entry.dateStated = true;
+      }
+      entry.notes = dropEchoes(entry.notes, rules, entry, now, state);
+      return entry;
+    })
+    // A stated zero is a session that never happened (RT-V2 B7), and a
+    // fragment with nothing in it — a lone date, a lone name — is not
+    // a session either (RT-V2 B9): it manufactured phantom cards that
+    // blocked imports or inherited the batch partner. A dated line
+    // naming a partner still reads as a log line and stays.
+    .filter((entry) => {
+      if (entry.zero) return false;
+      const substance =
+        entry.solo || entry.contraception.length > 0 || entry.positions.length > 0 || Boolean(entry.place) ||
+        entry.durationMins > 0 || entry.overall > 0 || entry.intensity > 0 || entry.connection > 0 ||
+        entry.satisfaction > 0 || entry.energy > 0 || entry.count > 1 || entry.nextDay ||
+        // A cycle fact is not an encounter, even wearing a problem.
+        (entry.problems.length > 0 && !(entry.problems.length === 1 && entry.problems[0] === "period" &&
+          /\bperiod (?:started|began|came)\b|le (?:vino|bajo)\b|empezo (?:su|el) (?:periodo|regla)\b/.test(fold(entry.source))));
+      if (substance) return true;
+      return Boolean(entry.partnerName) && entry.dateStated;
+    });
 }

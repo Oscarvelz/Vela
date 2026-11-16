@@ -1,16 +1,37 @@
-/* The pregnancy reader (2.2.7) — Oscar's order: the app becomes really good
-   at spotting when her own words already state a pregnancy or a pregnancy
-   test, in the first person or the third ("she got pregnant", "she did a
-   pregnancy test — two were negative and one was positive"), English and
-   Spanish. What it finds is never written silently: the batch door shows it
-   as a proposal with the exact clause as evidence (the 2.2.4 law), and
+/* The pregnancy reader (2.2.7; rebuilt 2.2.25 under the prejudice cure,
+   Wave 3) — Oscar's order: the app becomes really good at spotting when
+   her own words already state a pregnancy or a pregnancy test, in the
+   first person or the third ("she got pregnant", "she did a pregnancy
+   test — two were negative and one was positive"), English and Spanish.
+   What it finds is never written silently: the batch door shows it as a
+   proposal with the exact clause as evidence (the 2.2.4 law), and
    keeping it records the cycle's reason, so the end-of-cycle question —
-   which exists to ask what the journal does not know — never needs to ask
-   what she already said. Wishes, fears and tries are not statements:
-   "trying to get pregnant", "afraid she might be", "not pregnant" all read
-   as silence here. */
+   which exists to ask what the journal does not know — never needs to
+   ask what she already said. Wishes, fears and tries are not statements:
+   "trying to get pregnant", "afraid she might be", "not pregnant" all
+   read as silence here.
+ *
+ * The rebuild's laws, learned specimen by specimen (RT-V2/V2M):
+ * - Every pattern is written against FOLDED text, so a pattern that
+ *   names a curly apostrophe can never match anything (M1): negations
+ *   use the straight form fold() produces.
+ * - A veto (negation, wish, fear, condition) reaches only its own
+ *   proposition: it is judged in the segment before the match, bounded
+ *   by commas and scope-break words — a fear at the end of a sentence
+ *   no longer erases a fact stated at its start (M4).
+ * - A result word counts only inside a result frame — a copula or a
+ *   count ("was", "came back", "two were", "both") — so an attitude
+ *   ("she stayed positive") is never a test (M6).
+ * - Tests are events, not clauses: a result stated in the next sentence
+ *   belongs to the test it follows or precedes (M5), counts stated at a
+ *   distance distribute over a single result (M7), a test the words
+ *   date is recorded on its own date (M9), and a test about somebody
+ *   else (her sister) is not hers at all (P4).
+ * - Findings carry a `clean` flag: stated directly, in one clause, with
+ *   nothing inferred. The batch door saves clean findings with the
+ *   import; the rest are shown, never saved (Decision 1). */
 import { fold } from "./batch";
-import { NUMBER_WORDS } from "./batch-lexicon";
+import { MONTHS, NUMBER_WORDS } from "./batch-lexicon";
 import { isRealDate } from "./dates";
 import type { PregnancyTestEvent } from "./types";
 
@@ -18,87 +39,229 @@ export function newTestId(): string {
   return `pt-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
 }
 
-const TEST_NOUN = /\b(pregnancy test|prueba de embarazo|test de embarazo)\b/;
-/* A clause of wishes, fears or trying states no fact — it is suppressed for
-   declarations and test results alike. */
-const UNCERTAIN = /\b(trying|try|hope|hoping|wish|wishes|afraid|scared|fear|maybe|might|perhaps|tratando|intentando|buscando|espero|esperanza|ojala|miedo|temo|quizas|tal vez|puede que)\b/;
-/* Negation before the fact kills it ("I'm not pregnant", "no estoy…"). */
-const NEGATED = /\b(no|not|never|nunca|jamas|sin|n’t)\b/;
+const TEST_NOUN = /\b(pregnancy tests?|pruebas? de embarazo|tests? de embarazo)\b/;
+/* Negation before the fact kills it ("I'm not pregnant", "no estoy…").
+ * Straight apostrophe only: fold() straightens the text's apostrophes,
+ * so a curly one here would be dead code (RT-V2M M1). */
+const NEGATED = /\b(no|not|never|none|nunca|jamas|sin|ninguna?|ninguno|n't)\b/;
+/* Wishes, fears, tries, suspicions and beliefs state no fact. Judged
+ * only in the match's own segment (see scopeBefore), never clause-wide. */
+const UNCERTAIN = /\b(trying|try|hope|hoping|wish|wishes|afraid|scared|fear|maybe|might|perhaps|suspect|suspects|suspected|thinks|believes|tratando|intentando|buscando|espero|esperanza|ojala|miedo|temo|quizas|tal vez|puede que|sospech\w*|piensa|cree)\b/;
+/* A test about somebody else is not the journal owner's test (P4). */
+const OTHER_SUBJECT = /\b(her sister|his sister|my sister|her brother|his brother|my brother|her friend|his friend|my friend|her cousin|his cousin|my cousin|her mother|his mother|la hermana|el hermano|la prima|el primo|una amiga|un amigo|su hermana|su hermano|su prima|su amiga)\b/;
 
 const DECLARATIONS: RegExp[] = [
   /\bi(?:'m| am) pregnant\b/,
   /\bshe(?:'s| is| got| became) pregnant\b/,
-  /\bmy (?:wife|partner|girlfriend) is pregnant\b/,
+  /\bmy (?:wife|partner|girlfriend) (?:is|got|became) pregnant\b/,
+  /\bwe(?:'re| are) pregnant\b/,
+  /\bwe are expecting\b/,
+  /\bshe(?:'s| is) expecting\b/,
   /\bestoy embarazada\b/,
   /\besta embarazada\b/,
   /\bquedo embarazada\b/,
   /\bquede embarazada\b/,
   /\bse embarazo\b/,
 ];
+/* A named third person ("Ana is pregnant", "Lucía got pregnant"): any
+ * subject word that is not a thing or a pronoun already covered above. */
+const NAMED_DECLARATION = /\b(?!it\b|this\b|that\b|test\b|result\b|she\b|he\b|what\b)([a-z]+) (?:is|got|became) pregnant\b/;
 
 const RESULT_OF = (word: string): "positive" | "negative" => (word.startsWith("pos") ? "positive" : "negative");
+/* A result word speaks only inside a result frame: a copula or result
+ * verb just before it, a count or totality word just before it, a label
+ * colon, or the adjective place right before the test noun ("a positive
+ * pregnancy test"). "She stayed positive" has none of these (M6). */
+const RESULT_FRAME = /(?:was|were|is|are|came|turned|result|fue|fueron|era|eran|salio|salieron|resulto|resultaron|dio|dieron|quedo|quedaron)\s+(?:back\s+)?$|(?:one|two|three|four|five|both|all|una?|dos|tres|cuatro|cinco|ambas|ambos|todas|todos|las|los)\s+$|[:—-]\s*$/;
+const TOTALITY = /\b(both|all|todas|todos|ambas|ambos|las dos|los dos)\b/;
 
-function countBefore(clause: string, index: number): number {
-  const before = clause.slice(Math.max(0, index - 22), index);
-  const m = before.match(/(\d+|one|two|three|four|five|una?|dos|tres|cuatro|cinco)\s+(?:were\s+|fueron\s+|salieron\s+|eran\s+|fueron\s+)?$/);
-  if (!m) return 1;
-  const token = m[1];
+/** The match's own segment: the text since the last comma or
+ * scope-break word. A veto lives and dies inside it (M4). */
+function scopeBefore(folded: string, index: number) {
+  const before = folded.slice(0, index);
+  let start = Math.max(before.lastIndexOf(","), before.lastIndexOf(";"), before.lastIndexOf("(")) + 1;
+  for (const m of before.matchAll(/\b(but|pero|and|y|e|though|although|aunque|while|mientras|because|porque|then|entonces)\b/g)) {
+    start = Math.max(start, (m.index ?? 0) + m[0].length);
+  }
+  return before.slice(start);
+}
+
+function vetoed(folded: string, index: number) {
+  const scope = scopeBefore(folded, index);
+  if (NEGATED.test(scope) || UNCERTAIN.test(scope)) return true;
+  if (/\bif\b/.test(scope)) return true; // a conditional governs its segment
+  if (/^\s*si\b/.test(scope)) return true; // "si esta embarazada, …" — si as the segment's first word is "if"
+  return false;
+}
+
+function countValue(token: string): number {
   if (/^\d+$/.test(token)) return Math.max(1, Math.min(9, parseInt(token, 10)));
   return NUMBER_WORDS[token] ?? 1;
 }
 
+function countBefore(clause: string, index: number): number {
+  const before = clause.slice(0, index);
+  const m = before.match(/(\d+|one|two|three|four|five|six|seven|eight|nine|ten|una?|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+(?:were\s+|was\s+|fueron\s+|salieron\s+|eran\s+|fue\s+|es\s+|all\s+were\s+|both\s+were\s+)?$/);
+  if (!m) return 1;
+  // A day number inside a stated date is not a count: "the pregnancy
+  // test on Dec 25 was positive" files ONE test (Wave 3 re-hunt RH6).
+  if (/^\d+$/.test(m[1])) {
+    const numStart = before.length - m[0].length + m[0].indexOf(m[1]);
+    const pre = before.slice(Math.max(0, numStart - 16), numStart);
+    if (new RegExp(`(?:${Object.keys(MONTHS).join("|")})\\s+$`).test(pre)) return 1;
+  }
+  return countValue(m[1]);
+}
+
 function countAfter(clause: string, index: number, wordLength: number): number | null {
   const after = clause.slice(index + wordLength, index + wordLength + 16);
-  const m = after.match(/^\s*(twice|three times|dos veces|tres veces)\b/);
+  const m = after.match(/^\s*(twice|one time|two times|three times|four times|una vez|dos veces|tres veces|cuatro veces)\b/);
   if (!m) return null;
-  return m[1].startsWith("tw") || m[1].startsWith("tres") || m[1].startsWith("three") ? (m[1] === "twice" || m[1] === "dos veces" ? 2 : 3) : 2;
+  if (m[1] === "twice") return 2;
+  return countValue(m[1].split(" ")[0]);
+}
+
+/** The count the words give the test event itself ("a pregnancy test
+ * twice", "two pregnancy tests", "tres pruebas"). */
+function eventCount(text: string): number {
+  const twice = text.match(/\b(?:tests?|pruebas?)\s+twice\b/);
+  if (twice) return 2;
+  const after = text.match(/\b(?:tests?|pruebas?)\b[^.;]{0,24}?(\d+|one|two|three|four|five|six|una?|dos|tres|cuatro|cinco|seis)\s+(?:times|veces)\b/);
+  if (after) return countValue(after[1]);
+  const before = text.match(/(\d+|one|two|three|four|five|una?|dos|tres|cuatro|cinco)\s+(?:pregnancy\s+)?(?:tests?|pruebas?)\b/);
+  if (before) return countValue(before[1]);
+  return 1;
+}
+
+function shiftDate(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** A date the words themselves give the test ("last week", "hace tres
+ * días", "on Nov 3") — never later than the entry that reports it (M9). */
+function statedDate(text: string, entryDate: string): string {
+  if (/\blast week\b|\bla semana pasada\b/.test(text)) return shiftDate(entryDate, -7);
+  if (/\byesterday\b|\bayer\b/.test(text)) return shiftDate(entryDate, -1);
+  const days = text.match(/\b(\d+|one|two|three|four|five|six|seven|una?|dos|tres|cuatro|cinco|seis|siete)\s+days?\s+ago\b|\bhace\s+(\d+|one|two|three|four|five|six|seven|una?|dos|tres|cuatro|cinco|seis|siete)\s+dias?\b/);
+  if (days) return shiftDate(entryDate, -countValue(days[1] || days[2]));
+  const entryYear = Number(entryDate.slice(0, 4));
+  const named = text.match(new RegExp(`\\b(${Object.keys(MONTHS).join("|")})\\s+(\\d{1,2})\\b|\\b(\\d{1,2})\\s+(?:de\\s+)?(${Object.keys(MONTHS).join("|")})\\b`));
+  if (named) {
+    const month = MONTHS[named[1] ?? named[4]];
+    const day = Number(named[2] ?? named[3]);
+    for (const year of [entryYear, entryYear - 1]) {
+      const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      if (isRealDate(iso) && iso <= entryDate) return iso;
+    }
+  }
+  return entryDate;
 }
 
 export type PregnancyReading = {
   /** The earliest stated pregnancy (declaration or positive test), if any. */
-  reason: { date: string; evidence: string } | null;
-  /** Test events in her words, counts as stated. */
-  tests: Omit<PregnancyTestEvent, "id" | "createdAt">[];
+  reason: { date: string; evidence: string; clean: boolean } | null;
+  /** Test events in her words, counts as stated. `clean` = stated
+   * directly in one clause; the batch door saves only clean findings. */
+  tests: (Omit<PregnancyTestEvent, "id" | "createdAt"> & { clean: boolean })[];
 };
 
+type ClauseResult = { result: "positive" | "negative"; count: number };
+
+/** The valid results one clause states, each with its count. */
+function clauseResults(folded: string): ClauseResult[] {
+  const out: ClauseResult[] = [];
+  for (const r of folded.matchAll(/(positiv|negativ)([a-z]*)/g)) {
+    const index = r.index ?? 0;
+    if (vetoed(folded, index)) continue;
+    const segment = scopeBefore(folded, index);
+    const afterNoun = /^\s*(?:pregnancy tests?|pruebas? de embarazo|tests? de embarazo)\b/.test(folded.slice(index + r[0].length, index + r[0].length + 24));
+    if (!RESULT_FRAME.test(segment) && !afterNoun) continue;
+    const result = RESULT_OF(r[1]);
+    const count = countAfter(folded, index, r[0].length) ?? countBefore(folded, index);
+    out.push({ result, count });
+  }
+  return out;
+}
+
 /** Reads the parsed entries' original text, entry by entry, so every
- *  statement carries the date of the entry it was found in. */
+ *  statement carries the date of the entry it was found in — or the
+ *  date the words give it. */
 export function readPregnancy(entries: { date: string; source: string; notes: string }[]): PregnancyReading {
   let reason: PregnancyReading["reason"] = null;
   const tests: PregnancyReading["tests"] = [];
+  const noteReason = (date: string, evidence: string, clean: boolean) => {
+    if (!reason || date < reason.date) reason = { date, evidence, clean };
+  };
   for (const entry of entries) {
     const raw = entry.source || entry.notes || "";
     if (!raw) continue;
     const clauses = raw.split(/[.;\n]+/).map((c) => c.trim()).filter(Boolean);
+    // Test events: a noun clause plus the result clauses that belong to
+    // it, in either order (M5). Orphan results wait for their noun.
+    type Event = { text: string; results: (ClauseResult & { clean: boolean })[]; evidence: string };
+    let open: Event | null = null;
+    let orphans: (ClauseResult & { clean: boolean })[] = [];
+    let orphanText = "";
+    const closeEvent = () => {
+      if (!open) return;
+      const ev = open;
+      open = null;
+      if (!ev.results.length) return;
+      const date = statedDate(fold(ev.text), entry.date);
+      // A count the words give the whole event distributes over a
+      // single stated result ("test twice, both negative") (M7).
+      const total = eventCount(fold(ev.text));
+      const kinds = new Set(ev.results.map((r) => r.result));
+      const distribute = total > 1 && kinds.size === 1 && TOTALITY.test(fold(ev.text));
+      for (const r of ev.results) {
+        // A totality-backed distribution ("twice, both negative") is
+        // fully stated by the words, so the finding stays clean; only
+        // cross-clause assembly makes a finding less direct.
+        const count = distribute ? Math.max(r.count, total) : r.count;
+        tests.push({ date, result: r.result, count, evidence: ev.evidence, clean: r.clean });
+        if (r.result === "positive") noteReason(date, ev.evidence, r.clean);
+      }
+    };
     for (const clause of clauses) {
       const folded = fold(clause);
-      if (UNCERTAIN.test(folded)) continue;
       const evidence = clause.slice(0, 160);
-      let stated = false;
       // Declarations: her statement of the fact itself.
+      let declared = false;
       for (const re of DECLARATIONS) {
         const m = folded.match(re);
-        if (m && !NEGATED.test(folded.slice(0, m.index))) {
-          stated = true;
-          break;
-        }
+        if (m && !vetoed(folded, m.index ?? 0)) { declared = true; break; }
       }
-      // Test statements: the noun must be present; results may be counted
-      // in her words ("two were negative and one was positive").
-      if (TEST_NOUN.test(folded)) {
-        const results = [...folded.matchAll(/(positiv|negativ)([a-z]*)/g)];
-        for (const r of results) {
-          if (NEGATED.test(folded.slice(Math.max(0, (r.index ?? 0) - 14), r.index))) continue;
-          const result = RESULT_OF(r[1]);
-          const count = countAfter(folded, r.index ?? 0, r[0].length) ?? countBefore(folded, r.index ?? 0);
-          tests.push({ date: entry.date, result, count, evidence });
-          if (result === "positive") stated = true;
-        }
+      if (!declared) {
+        const m = folded.match(NAMED_DECLARATION);
+        if (m && !vetoed(folded, m.index ?? 0)) declared = true;
       }
-      if (stated && (!reason || entry.date < reason.date)) {
-        reason = { date: entry.date, evidence };
+      if (declared) noteReason(entry.date, evidence, true);
+      // Tests.
+      const hasNoun = TEST_NOUN.test(folded);
+      const results = clauseResults(folded);
+      if (hasNoun) {
+        closeEvent();
+        if (OTHER_SUBJECT.test(folded)) { orphans = []; orphanText = ""; continue; }
+        open = { text: clause, results: results.map((r) => ({ ...r, clean: true })), evidence };
+        if (!open.results.length && orphans.length) {
+          open.results = orphans;
+          open.text = `${orphanText}. ${clause}`;
+          orphans = [];
+          orphanText = "";
+        }
+      } else if (results.length) {
+        if (open && !open.results.length) {
+          for (const r of results) open.results.push({ ...r, clean: false });
+          open.text = `${open.text}. ${clause}`;
+        } else if (!open) {
+          orphans = results.map((r) => ({ ...r, clean: false }));
+          orphanText = clause;
+        }
       }
     }
+    closeEvent();
   }
   return { reason, tests };
 }

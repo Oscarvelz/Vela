@@ -151,8 +151,14 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
   // her earlier word stands.
   const [dismissedPreg, setDismissedPreg] = useState(false);
   const pregReading = useMemo(() => readPregnancy(kept.map((c) => c.entry)), [cards, edits]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Decision 1 (prejudice cure): clean findings — stated directly, in
+  // one clause — ride the save; findings the reader had to assemble
+  // (a result in the next sentence, a count spread over the event) are
+  // shown with their evidence but never saved.
+  const cleanTests = pregReading.tests.filter((x) => x.clean);
+  const uncleanFinding = pregReading.tests.find((x) => !x.clean) ?? (pregReading.reason && !pregReading.reason.clean ? pregReading.reason : null);
   const pregTarget = useMemo(() => {
-    if (!pregReading.reason) return null;
+    if (!pregReading.reason || !pregReading.reason.clean) return null;
     const entry = kept.map((c) => c.entry).find((e) => e.date === pregReading.reason!.date);
     const tracker = trackerForPartner(allCycles ?? [], entry?.partnerName || batchPartner);
     if (!tracker) return null;
@@ -160,7 +166,7 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
     if (!cycleStart || tracker.reasons?.[cycleStart]) return null;
     return { tracker, cycleStart };
   }, [pregReading, allCycles, batchPartner, cards, edits]); // eslint-disable-line react-hooks/exhaustive-deps
-  const pregTotals = pregReading.tests.reduce(
+  const pregTotals = cleanTests.reduce(
     (acc, x) => ({ n: acc.n + x.count, p: acc.p + (x.result === "positive" ? x.count : 0), q: acc.q + (x.result === "negative" ? x.count : 0) }),
     { n: 0, p: 0, q: 0 },
   );
@@ -420,10 +426,13 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
             <p className="mt-1.5 text-sm leading-relaxed text-dim">
               {pregTarget
                 ? fill(t("pgPropBody"), { text: pregReading.reason?.evidence ?? "" })
-                : fill(t("pgTestsBody"), { text: pregReading.tests[0]?.evidence ?? "" })}
+                : fill(t("pgTestsBody"), { text: cleanTests[0]?.evidence ?? pregReading.tests[0]?.evidence ?? "" })}
             </p>
-            {pregReading.tests.length ? (
+            {cleanTests.length ? (
               <p className="mt-1.5 text-sm leading-relaxed text-dim">{fill(t("pgTestsLine"), { n: pregTotals.n, p: pregTotals.p, q: pregTotals.q })}</p>
+            ) : null}
+            {uncleanFinding ? (
+              <p className="mt-1.5 text-sm leading-relaxed text-dim">{fill(t("pgUncleanNote"), { text: uncleanFinding.evidence })}</p>
             ) : null}
             <button
               type="button"
@@ -483,7 +492,7 @@ export function BatchLog({ onSaved, live = true }: { onSaved: () => void; live?:
                   pregTarget.tracker.id,
                 );
               }
-              if (pregReading.tests.length) addPregnancyTests(pregReading.tests);
+              if (cleanTests.length) addPregnancyTests(cleanTests);
             }
             setDismissedPreg(false);
             setDismissedThemes(new Set());
