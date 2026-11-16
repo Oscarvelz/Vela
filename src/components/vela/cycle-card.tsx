@@ -207,7 +207,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
 
   if (!cycle.enabled) {
     return (
-      <div className="ag-panel rounded-card border border-border px-4 py-4" id="cycle-card">
+      <div className="ag-panel rounded-card border border-border px-4 py-4" id="cycle-card" data-spot="cycle-card">
         <p className="flex items-center gap-2 font-display text-2xl">
           <span className="cy-bg-period size-2.5 rounded-full" />
           {t("cycleTitle")}
@@ -418,7 +418,14 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
           <span className="flex-1">{t("cyProjNote")}</span>
           <Hint topic="proyeccion" compact />
         </p>
-      ) : null}
+      ) : (
+        // The topic's bubble lives OUTSIDE the projected gate: with no
+        // pregnancy noted there is no projection line, but the door's
+        // fallback tier must still exist on the card (RT-V5 B5).
+        <div className="mt-3 flex justify-end">
+          <Hint topic="proyeccion" compact />
+        </div>
+      )}
       {tune ? <CycleTune /> : null}
     </div>
   );
@@ -1401,7 +1408,7 @@ function FirstStart() {
   const days = Array.from({ length: 35 }, (_, index) => addDays(first, index));
   const heads = days.slice(0, 7).map((ds) => parseDate(ds).toLocaleDateString(lang === "es" ? "es" : "en", { weekday: "narrow" }));
   return (
-    <div className="ag-panel rounded-card border border-border px-4 py-4" id="cycle-card" data-testid="cycle-first">
+    <div className="ag-panel rounded-card border border-border px-4 py-4" id="cycle-card" data-testid="cycle-first" data-spot="cycle-card">
       <TrackerSwitch className="mb-3" />
       <p className="text-xs font-semibold tracking-[0.16em] text-dim uppercase">{w("cyTitle")}</p>
       <div className="ag-seg mt-3 grid grid-cols-2 gap-1 rounded-card p-1" role="group" aria-label={t("cyPerspective")}>

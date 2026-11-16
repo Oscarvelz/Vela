@@ -842,6 +842,10 @@ type Store = {
   /** Where the manual was opened from ("settings" or a TabId), for its back chip. */
   manualFrom: string;
   showForm: boolean;
+  /** Home's batch card: raised by the hero tile, and by the Manual's
+   * doors — a door must be able to open the card it rings (RT-V5 B3).
+   * UI only — never persisted. */
+  showBatch: boolean;
   editingId: string | null;
   confirmDeleteId: string | null;
   confirmErase: boolean;
@@ -906,6 +910,7 @@ type Store = {
   toggleCluster: (id: string) => void;
   openCluster: (id: string) => void;
   setShowForm: (open: boolean) => void;
+  setShowBatch: (open: boolean) => void;
   beginSession: (encounterId: string) => void;
   clearCompose: () => void;
   openEdit: (id: string) => void;
@@ -1205,6 +1210,7 @@ export const useJournal = create<Store>((set, get) => {
     manualTopic: null,
     manualFrom: "",
     showForm: true,
+    showBatch: false,
     editingId: null,
     confirmDeleteId: null,
     confirmErase: false,
@@ -1541,6 +1547,7 @@ export const useJournal = create<Store>((set, get) => {
       set({ clusters });
     },
     setShowForm: (showForm) => set({ showForm }),
+    setShowBatch: (showBatch) => set({ showBatch }),
     beginSession: (encounterId) =>
       set({
         composeEncounterId: encounterId,

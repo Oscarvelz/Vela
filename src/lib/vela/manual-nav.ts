@@ -8,12 +8,12 @@ import { useJournal } from "./store";
 import { findTopic, type Go } from "./manual";
 import { SECTION_CLUSTER } from "./settings-clusters";
 
-export type SpotRequest = { spot?: string; topicId?: string; at: number };
+export type SpotRequest = { spot?: string; topicId?: string; fallbackSpot?: string; at: number };
 let pending: SpotRequest | null = null;
 const listeners = new Set<() => void>();
 
-export function requestSpotFocus(spot: string | undefined, topicId?: string) {
-  pending = { spot, topicId, at: Date.now() };
+export function requestSpotFocus(spot: string | undefined, topicId?: string, fallbackSpot?: string) {
+  pending = { spot, topicId, fallbackSpot, at: Date.now() };
   listeners.forEach((fn) => fn());
 }
 
@@ -45,7 +45,26 @@ export function goToGo(go: Go, topicId: string) {
     s.setTab(go.tab);
   }
   if (go.cycleSheet) s.setCycleSheet(true);
-  requestSpotFocus(go.spot, topicId);
+  // A door raises the surface it targets: the batch card stands open
+  // for its ring instead of sitting hidden behind a local toggle
+  // (RT-V5 B3).
+  if (go.spot === "batch-card" || go.spot === "batch-save") s.setShowBatch(true);
+  // A chapter's doors share a last-resort landing: when neither the
+  // named control nor the topic's bubble exists in the reader's state
+  // (an empty journal has no statistics cards yet; no pregnancy is
+  // noted, so no projection line exists; couple mode is off, so no
+  // inbox exists), the ring falls back to the surface that hosts the
+  // subject — the statistics anchor, the cycle card, the couple
+  // section (RT-V5 B5/B6/B7).
+  const fallbackSpot =
+    go.tab === "insights"
+      ? "insights-top"
+      : go.spot === "cycle-projected" || go.spot === "tracker-switch"
+        ? "cycle-card"
+        : go.settings === "couple"
+          ? "couple-section"
+          : undefined;
+  requestSpotFocus(go.spot, topicId, fallbackSpot);
 }
 
 export function goToTopicGo(topicId: string) {

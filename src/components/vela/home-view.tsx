@@ -36,7 +36,10 @@ export function HomeView() {
   }, [armed]);
   useBackLayer(armed > 0, () => setArmed(0), { name: "count-confirm" });
   const [formKey, setFormKey] = useState(0);
-  const [showBatch, setShowBatch] = useState(false);
+  // The batch card's raised state lives in the store: the Manual's
+  // doors must be able to open the card they ring (RT-V5 B3).
+  const showBatch = useJournal((s) => s.showBatch);
+  const setShowBatch = useJournal((s) => s.setShowBatch);
   const [help, setHelp] = useState(false);
   const [preset, setPreset] = useState<Draft | undefined>(undefined);
   const customPlaces = useJournal((s) => s.journal.settings.customPlaces);

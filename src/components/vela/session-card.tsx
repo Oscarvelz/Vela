@@ -226,6 +226,7 @@ export function SessionCard({ session, density = "list" }: { session: Session; d
               <button
                 type="button"
                 data-noswipe
+                data-spot="voice-door"
                 className="shrink-0 text-xs font-semibold text-dim active:opacity-70"
                 onClick={(event) => {
                   event.stopPropagation();

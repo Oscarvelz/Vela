@@ -924,6 +924,7 @@ function TrackerEditor({ tracker, multi, onRemoved }: { tracker: CycleTracker; m
     <div className="space-y-4" data-testid="cycle-tracker-editor">
       <div className="flex items-center gap-3">
         <span className="min-w-0 flex-1 font-semibold">{multi ? t("cyTrackerOn") : t("cycleEnable")}</span>
+        <Hint topic="ciclo-en-pausa" compact />
         <Switch checked={tracker.enabled} label={multi ? `${t("cyTrackerOn")} · ${label}` : t("cycleTitle")} onChange={(enabled) => setCycle({ enabled })} />
       </div>
       {multi && !tracker.enabled ? <p className="-mt-2 text-xs leading-relaxed text-dim">{t("cyPausedHint")}</p> : null}

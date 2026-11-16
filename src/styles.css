@@ -65,7 +65,9 @@
   --ag-border: rgba(122, 48, 64, 0.18);
   --ag-accent: #a56a1e;
   --ag-accent-soft: rgba(165, 106, 30, 0.14);
-  --ag-on-accent: #fffaf4;
+  /* The label on the accent is a warm near-black: the pale label sat
+     at 4.32:1 on this ochre, under AA for normal text (RT-V5 B10). */
+  --ag-on-accent: #050200;
   --ag-wine: #c44768;
   --ag-danger: #b4233c;
   --ag-chip: #f3c9b4;
@@ -115,7 +117,9 @@
   --ag-border: rgba(18, 26, 58, 0.13);
   --ag-accent: #b7791f;
   --ag-accent-soft: rgba(183, 121, 31, 0.14);
-  --ag-on-accent: #fffaf0;
+  /* The label on the accent is a deep warm brown: the pale label sat
+     at 3.50:1 on this amber, under AA for normal text (RT-V5 B10). */
+  --ag-on-accent: #241300;
   --ag-wine: #3b4f9e;
   --ag-danger: #b4233c;
   --ag-chip: #dde4f6;

@@ -139,5 +139,21 @@ for (const k of enKeys.filter((k) => k.startsWith("mn"))) {
 }
 console.log(`(g) copy keys EN=${enKeys.length} ES=${esKeys.length}, mn keys=${enKeys.filter((k) => k.startsWith("mn")).length}`);
 
+// (h) every HINT_ONLY entry is actually placed: a hint no component
+// renders is a door to nowhere (RT-V5 B9 — ciclo-en-pausa sat defined
+// but unplaced). The check reads the component sources for a Hint
+// carrying the id.
+{
+  const dir = "src/components/vela";
+  const sources = readdirSync(dir)
+    .filter((f) => f.endsWith(".tsx"))
+    .map((f) => readFileSync(`${dir}/${f}`, "utf8"))
+    .join("\n");
+  for (const h of HINT_ONLY) {
+    if (!sources.includes(`topic="${h.id}"`)) fail(`hint-only ${h.id} is rendered by no component`);
+  }
+  ok("(h) hint-only placement checked");
+}
+
 console.log(failures === 0 ? "MANUAL LINT: ALL PASS" : `MANUAL LINT: ${failures} FAILURES`);
 process.exit(failures === 0 ? 0 : 1);

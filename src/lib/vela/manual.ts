@@ -150,7 +150,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "El teléfono se actualiza y la huella deja de coincidir: la frase abre Vela como siempre — nada se pierde, y la huella puede configurarse otra vez.",
         ],
         related: ["tu-frase"],
-        go: { settings: "privacy", spot: "lock-now", where: ["Settings → Privacy & data → Privacy", "Ajustes → Privacidad y datos → Privacidad"] },
+        go: { settings: "profile", spot: "lock-now", where: ["Settings → Personal → Profile", "Ajustes → Personal → Perfil"] },
         terms: [["biometric", "biometría"], ["auto-lock", "bloqueo automático"]],
       },
       {

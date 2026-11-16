@@ -259,7 +259,7 @@ export function AccountPanel() {
   const again = sessionGone && mode === "in";
 
   return (
-    <div className="space-y-3" data-spot="sync-section">
+    <div className="space-y-3" data-spot="sync-section account-door">
       {sessionGone ? (
         <div className="vela-relogin" data-testid="relogin" role="status">
           <span className="vela-relogin-icon" aria-hidden="true">

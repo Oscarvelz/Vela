@@ -269,16 +269,11 @@ export function InsightsView() {
   const openRange = useJournal((s) => s.openHistRange);
   const list = sessionsSorted(sessions);
 
-  if (list.length === 0) {
-    return (
-      <Card className="ag-glass px-6 py-12 text-center">
-        <Sparkle className="mx-auto size-8 text-fg" />
-        <h2 className="mt-5 font-display text-4xl leading-tight">{t("insightsEmptyTitle")}</h2>
-        <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-dim">{t("insightsEmptyBody")}</p>
-      </Card>
-    );
-  }
-
+  // Every hook in this component runs on every render, above every
+  // return: the empty state is a branch of the final return, never an
+  // early exit. An early return above the useMemos below crashed the
+  // whole app when a sync landed while Insights sat mounted on an
+  // empty journal (RT-V5 B1 — React error #310/#300, blank screen).
   const total = list.length;
   const streak = longestStreak(list);
   const avgGlow = list.reduce((sum, session) => sum + (session.overall || 0), 0) / total;
@@ -384,6 +379,16 @@ export function InsightsView() {
     [list],
   );
   const fellProblems = useMemo(() => topCounts(fellShort.flatMap((session) => session.problems)), [fellShort]);
+
+  if (list.length === 0) {
+    return (
+      <Card className="ag-glass px-6 py-12 text-center" data-spot="insights-top">
+        <Sparkle className="mx-auto size-8 text-fg" />
+        <h2 className="mt-5 font-display text-4xl leading-tight">{t("insightsEmptyTitle")}</h2>
+        <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-dim">{t("insightsEmptyBody")}</p>
+      </Card>
+    );
+  }
 
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden" data-spot="insights-top">
