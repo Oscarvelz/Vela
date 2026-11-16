@@ -43,8 +43,21 @@ export async function hashPin(pin: string): Promise<NonNullable<Person["pin"]>> 
   return { salt: toB64(salt), hash: toB64(hash), iterations: PIN_ITERATIONS };
 }
 
+/** The work factor is part of the PIN's promise: hashPin writes 150k, and
+ *  a stored record claiming anything far outside this band is foreign —
+ *  1 iteration would make the PIN brute-forceable, 10^9 would hang the
+ *  phone. Out-of-band records lose their PIN at the gate and are refused
+ *  at verification, however they arrived (prejudice hunt RT-V4 B13). */
+export const PIN_ITERATIONS_MIN = 10_000;
+export const PIN_ITERATIONS_MAX = 600_000;
+
+export function pinIterationsInBand(iterations: unknown): iterations is number {
+  return typeof iterations === "number" && Number.isFinite(iterations) && iterations >= PIN_ITERATIONS_MIN && iterations <= PIN_ITERATIONS_MAX;
+}
+
 export async function verifyPin(person: Person | undefined, pin: string): Promise<boolean> {
   if (!person?.pin || !pin) return false;
+  if (!pinIterationsInBand(person.pin.iterations)) return false;
   try {
     const derived = await derivePin(pin, fromB64(person.pin.salt), person.pin.iterations);
     const expected = fromB64(person.pin.hash);
@@ -82,7 +95,7 @@ export function cleanPeople(raw: unknown): Person[] {
       typeof p.pin === "object" &&
       typeof p.pin.salt === "string" &&
       typeof p.pin.hash === "string" &&
-      typeof p.pin.iterations === "number"
+      pinIterationsInBand(p.pin.iterations)
         ? { pin: { salt: p.pin.salt, hash: p.pin.hash, iterations: p.pin.iterations } }
         : {}),
       createdAt: typeof p.createdAt === "number" ? p.createdAt : Date.now(),

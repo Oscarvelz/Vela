@@ -3,7 +3,7 @@ import { PLACES, POSITIONS, PROBLEMS, namedPlace, type Mode, type RatingStyle, t
 import { coverDates, coveringEncounter, partnerKey, samePartner, spanDays } from "./encounters";
 import { MIN_PASSPHRASE, asEnvelope, newVaultKey, open, openWithCandidates, randomBytes, seal, toB64, type Envelope, type VaultKey } from "./vault-crypto";
 import { deleteSync, deleteVault, readUi, readVault, writeUi, writeVault } from "./vault-db";
-import { addDays, nowTime, pad, todayStr } from "./dates";
+import { addDays, isRealDate, nowTime, pad, todayStr } from "./dates";
 import type { BatchEntry } from "./batch";
 import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
@@ -166,7 +166,17 @@ function asVoice(raw: unknown): Session["partnerVoice"] {
 function asSession(raw: unknown, index: number): Session | null {
   if (!raw || typeof raw !== "object") return null;
   const s = raw as Partial<Session>;
-  if (typeof s.date !== "string") return null;
+  if (!isRealDate(s.date)) return null;
+  // The gate loads; it does not rewrite. A stored 0 is a fact — unrated
+  // (overall 0) or a session logged without a duration — and only a truly
+  // ABSENT field takes the historical default (prejudice hunt RT-V1 B-3).
+  // Dials clamp to the same 0..5 the partner's voice already obeys (B12).
+  const dial = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(5, Math.max(0, n)) : 0;
+  };
+  const overall = s.overall === undefined || s.overall === null || !Number.isFinite(Number(s.overall)) ? 5 : dial(s.overall);
+  const duration = s.durationMins === undefined || s.durationMins === null || !Number.isFinite(Number(s.durationMins)) ? 30 : Math.max(0, Number(s.durationMins));
   return {
     id: typeof s.id === "string" ? s.id : `s${Date.now().toString(36)}${index}`,
     createdAt: typeof s.createdAt === "number" ? s.createdAt : Date.now() + index,
@@ -174,13 +184,13 @@ function asSession(raw: unknown, index: number): Session | null {
     date: s.date,
     time: typeof s.time === "string" ? s.time : "21:00",
     place: typeof s.place === "string" ? s.place : "Bedroom",
-    durationMins: Number(s.durationMins) || 30,
+    durationMins: duration,
     positions: Array.isArray(s.positions) ? s.positions.map(String) : [],
-    intensity: Number(s.intensity) || 0,
-    connection: Number(s.connection) || 0,
-    satisfaction: Number(s.satisfaction) || 0,
-    energy: Number(s.energy) || 0,
-    overall: Number(s.overall) || 5,
+    intensity: dial(s.intensity),
+    connection: dial(s.connection),
+    satisfaction: dial(s.satisfaction),
+    energy: dial(s.energy),
+    overall,
     notes: typeof s.notes === "string" ? s.notes : "",
     ownWords: typeof s.ownWords === "string" ? s.ownWords : "",
     contraception: Array.isArray(s.contraception) ? s.contraception.filter((item) => typeof item === "string") : [],
@@ -197,7 +207,7 @@ function asSession(raw: unknown, index: number): Session | null {
 function asEncounter(raw: unknown, index: number): Encounter | null {
   if (!raw || typeof raw !== "object") return null;
   const e = raw as Partial<Encounter>;
-  if (typeof e.startDate !== "string" || typeof e.endDate !== "string") return null;
+  if (!isRealDate(e.startDate) || !isRealDate(e.endDate)) return null;
   const start = e.startDate <= e.endDate ? e.startDate : e.endDate;
   const end = e.startDate <= e.endDate ? e.endDate : e.startDate;
   return {

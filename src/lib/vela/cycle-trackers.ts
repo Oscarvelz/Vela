@@ -8,6 +8,7 @@ import {
   type CycleSettings,
   type DayLog,
 } from "./cycle";
+import { isRealDate } from "./dates";
 
 /**
  * Several cycle trackers: the user's own cycle and/or the cycles of partners they follow, each with its
@@ -66,7 +67,7 @@ export function cleanTracker(raw: unknown, fallbackId = FIRST_TRACKER_ID): Cycle
   if (value.stamps && typeof value.stamps === "object") {
     // Sorted so equal trackers serialise identically (merges compare by content).
     for (const [key, at] of Object.entries(value.stamps as Record<string, unknown>).sort(([x], [y]) => (x < y ? -1 : 1))) {
-      if (/^[sedr]:\d{4}-\d{2}-\d{2}$/.test(key) && num(at)) stamps[key] = at as number;
+      if (/^[sedr]:/.test(key) && isRealDate(key.slice(2)) && num(at)) stamps[key] = at as number;
     }
   }
   const partnerLink = cycle.perspective === "partner" && typeof value.partnerLink === "string" ? value.partnerLink.trim().slice(0, 60) : "";
@@ -252,7 +253,23 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
     if (sa || sb) stamps[key] = Math.max(sa, sb);
     let value: string | undefined;
     if (sa !== sb) value = sa > sb ? ea.get(key) : eb.get(key);
-    else value = (newerSide === a ? ea.get(key) : eb.get(key)) ?? ea.get(key) ?? eb.get(key);
+    else if (key.startsWith("r:")) {
+      // A reason carries its own testimony stamp (`at`). When neither side
+      // stamped the entry (legacy data from before r: stamps survived the
+      // gate), the newer TESTIMONY wins — never whichever tracker happened
+      // to be touched last for an unrelated edit (RT-V3 B4's residue).
+      const va = ea.get(key);
+      const vb = eb.get(key);
+      if (va && vb) {
+        try {
+          const ra = (JSON.parse(va) as CycleReason).at ?? 0;
+          const rb = (JSON.parse(vb) as CycleReason).at ?? 0;
+          value = ra !== rb ? (ra > rb ? va : vb) : newerSide === a ? va : vb;
+        } catch {
+          value = newerSide === a ? va : vb;
+        }
+      } else value = va ?? vb;
+    } else value = (newerSide === a ? ea.get(key) : eb.get(key)) ?? ea.get(key) ?? eb.get(key);
     if (value === undefined) continue;
     const date = key.slice(2);
     if (key.startsWith("s:")) starts.push(date);

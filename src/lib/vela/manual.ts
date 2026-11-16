@@ -458,8 +458,8 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "El anillo muestra dónde está el ciclo hoy. Los días futuros se dibujan como predicción — marcados, más tenues — porque son el patrón extendido, no fechas que pasaron.",
         ],
         how: [
-          "Log a start and the cycle counts from it; log the next start and the first cycle closes with its real length.\nEstimates come from her own recent cycles — never from a textbook average.\nDays with no record behind them wear the ‘predicted’ mark wherever they appear: the ring, the calendar, the day panel.",
-          "Anota un inicio y el ciclo cuenta desde él; anota el próximo inicio y el primer ciclo se cierra con su duración real.\nLos estimados salen de sus propios ciclos recientes — nunca de un promedio de libro.\nLos días sin registro detrás llevan la marca de «predicho» donde sea que aparezcan: el anillo, el calendario, el panel del día.",
+          "Log a start and the cycle counts from it; log the next start and the first cycle closes with its real length.\nEstimates come from her own recent cycles — never from a textbook average.\nDays with no record behind them wear the ‘predicted’ mark wherever they appear: the ring, the calendar, the day panel.\nA start dated in the future — a clock that was wrong when it was logged — stays in the record, and the card names it; forecasts count only from the last start before today.",
+          "Anota un inicio y el ciclo cuenta desde él; anota el próximo inicio y el primer ciclo se cierra con su duración real.\nLos estimados salen de sus propios ciclos recientes — nunca de un promedio de libro.\nLos días sin registro detrás llevan la marca de «predicho» donde sea que aparezcan: el anillo, el calendario, el panel del día.\nUn inicio con fecha futura — un reloj que estaba mal cuando se anotó — queda en el registro, y la tarjeta lo nombra; el pronóstico cuenta solo desde el último inicio antes de hoy.",
         ],
         calc: [
           "The expected day is the average of her last cycles; ovulation and the fertile window are counted back from it using the luteal days set in the cycle's tuning.",

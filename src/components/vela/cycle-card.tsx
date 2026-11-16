@@ -231,6 +231,10 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
       ? fill(t("cyProjLine"), { d: `${snap.regularity === "learning" ? "~" : ""}${fmtShort(snap.nextPeriod, lang)}` })
       : dialLine(snap, today, t);
   const stats = cycleStats(cycle);
+  // A start dated in the future is named on the card, never silently
+  // obeyed: the forecast already anchors on the last start before today
+  // (cycle.ts, V3-07) — this line says why, and where to remove it.
+  const futureStart = cycle.starts.filter((s) => s > today).sort()[0];
   const started: Act = {
     key: "start",
     label: w("cyPeriodStarted"),
@@ -315,6 +319,11 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
           <p className="mb-2 text-xs font-semibold text-dim">{fmtShort(picked, lang)}</p>
           <PeriodDateActions date={picked} />
         </div>
+      ) : null}
+      {futureStart ? (
+        <p className="mt-3 text-center text-[11px] leading-relaxed text-dim" data-testid="cycle-future-start">
+          {fill(t("cyFutureStart"), { d: fmtShort(futureStart, lang) })}
+        </p>
       ) : null}
       <p className="mt-3 text-center text-[11px] leading-relaxed text-dim" data-testid="cycle-footnote">
         {snap.window && snap.late === 0 ? `${fill(t("cyFcShift"), { n: snap.window })} · ` : ""}

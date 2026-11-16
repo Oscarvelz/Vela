@@ -18,6 +18,21 @@ export function parseDate(ds: string) {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
+const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A date string that names a day that actually exists. The shape alone is
+ *  not enough: "2026-02-30" matches the shape and parseDate silently rolls
+ *  it to March 2, so every cleaner that admits dates shares this one check
+ *  (prejudice hunt V3-01/V3-13 — impossible dates corrupted timelines,
+ *  quiet stretches and test records at every gate that only tested shape). */
+export function isRealDate(ds: unknown): ds is string {
+  if (typeof ds !== "string" || !DATE_SHAPE.test(ds)) return false;
+  const [y, m, d] = ds.split("-").map(Number);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+
 export function addDays(ds: string, n: number) {
   const d = parseDate(ds);
   d.setDate(d.getDate() + n);

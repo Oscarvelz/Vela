@@ -11,6 +11,7 @@
    as silence here. */
 import { fold } from "./batch";
 import { NUMBER_WORDS } from "./batch-lexicon";
+import { isRealDate } from "./dates";
 import type { PregnancyTestEvent } from "./types";
 
 export function newTestId(): string {
@@ -111,7 +112,7 @@ export function cleanPregnancyTests(raw: unknown): PregnancyTestEvent[] {
     if (!item || typeof item !== "object") continue;
     const t = item as Partial<PregnancyTestEvent>;
     if (typeof t.id !== "string" || !t.id) continue;
-    if (typeof t.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(t.date)) continue;
+    if (!isRealDate(t.date)) continue;
     if (t.result !== "positive" && t.result !== "negative") continue;
     out.push({
       id: t.id,

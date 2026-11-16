@@ -18,7 +18,10 @@ function cleanMonthDay(raw: unknown): string {
   if (!m) return "";
   const mm = Number(m[1]);
   const dd = Number(m[2]);
-  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return "";
+  // The day must exist in its month (Feb 29 lives — the date recurs yearly
+  // and leap years carry it; Feb 30 and Apr 31 never happen).
+  const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mm - 1] ?? 0;
+  if (mm < 1 || mm > 12 || dd < 1 || dd > daysInMonth) return "";
   return raw;
 }
 

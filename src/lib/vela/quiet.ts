@@ -1,6 +1,6 @@
 import { fold } from "./batch";
 import { NUMBER_WORDS } from "./batch-lexicon";
-import { addDays, parseDate, todayStr } from "./dates";
+import { addDays, isRealDate, parseDate, todayStr } from "./dates";
 import type { QuietMark, QuietReasonId, QuietThemeId, Session } from "./types";
 
 /**
@@ -34,7 +34,7 @@ export function cleanQuietMarks(raw: unknown): QuietMark[] {
     if (!item || typeof item !== "object") continue;
     const m = item as Partial<QuietMark>;
     if (typeof m.id !== "string" || !m.id) continue;
-    if (typeof m.from !== "string" || !DATE_RE.test(m.from) || typeof m.to !== "string" || !DATE_RE.test(m.to)) continue;
+    if (!isRealDate(m.from) || !isRealDate(m.to)) continue;
     if (m.to < m.from) continue;
     if (m.reason !== "custom" && !THEME_IDS.includes(m.reason as QuietThemeId)) continue;
     out.push({
@@ -58,8 +58,12 @@ function dayDiff(from: string, to: string) {
 }
 
 export function eachDay(from: string, to: string): string[] {
+  // No silent cap: a stretch is as long as it is, and a reader that stops
+  // early lies about the rest (prejudice hunt V3-12 — a 730-day silence
+  // painted and counted as 400 days). Counting surfaces use interval
+  // arithmetic (episodes below); this enumeration serves bounded windows.
   const days: string[] = [];
-  for (let d = from; d <= to && days.length < 400; d = addDays(d, 1)) days.push(d);
+  for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
   return days;
 }
 
@@ -86,8 +90,16 @@ export function episodes(marks: QuietMark[], sessions: Session[], today = todayS
   const out: QuietEpisode[] = [];
   for (const mark of marks) {
     if (mark.from > today) continue;
-    const days = eachDay(mark.from, mark.to > today ? today : mark.to).filter((d) => !sessionDays.has(d));
-    if (days.length) out.push({ mark, days: days.length, firstDay: days[0] });
+    // Interval arithmetic, not enumeration: the count is the span's length
+    // minus the session days inside it, however long the span runs.
+    const end = mark.to > today ? today : mark.to;
+    let sessionInside = 0;
+    for (const d of sessionDays) if (d >= mark.from && d <= end) sessionInside += 1;
+    const days = dayDiff(mark.from, end) + 1 - sessionInside;
+    if (days <= 0) continue;
+    let firstDay = mark.from;
+    while (firstDay <= end && sessionDays.has(firstDay)) firstDay = addDays(firstDay, 1);
+    out.push({ mark, days, firstDay });
   }
   return out;
 }

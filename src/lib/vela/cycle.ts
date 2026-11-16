@@ -1,4 +1,4 @@
-import { addDays, parseDate } from "./dates";
+import { addDays, isRealDate, parseDate } from "./dates";
 
 /**
  * Cycle engine. Everything here is pure and works on dates as "YYYY-MM-DD" strings in local time.
@@ -153,7 +153,7 @@ function cleanEnds(raw: unknown, starts: string[]) {
   const map = raw as Record<string, unknown>;
   starts.forEach((start, index) => {
     const end = map[start];
-    if (typeof end !== "string" || !DATE_RE.test(end) || end < start) return;
+    if (typeof end !== "string" || !isRealDate(end) || end < start) return;
     if (daysBetween(start, end) >= MAX_PERIOD) return;
     const next = starts[index + 1];
     if (next && end >= next) return;
@@ -166,7 +166,7 @@ function cleanDays(raw: unknown) {
   const out: Record<string, DayLog> = {};
   if (!raw || typeof raw !== "object") return out;
   for (const [date, entry] of Object.entries(raw as Record<string, unknown>)) {
-    if (!DATE_RE.test(date) || !entry || typeof entry !== "object") continue;
+    if (!isRealDate(date) || !entry || typeof entry !== "object") continue;
     const log = cleanLog(entry as DayLog);
     if (log) out[date] = log;
   }
@@ -188,7 +188,7 @@ export function cleanLog(entry: Partial<DayLog> | null | undefined): DayLog | nu
 }
 
 export function sortedStarts(starts: string[]) {
-  return [...new Set(starts.filter((item) => DATE_RE.test(item)))].sort();
+  return [...new Set(starts.filter((item) => isRealDate(item)))].sort();
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -398,7 +398,13 @@ export function pregnancyNoted(cycle: CycleSettings): boolean {
 function lateInfo(cycle: CycleSettings, today: string) {
   const starts = sortedStarts(cycle.starts);
   if (!starts.length) return { predictedNext: null as string | null, late: 0, due: false };
-  const last = starts[starts.length - 1];
+  // The forecast anchors on the last start that has actually happened. A
+  // start dated in the future (a device clock once lied) stays in the
+  // record — the card names it — but it never anchors a forecast, or one
+  // bad date would disarm "late" for a year (prejudice hunt V3-07).
+  const past = starts.filter((s) => s <= today);
+  if (!past.length) return { predictedNext: addDays(starts[0], cycleStats(cycle).cycle), late: 0, due: false };
+  const last = past[past.length - 1];
   const predictedNext = addDays(last, cycleStats(cycle).cycle);
   // "Due": the predicted day has arrived (or passed) and no new start is logged yet.
   // A noted pregnancy suspends "due" entirely: the date ahead is a projection, not an expectation.
@@ -413,12 +419,17 @@ function anchors(cycle: CycleSettings, today: string): Anchor[] {
   const stats = cycleStats(cycle);
   const { predictedNext, due } = lateInfo(cycle, today);
   const list: Anchor[] = [];
-  for (let index = 0; index < starts.length; index += 1) {
-    const start = starts[index];
-    const ovRef = starts[index + 1] ?? predictedNext!;
+  // Logged anchors are the starts that have happened; a future-dated start
+  // is not an anchor (V3-07) — unless it is the only start there is, in
+  // which case it anchors the wait for its own day.
+  const pastStarts = starts.filter((s) => s <= today);
+  const logged = pastStarts.length ? pastStarts : starts.slice(0, 1);
+  for (let index = 0; index < logged.length; index += 1) {
+    const start = logged[index];
+    const ovRef = logged[index + 1] ?? predictedNext!;
     // A due or late period keeps the current cycle open through today (it is never "day 1" until logged);
     // the projected period then starts today ("expected any day"), overlapping only that one day.
-    const next = starts[index + 1] ?? (due ? addDays(today, 1) : predictedNext!);
+    const next = logged[index + 1] ?? (due ? addDays(today, 1) : predictedNext!);
     const end = cycle.ends[start] ?? addDays(start, stats.period - 1);
     list.push({ start, next, ovRef, logged: true, periodEnd: end < next ? end : addDays(next, -1) });
   }
@@ -556,12 +567,17 @@ export function cycleSnapshot(cycle: CycleSettings, today: string): CycleSnapsho
   // While due or late the next period is "expected any day": shown as today.
   const nextPeriod = due ? today : current.start > today ? current.start : current.next;
   const ovulationRaw = addDays(current.ovRef, -luteal);
-  const ovulation = ovulationRaw > current.start && ovulationRaw < current.next ? ovulationRaw : null;
+  // The marks' own guard, applied to the snapshot too: no ovulation inside
+  // the period itself (prejudice hunt V3-14 — a short cycle with a long
+  // luteal phase put ovulation on day 4 of the logged period, and the
+  // snapshot's fertile window opened after its own ovulation).
+  const ovulation = ovulationRaw > current.start && ovulationRaw < current.next && ovulationRaw > current.periodEnd ? ovulationRaw : null;
   const fertileRaw = ovulation ? addDays(ovulation, -fertile) : null;
   const fertileStart = fertileRaw && fertileRaw > current.periodEnd ? fertileRaw : ovulation ? addDays(current.periodEnd, 1) : null;
   const phase = phaseOn(cycle, today, today);
   const inPeriod = phase === "period" && inside;
-  const last = starts[starts.length - 1];
+  const pastStarts = starts.filter((s) => s <= today);
+  const last = pastStarts[pastStarts.length - 1];
   // "Period ended" stays offered through the estimated end plus two days of grace.
   const periodOpen =
     current.start === last && last <= today && !cycle.ends[last] && today <= addDays(last, stats.period + 1);

@@ -91,7 +91,12 @@ export function asEnvelope(raw: unknown): Envelope | null {
   const e = raw as Partial<Envelope>;
   const kdf = validKdf(e.kdf);
   if (!kdf || typeof e.salt !== "string" || typeof e.iv !== "string" || typeof e.ciphertext !== "string") return null;
-  return { v: Number(e.v) || 1, kdf, salt: e.salt, iv: e.iv, ciphertext: e.ciphertext };
+  // The version is a claim about the format, and only one format exists:
+  // an envelope stamped with any other version is refused, never opened
+  // under v1 rules and hoped for the best (prejudice hunt RT-V1 B-6).
+  // A missing version is the legacy shape and reads as v1.
+  if (e.v !== undefined && e.v !== ENVELOPE_VERSION) return null;
+  return { v: ENVELOPE_VERSION, kdf, salt: e.salt, iv: e.iv, ciphertext: e.ciphertext };
 }
 
 /** Opens an envelope with the passphrase, deriving with the envelope's own salt. */
