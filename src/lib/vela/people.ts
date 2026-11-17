@@ -164,7 +164,7 @@ export function newProposalId(): string {
 
 const PROPOSAL_KINDS = ["delete-session", "delete-encounter", "delete-person", "wipe-vault"] as const;
 
-export function cleanProposals(raw: unknown): Proposal[] {
+export function cleanProposals(raw: unknown, people?: readonly { id: string }[]): Proposal[] {
   if (!Array.isArray(raw)) return [];
   const now = Date.now();
   const out: Proposal[] = [];
@@ -174,6 +174,11 @@ export function cleanProposals(raw: unknown): Proposal[] {
     if (typeof p.id !== "string" || !p.id) continue;
     if (!PROPOSAL_KINDS.includes(p.kind as (typeof PROPOSAL_KINDS)[number])) continue;
     if (typeof p.proposedBy !== "string" || typeof p.proposedAt !== "number" || typeof p.expiresAt !== "number") continue;
+    // Membership is not arithmetic (Round 2, RT2-H1 B3): when the diary's
+    // people are known to the gate, an approval signed by an id that is
+    // none of them is a ghost signature — the proposal is void here, the
+    // same way a self-signed one is. An empty people list signs nothing.
+    if (people && p.state === "approved" && typeof p.decidedBy === "string" && !people.some((person) => person.id === p.decidedBy)) continue;
     // A pending proposal whose week has lapsed caduces silently (the law):
     // it is dropped here, at the gate, and never resurfaces.
     if (p.state !== "approved" && p.expiresAt < now) continue;

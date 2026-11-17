@@ -381,8 +381,13 @@ function settingsNums(cycle: CycleSettings) {
  *  cycles as they would have run — never a period "due" or "late". The
  *  moment she logs a real start, the latest closed cycle changes and the
  *  projection ends by itself; her corrections are the record from there. */
-export function pregnancyNoted(cycle: CycleSettings): boolean {
-  const starts = sortedStarts(cycle.starts);
+export function pregnancyNoted(cycle: CycleSettings, today: string): boolean {
+  // Anchored like the forecast (Round 2, RT2-H3-02): only starts that
+  // have actually happened index the tail. This reader used to read the
+  // raw list, so one future-dated start — the V3-07 specimen — shifted
+  // the window and the noted pregnancy fell out of it, and the snapshot
+  // then read a period LATE against a pregnancy.
+  const starts = sortedStarts(cycle.starts).filter((s) => s <= today);
   if (!starts.length) return false;
   // A pregnancy noted for the cycle still open (2.2.7: she stated it in her
   // words while the cycle runs, before any closing start exists) counts
@@ -408,7 +413,7 @@ function lateInfo(cycle: CycleSettings, today: string) {
   const predictedNext = addDays(last, cycleStats(cycle).cycle);
   // "Due": the predicted day has arrived (or passed) and no new start is logged yet.
   // A noted pregnancy suspends "due" entirely: the date ahead is a projection, not an expectation.
-  const due = !pregnancyNoted(cycle) && last <= today && today >= predictedNext;
+  const due = !pregnancyNoted(cycle, today) && last <= today && today >= predictedNext;
   const late = due ? daysBetween(predictedNext, today) : 0;
   return { predictedNext, late, due };
 }
@@ -435,7 +440,7 @@ function anchors(cycle: CycleSettings, today: string): Anchor[] {
   }
   let cursor = due ? today : list[list.length - 1].next;
   // A noted pregnancy projects further ahead, so the trace spans the whole pregnancy.
-  const steps = pregnancyNoted(cycle) ? 14 : 9;
+  const steps = pregnancyNoted(cycle, today) ? 14 : 9;
   for (let step = 0; step < steps; step += 1) {
     const next = addDays(cursor, stats.cycle);
     list.push({ start: cursor, next, ovRef: next, logged: false, periodEnd: addDays(cursor, stats.period - 1) });

@@ -320,9 +320,62 @@ export function mergeTrackerLists(newer: CycleTracker[], older: CycleTracker[], 
   const out = order
     .map((id) => byId.get(id)!)
     .filter((tracker) => !(deleted[`cycle:${tracker.id}`] && deleted[`cycle:${tracker.id}`] >= tracker.updatedAt));
-  if (out.length) return out.slice(0, MAX_TRACKERS);
+  if (out.length) return shareReasonsAcrossTwins(out).slice(0, MAX_TRACKERS);
   const id = deleted[`cycle:${FIRST_TRACKER_ID}`] ? newTrackerId() : FIRST_TRACKER_ID;
   return [defaultTracker(id)];
+}
+
+/* Two trackers for the same person, born on two devices before they ever
+ * synced, survive the merge as separate data — which tracker she meant
+ * is unknowable (Round 1, L-1). But a reason is testimony about a PERSON
+ * and a cycle, not about a tracker (Round 2, RT2-H3-07): a dismissal
+ * recorded on one twin left the other free to re-ask the very question
+ * she had dismissed — same person, same start, same cycle. So for
+ * starts the twins share, the winning testimony — the later `at`, a
+ * dismissal standing on a tie — is written to every twin, with its
+ * stamp, so the question is answered once, for the person. Reasons for
+ * starts a twin does not carry stay home. */
+function personGroupKey(tracker: CycleTracker): string | null {
+  if (tracker.perspective === "self") return "self";
+  if (tracker.ownerId) return `id:${tracker.ownerId}`;
+  const name = (tracker.partnerLink || tracker.partnerName || "").trim().toLocaleLowerCase();
+  return name ? `name:${name}` : null;
+}
+
+function shareReasonsAcrossTwins(trackers: CycleTracker[]): CycleTracker[] {
+  const groups = new Map<string, CycleTracker[]>();
+  for (const tracker of trackers) {
+    const key = personGroupKey(tracker);
+    if (!key) continue;
+    groups.set(key, [...(groups.get(key) ?? []), tracker]);
+  }
+  const changed = new Map<string, CycleTracker>();
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const shared = group[0].starts.filter((start) => group.every((tracker) => tracker.starts.includes(start)));
+    for (const start of shared) {
+      const candidates = group
+        .map((tracker) => tracker.reasons?.[start])
+        .filter((reason): reason is CycleReason => !!reason);
+      if (!candidates.length) continue;
+      const winner = candidates.reduce((best, reason) => {
+        if (reason.at !== best.at) return reason.at > best.at ? reason : best;
+        return reason.id === "dismissed" ? reason : best;
+      });
+      const stamp = Math.max(...group.map((tracker) => tracker.stamps[`r:${start}`] ?? 0));
+      for (const tracker of group) {
+        if (tracker.reasons?.[start]?.id === winner.id && tracker.reasons?.[start]?.at === winner.at) continue;
+        const current = changed.get(tracker.id) ?? tracker;
+        changed.set(tracker.id, {
+          ...current,
+          reasons: { ...(current.reasons ?? {}), [start]: winner },
+          ...(stamp ? { stamps: { ...current.stamps, [`r:${start}`]: Math.max(stamp, current.stamps[`r:${start}`] ?? 0) } } : {}),
+        });
+      }
+    }
+  }
+  if (!changed.size) return trackers;
+  return trackers.map((tracker) => changed.get(tracker.id) ?? tracker);
 }
 
 /** Deletion-marker key used in journal.deleted for a removed tracker. */

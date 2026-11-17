@@ -80,7 +80,7 @@ const session = (id: string, partnerName: string, extra: Record<string, unknown>
   const cyc = { enabled: true, perspective: "self" as const, partnerName: "", periodDays: 5, cycleDays: 28, lutealDays: 14, fertileDays: 5,
     starts: ["2026-09-21"], ends: { "2026-09-21": "2026-09-26" }, days: {}, reasons: { "2026-09-21": { id: "pregnant" as const, at: T } } };
   const moved = withStart(cyc, "2026-09-24");
-  if (moved.reasons?.["2026-09-24"]?.id === "pregnant" && pregnancyNoted(moved))
+  if (moved.reasons?.["2026-09-24"]?.id === "pregnant" && pregnancyNoted(moved, "2026-09-24"))
     hold("S3a a corrected start carries its pregnancy reason — the projection still knows");
   else brk("S3a correcting a start killed its reason", JSON.stringify(moved.reasons));
   if (moved.ends["2026-09-24"] === "2026-09-26") hold("S3b the end still carries (pre-existing behavior)");

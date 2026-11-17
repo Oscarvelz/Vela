@@ -317,7 +317,7 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       deleted: deletedMap,
       migrations: Array.isArray(data.migrations) ? data.migrations.filter((m): m is string => typeof m === "string") : [],
       ...(cleanPeople(peopleRaw).length ? { people: cleanPeople(peopleRaw) } : {}),
-      ...(cleanProposals(data.proposals).length ? { proposals: cleanProposals(data.proposals) } : {}),
+      ...(cleanProposals(data.proposals, cleanPeople(peopleRaw)).length ? { proposals: cleanProposals(data.proposals, cleanPeople(peopleRaw)) } : {}),
       ...(cleanQuietMarks(data.quietDays).length ? { quietDays: cleanQuietMarks(data.quietDays) } : {}),
       ...(cleanPregnancyTests(data.pregnancyTests).length ? { pregnancyTests: cleanPregnancyTests(data.pregnancyTests) } : {}),
     };
@@ -599,7 +599,14 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
         const prev = byId.get(p.id);
         if (!prev || (p.decidedAt ?? p.proposedAt) >= (prev.decidedAt ?? prev.proposedAt)) byId.set(p.id, p);
       }
-      const merged = [...byId.values()].filter((p) => !(deleted[p.id] >= p.proposedAt));
+      /* The merge applies the gate's consent law too (RT2-H1 B3): an
+       * approved proposal whose decider is none of the merged people
+       * does not cross — a ghost signature gains nothing by arriving
+       * through sync instead of through the load gate. */
+      const memberIds = new Set((people ?? []).map((person) => person.id));
+      const merged = [...byId.values()].filter(
+        (p) => !(deleted[p.id] >= p.proposedAt) && (p.state !== "approved" || (p.decidedBy !== undefined && memberIds.has(p.decidedBy))),
+      );
       return { proposals: merged };
     })(),
     // Quiet marks union by id (2.2.4): the later writing wins; a tombstoned
@@ -2068,10 +2075,14 @@ export const useJournal = create<Store>((set, get) => {
         });
         return;
       }
-      // Consent comes from a person of the diary: when the diary has
-      // people, a decider who is none of them signs nothing.
+      // Consent comes from a person of the diary — unconditionally
+      // (Round 2, RT2-H1 B3): the guard used to apply only when the
+      // diary HAD people, so an empty people list let a fabricated id
+      // sign. Nobody home means nobody signs; and a proposal nobody in
+      // the diary made cannot be decided either — both signatures must
+      // belong to the diary's people.
       const people = journal.people ?? [];
-      if (people.length > 0 && !people.some((person) => person.id === by)) return;
+      if (!people.some((person) => person.id === by) || !people.some((person) => person.id === proposal.proposedBy)) return;
       if (approve && proposal.kind === "wipe-vault") {
         // The second consent starts the cooling-off; the wipe itself is a
         // separate, later act either partner can still cancel.
@@ -2117,7 +2128,7 @@ export const useJournal = create<Store>((set, get) => {
       // cancelled (tombstoned, so it cannot resurface as approved) and
       // nothing burns.
       const people = journal.people ?? [];
-      if (!proposal.decidedBy || proposal.decidedBy === proposal.proposedBy || (people.length > 0 && !people.some((person) => person.id === proposal.decidedBy))) {
+      if (!proposal.decidedBy || proposal.decidedBy === proposal.proposedBy || !people.some((person) => person.id === proposal.decidedBy)) {
         get().cancelProposal(id);
         return;
       }
@@ -2367,6 +2378,17 @@ export const useJournal = create<Store>((set, get) => {
           ? settings.cycles.find((tracker) => tracker.perspective === "self")
           : settings.cycles.find((tracker) => followsPartner(tracker, spec.partnerLink || spec.partnerName || ""));
       if (existing) return existing.id;
+      // The id binding is identity too (Round 2, RT2-H3-06): a tracker
+      // bound to a person by ownerId whose name and link were cleared is
+      // invisible to followsPartner, and the door minted a twin for the
+      // very person it already follows. The delete cascade reads
+      // ownerId (V3-11); the add door now reads it the same way.
+      if (spec.perspective === "partner") {
+        const wanted = partnerKey(spec.partnerLink || spec.partnerName || "");
+        const person = (get().journal.people ?? []).find((p) => partnerKey(p.name) === wanted && wanted !== "");
+        const bound = person ? settings.cycles.find((tracker) => tracker.ownerId === person.id) : undefined;
+        if (bound) return bound.id;
+      }
       if (settings.cycles.length >= MAX_TRACKERS) return "";
       const now = stampNow(get().journal);
       const id = newTrackerId();

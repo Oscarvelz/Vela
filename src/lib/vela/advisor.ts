@@ -269,7 +269,7 @@ export function readAdvisor(
   // The one Advisor sentence about a noted pregnancy (Oscar's no-silence
   // word, 2026-11-14): it speaks of the journal and the calendar — the
   // projection the note set in motion — never of the person herself.
-  if (live.some((tracker) => pregnancyNoted(tracker))) lines.push({ kind: "cycleProjected" });
+  if (live.some((tracker) => pregnancyNoted(tracker, today))) lines.push({ kind: "cycleProjected" });
 
   const cyclePatternOf = (): Extract<AdvisorFact, { kind: "cyclePattern" }> | null => {
     let best: Extract<AdvisorFact, { kind: "cyclePattern" }> | null = null;

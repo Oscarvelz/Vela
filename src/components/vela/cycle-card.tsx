@@ -228,7 +228,7 @@ export function CycleCard({ inSheet = false, onClose }: { inSheet?: boolean; onC
 
   // A noted pregnancy turns every prediction ahead into a projection (2.2.5):
   // the dial speaks of the would-be cycle, never of a period due or late.
-  const projected = pregnancyNoted(cycle);
+  const projected = pregnancyNoted(cycle, today);
   const keyLine =
     projected && snap.nextPeriod
       ? fill(t("cyProjLine"), { d: `${snap.regularity === "learning" ? "~" : ""}${fmtShort(snap.nextPeriod, lang)}` })
@@ -598,7 +598,7 @@ function useForecast(snap: Snap, today: string): { lead: string; next: string; l
   const lang = useLang();
   const activeCycle = useJournal(selectActiveCycle);
   const name = activeCycle.partnerName.trim();
-  const projected = pregnancyNoted(activeCycle);
+  const projected = pregnancyNoted(activeCycle, today);
   const loc = lang === "es" ? "es" : "en";
   const weekday = (ds: string) => parseDate(ds).toLocaleDateString(loc, { weekday: "short" }).replace(/\.$/, "");
   const soon = (ds: string) => (daysUntil(today, ds) <= 6 ? weekday(ds) : fmtShort(ds, lang));
