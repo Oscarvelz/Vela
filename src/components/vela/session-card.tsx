@@ -26,7 +26,15 @@ const METHOD_KEY = {
 } as const;
 
 export function SessionCard({ session, density = "list" }: { session: Session; density?: "list" | 2 | 3 | 4 }) {
+  // The switch itself calls no hooks (RT2-H5 B1′): History's layout
+  // toggle flips `density` on this same keyed instance, so any hook
+  // below the branch would change the hook count mid-life and crash
+  // the tree. Each face is its own component with a stable count.
   if (density !== "list") return <CompactSession session={session} density={density} />;
+  return <ListSessionCard session={session} />;
+}
+
+function ListSessionCard({ session }: { session: Session }) {
   const t = useT();
   const lang = useLang();
   const style = useJournal((s) => s.journal.settings.ratingStyle);
