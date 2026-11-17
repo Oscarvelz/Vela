@@ -570,8 +570,8 @@ function numberValue(word: string) {
 }
 
 const DUR_NUM = "\\d+(?:[.,]\\d+)?|one|two|three|four|five|ten|fifteen|twenty|thirty|forty[- ]five|forty|sixty|ninety|un|una|uno|dos|tres|cuatro|cinco|diez|quince|veinte|treinta|cuarenta y cinco|cuarenta|sesenta|noventa|a couple of|a couple|couple of|un par de|an|a";
-const NOT_DURATION_AFTER = /^\s*(?:later|after|afterwards|before|ago|earlier|despues|antes|mas tarde|from now|de distancia|away|a day|per day|each day|al dia|por dia)\b/;
-const NOT_DURATION_BEFORE = /\b(?:hace|after|following|within|every|cada|despues de|tras)\s+(?:(?:a|an|the|un|una|el|la)\s+)?$/;
+const NOT_DURATION_AFTER = /^\s*(?:later|after|afterwards|before|ago|earlier|despues|antes|mas tarde|from now|de distancia|away|a day|per day|each day|al dia|por dia|drive|flight|trip|meeting|commute|walk|hike|ride)\b/;
+const NOT_DURATION_BEFORE = /\b(?:hace|after|following|within|every|cada|despues de|tras|during|durante)\s+(?:(?:a|an|the|un|una|el|la)\s+)?$/;
 const WORK_BEFORE = /\b(?:works?|worked|working|trabaj\w+|shift|turno)\s*$/;
 
 function findDuration(folded: string, blocked: Span[]): (Span & { mins: number }) | null {
@@ -606,7 +606,7 @@ function findDuration(folded: string, blocked: Span[]): (Span & { mins: number }
   return { ...first, mins: Math.min(240, Math.max(5, first.mins)) };
 }
 
-const VERDICT_OBJECT_AFTER = /^\s+(?:traffic|pizza|weather|dinner|food|movie|film|room|car|dress|condom|quality|service|hotel|flight|trip|game|show|book|song)\b/;
+const VERDICT_OBJECT_AFTER = /^\s+(?:traffic|pizza|weather|dinner|food|movie|film|room|car|dress|condom|quality|service|hotel|flight|trip|game|show|book|song|view|views|conversation|scenery|sunset|back pain|headache|toothache)\b/;
 function verdictAboutOtherThing(folded: string, h: Hit) {
   const before = folded.slice(Math.max(0, h.start - 20), h.start);
   const after = folded.slice(h.end, h.end + 24);
@@ -647,6 +647,10 @@ function ordinalRounds(folded: string, blocked: Span[]) {
     const before = folded.slice(Math.max(0, start - 10), start);
     const after = folded.slice(end, end + 24);
     if (/\b(?:for|por)\s*$/.test(before)) continue;
+    // A round OF something else — the fight, the match, the menu —
+    // belongs to that event, not to the encounter (Round 2).
+    if (/^\s*(?:of|de|del)\s+(?:the\s+|la\s+|el\s+)?(?:\w+\s+)?(?:fight|match|game|partido|pelea|combate|juego)\b/.test(after)) continue;
+    if (/^\s*(?:on|en)\s+(?:the\s+|la\s+|el\s+)?(?:menu|list|page|carta)\b/.test(after)) continue;
     if (/^\s*(?:(?:that|que)\s+)?(?:we|i|she|he|they|ever|in|this|that|que|nos|lo|la|me|en|this year|este)\b/.test(after) && !/^\s*(?:was|fue|felt|se sintio|estuvo|lasted|duro)\b/.test(after)) continue;
     const key = (m[1] ?? m[0].split(/\s+/).pop() ?? "").trim();
     const value = ORDINAL_VALUE[key] ?? 0;
@@ -661,10 +665,13 @@ function ordinalRounds(folded: string, blocked: Span[]) {
  * third person, a meal — never lends its numbers to the encounter
  * (RT-V2 B1, RT-V2M M8). A meal sentence that also carries the
  * encounter (its place, its method, its verb) is the encounter's own. */
-const FOREIGN_SUBJECT = /\b(her sister|his sister|her brother|his brother|her friend|his friend|her cousin|his cousin|su hermana|su hermano|la hermana|el hermano|su prima|su amiga|her mother|his mother)\b/;
+const FOREIGN_SUBJECT = /\b(her sister|his sister|her brother|his brother|her friend|his friend|her cousin|his cousin|su hermana|su hermano|la hermana|el hermano|su prima|su amiga|her mother|his mother|the team|el equipo)\b/;
 const FOREIGN_FOOD = /\b(eaten|ate|eating|dinner|lunch|breakfast|brunch|comimos|cenamos|almorzamos|comiendo|cenando|comer|comida|restaurant|restaurante)\b/;
 const ENCOUNTER_SIGNAL = /\b(condom|condon|pill|pastilla|hotel|motel|bed|cama|shower|ducha|car|carro|couch|sofa|sex|sexo|love|hicimos|fuimos|tuvimos|did it|made love|hooked up|solo|alone)\b/;
 const TEST_WORDS = /\b(pregnancy tests?|pruebas? de embarazo|tests? de embarazo)\b/;
+/* A count spread over a span of days ("worked 3 times that week") is
+ * a week's tally, not this encounter's rounds (Round 2). */
+const WEEK_FRAME = /\b(that week|this week|esa semana|esta semana|per week|por semana)\b/;
 
 function sentenceSpans(folded: string): Span[] {
   const out: Span[] = [];
@@ -674,13 +681,14 @@ function sentenceSpans(folded: string): Span[] {
 
 function foreignSentence(sentence: string) {
   if (TEST_WORDS.test(sentence) || FOREIGN_SUBJECT.test(sentence)) return true;
+  if (WEEK_FRAME.test(sentence) && !ENCOUNTER_SIGNAL.test(sentence)) return true;
   return FOREIGN_FOOD.test(sentence) && !ENCOUNTER_SIGNAL.test(sentence);
 }
 
 /* An again/second-round phrase raises the count only when its own
  * sentence says the round HAPPENED — not when it was denied, nearly
  * happened, wanted, planned, or slept through (RT-V2 B2, RT-V2M M15). */
-const UNHAPPENED = /\b(never|didn'?t|did not|was no|there was no|no hubo|almost|casi|nearly|wanted|queria|quiso|quisimos|were going to|was going to|going to|ibamos a|pensamos|planned|too tired|cansad\w+|agotad\w+|fell asleep|se durmio|nos dormimos|quedamos dormidos|no pudimos|no se pudo)\b/;
+const UNHAPPENED = /\b(never|didn'?t|did not|couldn'?t|could not|was no|there was no|no hubo|almost|casi|nearly|wanted|queria|quiso|quisimos|were going to|was going to|going to|ibamos a|pensamos|planned|too tired|cansad\w+|agotad\w+|fell asleep|se durmio|nos dormimos|quedamos dormidos|no pudimos|no se pudo)\b/;
 function roundHappened(folded: string, start: number, end: number) {
   const from = Math.max(folded.lastIndexOf(".", start - 1), folded.lastIndexOf(";", start - 1), folded.lastIndexOf("\n", start - 1), folded.lastIndexOf("!", start - 1), folded.lastIndexOf("?", start - 1)) + 1;
   const rest = folded.slice(end);
@@ -705,13 +713,25 @@ function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[];
   };
   // A self-correction replaces, never competes: everything counted
   // before the last "no wait" / "mejor dicho" is the discarded draft
-  // (RT-V2 B1).
+  // (RT-V2 B1). "I mean" joins them only when it truly corrects —
+  // a count on both sides of it; as bare filler it discards nothing
+  // (Round 2: "three times, I mean, twice" filed three).
   let correctionAt = -1;
   for (const m of matches(/\b(?:no wait|mejor dicho|correction|en realidad)\b/g, folded)) correctionAt = m.index ?? 0;
+  const COUNTISH = /\b\d+\s*(?:times|veces|rounds|rondas)\b|\b(?:once|twice|thrice|una vez|dos veces|tres veces|cuatro veces|cinco veces|two times|three times|four times|five times|two rounds|three rounds)\b/;
+  for (const m of matches(/\bi mean\b/g, folded)) {
+    const at = m.index ?? 0;
+    if (COUNTISH.test(folded.slice(0, at)) && COUNTISH.test(folded.slice(at + m[0].length))) correctionAt = Math.max(correctionAt, at);
+  }
   const usable = (span: Span) => freeOf(blocked, span) && !foreign(span.start) && span.start > correctionAt;
+  // Rounds of drinks are a bar's rounds, not the encounter's: a
+  // rounds/rondas count governed by a drink noun lends nothing
+  // (Round 2).
+  const foreignRound = (span: Span) => /(?:rounds|rondas)$/.test(folded.slice(span.start, span.end)) &&
+    /^\s+(?:of|de)\s+(?:drinks?|tragos?|bebidas?|cervezas?|beers?|shots?|copas?|vino|wine|whiskey|tequila|ron)\b/.test(folded.slice(span.end, span.end + 20));
   for (const m of matches(/\b(\d{1,3})\s*(?:times|veces|x|rounds|rondas)\b|\bx\s?(\d)\b/g, folded)) {
     const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
-    if (!freeOf(blocked, span) || foreign(span.start)) continue;
+    if (!freeOf(blocked, span) || foreign(span.start) || foreignRound(span)) continue;
     spans.push(span);
     const value = Number(m[1] || m[2]);
     if (span.start <= correctionAt) continue;
@@ -721,7 +741,7 @@ function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[];
   for (const [re, value] of COUNT_WORDS) {
     for (const m of matches(re, folded)) {
       const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
-      if (!freeOf(blocked, span) || !freeOf(spans, span) || !usable(span)) continue;
+      if (!freeOf(blocked, span) || !freeOf(spans, span) || !usable(span) || foreignRound(span)) continue;
       // "una vez" inside "una vez mas" is the again-rule's job
       if (/^\s*mas\b/.test(folded.slice(span.end, span.end + 5))) continue;
       spans.push(span);
@@ -733,7 +753,7 @@ function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[];
   // rounds", "once veces" (RT-V2 B6).
   for (const m of matches(COUNT_NUMBER_RE, folded)) {
     const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
-    if (!freeOf(blocked, span) || !freeOf(spans, span) || !usable(span)) continue;
+    if (!freeOf(blocked, span) || !freeOf(spans, span) || !usable(span) || foreignRound(span)) continue;
     spans.push(span);
     const value = /^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1].replace(/\s+/g, " ")] ?? 0;
     if (value === 0) zero = true;
@@ -785,18 +805,23 @@ function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[];
     const add = folded.match(/\b(?:and|y|then|luego|despues),?\s+(?:a\s+|una\s+)?(?:second|segunda)\s+(?:time|vez|round|ronda)\b/);
     if (add && !foreign(add.index ?? 0)) n = 2;
   }
+  // A round phrase governed by another event — "round two of the
+  // boxing match", "la segunda ronda del partido", "otra ronda de
+  // tragos" — is that event's round, not the encounter's (Round 2).
+  const EVENT_AFTER = /^\s*(?:of|de|del)\s+(?:the\s+|la\s+|el\s+)?(?:\w+\s+)?(?:fight|match|game|partido|pelea|combate|juego)\b/;
+  const againForeign = (span: Span) => foreignRound(span) || EVENT_AFTER.test(folded.slice(span.end, span.end + 26));
   let again = false;
   for (const m of matches(AGAIN_AT, folded)) {
     const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length - 1 };
     if (!freeOf(blocked, { start: span.start, end: span.start + 5 })) continue;
-    if (!roundHappened(folded, span.start, span.end) || foreign(span.start)) continue;
+    if (!roundHappened(folded, span.start, span.end) || foreign(span.start) || againForeign(span)) continue;
     again = true;
   }
   for (const m of matches(AGAIN, folded)) {
     const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
     // "again the next morning": the time-of-day word inside is fine, only the start must be free
     if (!freeOf(blocked, { start: span.start, end: Math.min(span.end, span.start + 5) })) continue;
-    if (!roundHappened(folded, span.start, span.end) || foreign(span.start)) continue;
+    if (!roundHappened(folded, span.start, span.end) || foreign(span.start) || againForeign(span)) continue;
     spans.push(span);
     again = true;
   }
@@ -834,11 +859,17 @@ function findNumericRatings(folded: string): Numeric[] {
     const scale = Number(m[2]);
     // 10/29-style dates are not ratings; only N/10 and N/5 with N within the scale count.
     if (value > scale) continue;
+    // A fraction scoring a named thing — "the movie was 10/10" —
+    // scores that thing, not the night (Round 2).
+    if (/\b(?:movie|film|pelicula|hotel|restaurant|restaurante|game|partido|book|libro|dinner|cena|food|comida|show|service|servicio)\s+(?:was|fue|es|estuvo|era)?\s*$/.test(folded.slice(Math.max(0, (m.index ?? 0) - 26), m.index ?? 0))) continue;
     add(m.index ?? 0, (m.index ?? 0) + m[0].length, value, scale);
   }
   for (const m of matches(/\b([1-5](?:[.,]5)?)\s*(?:stars?|estrellas?|flames?|llamas?|hearts?|corazones)\b/g, folded)) {
     // A five-star hotel is a building's rating, not the night's (RT-V2 B12).
     if (/^\s+(?:hotel|motel|resort|restaurant|room|place|bar|hostel|airbnb)\b/.test(folded.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 16))) continue;
+    // …and so is a hotel the text GAVE its stars to: "we gave the
+    // hotel 5 stars online" rates the hotel (Round 2).
+    if (/\b(?:gave|gives|given|rated|le di|le doy)\s+(?:the\s+|a\s+|el\s+|la\s+)?(?:hotel|motel|resort|restaurant|room|place|bar|movie|film)\s*$/.test(folded.slice(Math.max(0, (m.index ?? 0) - 26), m.index ?? 0))) continue;
     add(m.index ?? 0, (m.index ?? 0) + m[0].length, Number(m[1].replace(",", ".")), 5);
   }
   for (const m of matches(/\b(?:rated?(?: it)?|rating|score|le doy|le di|un)\s+(10|[1-9])\b(?!\s*(?:\/|de|out|times|veces|min|hours?|horas?|am|pm|:|dias?|days?))/g, folded)) {
@@ -953,7 +984,7 @@ function fuzzyHits(folded: string, fuzzy: ReturnType<typeof buildRules>["fuzzy"]
  * brand survives company elsewhere in the entry is judged in
  * readEntry, inside the marker's own clause (RT-V2 B10, RT-V2M M27). */
 const SOLO_STRONG = /\b(?:masturbat\w*|masturb\w*|jerk(?:ed|ing)? off|jack(?:ed|ing)? off|by myself|on my own|just me|solo (?:session|moment|time)|me toque|me hice una paja|una paja|por mi cuenta|yo sol[oa]|a solas|solit[oa]|en solitario|momento en solitario)\b/;
-const SOLO_RE = /\b(?:masturbat\w*|masturb\w*|jerk(?:ed|ing)? off|jack(?:ed|ing)? off|by myself|on my own|just me|solo (?:session|moment|time)|me toque|me hice una paja|una paja|por mi cuenta|yo sol[oa]|a solas|solit[oa]|en solitario|momento en solitario)\b|\bsol[oa]\b(?!\s*(?:una vez|con\b|quiero|queria|fue\b|era\b|para\b|porque\b|eso\b))|\balone\b/;
+const SOLO_RE = /\b(?:masturbat\w*|masturb\w*|jerk(?:ed|ing)? off|jack(?:ed|ing)? off|by myself|on my own|just me|solo (?:session|moment|time)|me toque|me hice una paja|una paja|por mi cuenta|yo sol[oa]|a solas|solit[oa]|en solitario|momento en solitario)\b|\bsol[oa]\b(?!\s*(?:una vez|un rato|un momento|un poco|una noche|esta noche|esta manana|esta tarde|ese dia|esa noche|hoy|ayer|anoche|con\b|quiero|queria|fue\b|era\b|para\b|porque\b|eso\b))|\balone\b/;
 const WE_RE = /\b(?:we|us|our|together|nosotros|juntos|lo hicimos|hicimos|fuimos|estuvimos)\b/;
 /** Another person taking part, named or not: in a first-person encounter log, a she/her/he/him
  * on stage IS the partner ("she stimulated me", "I made her finish"). Solo is a conclusion of
@@ -963,8 +994,18 @@ const WE_RE = /\b(?:we|us|our|together|nosotros|juntos|lo hicimos|hicimos|fuimos
 const PARTNER_SIGNS = /\b(?:she|her|he|him|ella)\b/;
 
 const NAME_STOP = new Set(
-  "the a an my her his him our their your me us it this that el la los las un una mi su sus tu nosotros ella el ellos condom condon lube lubricante protection proteccion nothing nada " +
-    "music musica love amor pleasure placer wine vino friends amigos everyone todos".split(" "),
+  (
+    "the a an my her his him our their your me us it this that el la los las un una mi su sus tu nosotros ella el ellos condom condon lube lubricante protection proteccion nothing nada " +
+    // "solo" is the alone/only adverb, never a discovered name: a
+    // partnerless "solo dos veces" used to invent a partner called
+    // Solo (Round 2). A SAVED partner named Solo still matches
+    // through the saved-name path, which never consults this set.
+    // (The parentheses matter: without them .split bound to the
+    // second string alone, string + array coerced the array to a
+    // comma-joined string, and the set held single characters —
+    // the stop list was dead code until Round 2.)
+    "solo sola music musica love amor pleasure placer wine vino friends amigos everyone todos"
+  ).split(" "),
 );
 
 /** Words right before a name that say "the person I was with" (English, Spanish, any mix). */
@@ -1003,6 +1044,14 @@ function partnerCandidates(text: string, folded: string, partners: string[], bub
     const re = new RegExp(`(?<![a-z0-9])${escapeRe(f).replace(/\s+/g, "\\s+")}(?![a-z0-9])`, "g");
     for (const m of matches(re, folded)) {
       const start = m.index ?? 0;
+      // A saved name that is also a month ("April", "May") is the
+      // month when a temporal preposition governs it — "back in
+      // April we laughed" is a date, not a partner (Round 2). A
+      // partner cue ("with April") still names the person.
+      if (MONTHS[f] !== undefined) {
+        const before = folded.slice(Math.max(0, start - 30), start);
+        if (!PARTNER_CUE.test(before) && /(?:back in|in|since|until|from|during|last|next|en|de|desde|hasta)\s*$/.test(before)) continue;
+      }
       if (FUNCTION_NAMES.has(f)) {
         const capitalised = /^[A-ZÁÉÍÓÚÑÜ]/.test(text.slice(start, start + 1));
         if (!capitalised && scoreAt(start, start + m[0].length) < 3) continue;
@@ -1235,7 +1284,9 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     // A place word naming an event ("the office party") is where the
     // evening started, not where it happened (RT-V2M M24).
     if (/^\s+(?:party|fiesta)\b/.test(folded.slice(h.end, h.end + 10))) return true;
-    return /\b(?:after|despues de|from|back from|coming back from|on the way (?:back )?from|left|leaving|de vuelta de|volviendo de|volvimos de|regrese de|regresamos de|saliendo de|salimos de|day|dia|shift|turno|jornada)\b/.test(clause);
+    // A meeting point is a came-from too: "met at the office, then
+    // the hotel" happened at the hotel (Round 2).
+    return /\b(?:after|despues de|from|back from|coming back from|on the way (?:back )?from|left|leaving|met|meet|de vuelta de|volviendo de|volvimos de|regrese de|regresamos de|saliendo de|salimos de|day|dia|shift|turno|jornada)\b/.test(clause);
   };
   // A place the text only came FROM files no place at all: falling
   // back to it put the encounter at the office after "a rough day at
@@ -1312,7 +1363,6 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     const clause = folded.slice(from, clauseEnd);
     const leaveIt = /(?:leave|left|dejame|dejo)\s+(?:me\s+)?$/.test(folded.slice(Math.max(0, soloAt - 10), soloAt));
     const clausePartner = pickPartner(text.slice(from, clauseEnd), clause, ctx.partners ?? [], []).best;
-    const strong = SOLO_STRONG.test(folded.slice(soloAt, soloAt + 24));
     const partnerCued = partner
       ? PARTNER_CUE.test(folded.slice(Math.max(0, partner.start - 30), partner.start)) || ARRIVAL_AFTER.test(folded.slice(partner.end, partner.end + 40))
       : false;
@@ -1323,7 +1373,14 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     // phone — still does not veto.
     const partnerActs = Boolean(partner && partnerCued && partner.start > clauseEnd &&
       (ARRIVAL_AFTER.test(folded.slice(partner.end, partner.end + 40)) || WE_RE.test(folded.slice(partner.end))));
-    solo = !leaveIt && !clausePartner && !WE_RE.test(clause) && !PARTNER_SIGNS.test(clause) && !(strong && partnerCued) && !partnerActs;
+    // A partner the text CUES as taking part ("solo dos veces, con
+    // Ana") vetoes the brand outright: "solo" there is the adverb
+    // "only", and the encounter is hers too. Until Round 2 this case
+    // survived by accident — the phantom partner "Solo" discovered
+    // inside the marker's own clause vetoed the brand in the fake
+    // partner's name; with the phantom dead, the real partner's cue
+    // does the veto in her own.
+    solo = !leaveIt && !clausePartner && !WE_RE.test(clause) && !PARTNER_SIGNS.test(clause) && !partnerCued && !partnerActs;
   }
   // The note strips only what the entry actually captured: the FIRST anchor is the date and
   // placeHit is the place. Any other date or place the text mentions is ambiguous — it was not
@@ -1701,14 +1758,27 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
     // naming a partner still reads as a log line and stays.
     .filter((entry) => {
       if (entry.zero) return false;
+      // Problems alone are a day's weather, not an encounter: a line
+      // carrying only how the day felt ("exhausted and stressed all
+      // day", "terrible back pain all day") files no session
+      // (Round 2). They keep their force as fields ON an encounter
+      // that something else establishes.
       const substance =
         entry.solo || entry.contraception.length > 0 || entry.positions.length > 0 || Boolean(entry.place) ||
         entry.durationMins > 0 || entry.overall > 0 || entry.intensity > 0 || entry.connection > 0 ||
-        entry.satisfaction > 0 || entry.energy > 0 || entry.count > 1 || entry.nextDay ||
-        // A cycle fact is not an encounter, even wearing a problem.
-        (entry.problems.length > 0 && !(entry.problems.length === 1 && entry.problems[0] === "period" &&
-          /\bperiod (?:started|began|came)\b|le (?:vino|bajo)\b|empezo (?:su|el) (?:periodo|regla)\b/.test(fold(entry.source))));
+        entry.satisfaction > 0 || entry.energy > 0 || entry.count > 1 || entry.nextDay;
       if (substance) return true;
+      // …unless the problem is stated as the encounter's aftermath:
+      // "some burning afterwards, she felt irritated down there" is a
+      // session's consequence, not a day's weather. The marker is an
+      // aftermath word, or a partner on stage with no all-day frame.
+      if (entry.problems.length > 0) {
+        const src = fold(entry.source);
+        const aftermath = /\b(afterwards?|despues|al terminar|down there|ahi abajo|entre las piernas)\b/.test(src);
+        const dayFrame = /\b(all day|todo el dia|all week|toda la semana)\b/.test(src);
+        const partnerSign = /\b(?:she|her|ella)\b/.test(src);
+        if (aftermath || (partnerSign && !dayFrame)) return true;
+      }
       return Boolean(entry.partnerName) && entry.dateStated;
     });
 }
