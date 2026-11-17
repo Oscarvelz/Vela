@@ -210,6 +210,11 @@ function entries(tracker: CycleSettings) {
   for (const [start, end] of Object.entries(tracker.ends)) map.set(`e:${start}`, end);
   for (const [date, log] of Object.entries(tracker.days)) map.set(`d:${date}`, JSON.stringify(log));
   for (const [start, reason] of Object.entries(tracker.reasons ?? {})) map.set(`r:${start}`, JSON.stringify(reason));
+  /* "Don't ask again" is an entry like any other (Round 2, RT2-H3-01):
+   * outside entries() and META_KEYS it minted no stamp at all, so a
+   * sync merge revoked it in both orders while reason answers — real
+   * entries — survived. */
+  map.set("q:mute", tracker.muteReasonAsks ? "1" : "0");
   return map;
 }
 
@@ -247,13 +252,20 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
   const days: Record<string, DayLog> = {};
   const reasons: Record<string, CycleReason> = {};
   const stamps: Record<string, number> = {};
+  let muteAsks = false;
   for (const key of keys) {
     const sa = a.stamps[key] ?? 0;
     const sb = b.stamps[key] ?? 0;
     if (sa || sb) stamps[key] = Math.max(sa, sb);
     let value: string | undefined;
     if (sa !== sb) value = sa > sb ? ea.get(key) : eb.get(key);
-    else if (key.startsWith("r:")) {
+    else if (key.startsWith("q:")) {
+      // Never stamped on either side (legacy): a mute is a one-way
+      // door — if either copy carries it, it stands. Stamped copies
+      // resolve by the stamp law above, so a later un-mute in
+      // Settings still revokes it.
+      value = ea.get(key) === "1" || eb.get(key) === "1" ? "1" : "0";
+    } else if (key.startsWith("r:")) {
       // A reason carries its own testimony stamp (`at`). When neither side
       // stamped the entry (legacy data from before r: stamps survived the
       // gate), the newer TESTIMONY wins — never whichever tracker happened
@@ -272,7 +284,8 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
     } else value = (newerSide === a ? ea.get(key) : eb.get(key)) ?? ea.get(key) ?? eb.get(key);
     if (value === undefined) continue;
     const date = key.slice(2);
-    if (key.startsWith("s:")) starts.push(date);
+    if (key.startsWith("q:")) muteAsks = value === "1";
+    else if (key.startsWith("s:")) starts.push(date);
     else if (key.startsWith("e:")) ends[date] = value;
     else if (key.startsWith("r:")) {
       try {
@@ -289,7 +302,7 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
     }
   }
   const meta = b.metaAt > a.metaAt ? b : b.metaAt < a.metaAt ? a : newerSide;
-  const merged = cleanTracker({ ...meta, id: a.id, starts, ends, days, reasons, stamps });
+  const merged = cleanTracker({ ...meta, id: a.id, starts, ends, days, reasons, stamps, muteReasonAsks: muteAsks });
   return { ...merged, updatedAt: Math.max(a.updatedAt, b.updatedAt), metaAt: Math.max(a.metaAt, b.metaAt) };
 }
 

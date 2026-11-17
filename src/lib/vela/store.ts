@@ -353,6 +353,31 @@ export function stampNow(journal: Journal): number {
     if (tracker.metaAt > max) max = tracker.metaAt;
     for (const at of Object.values(tracker.stamps)) if (at > max) max = at;
   }
+  /* The scan covers every stamp the journal carries, not only the
+   * trackers' (Round 2, RT2-H3-05's root): a removal minted below a
+   * future-dated copy it removes — written by a clock that had been
+   * set forward — loses to that copy at the merge. A stamp this
+   * journal mints outranks every stamp this journal has seen. */
+  for (const s of journal.sessions) {
+    if (s.createdAt > max) max = s.createdAt;
+    if ((s.updatedAt ?? 0) > max) max = s.updatedAt ?? 0;
+  }
+  for (const e of journal.encounters) if (e.createdAt > max) max = e.createdAt;
+  for (const p of journal.people ?? []) if (p.updatedAt > max) max = p.updatedAt;
+  for (const m of journal.quietDays ?? []) {
+    if (m.createdAt > max) max = m.createdAt;
+    if ((m.updatedAt ?? 0) > max) max = m.updatedAt ?? 0;
+  }
+  for (const t of journal.pregnancyTests ?? []) if (t.createdAt > max) max = t.createdAt;
+  for (const p of journal.proposals ?? []) {
+    if (p.proposedAt > max) max = p.proposedAt;
+    if ((p.decidedAt ?? 0) > max) max = p.decidedAt ?? 0;
+  }
+  for (const a of journal.settings.anniversaries ?? []) if (a.createdAt > max) max = a.createdAt;
+  for (const c of journal.settings.children ?? []) if (c.createdAt > max) max = c.createdAt;
+  for (const p of journal.settings.archivedPeople ?? []) if (p.archivedAt > max) max = p.archivedAt;
+  if ((journal.settings.batchDraft?.at ?? 0) > max) max = journal.settings.batchDraft?.at ?? 0;
+  if ((journal.settings.coupleMode?.enabledAt ?? 0) > max) max = journal.settings.coupleMode?.enabledAt ?? 0;
   return Math.max(Date.now(), max + 1);
 }
 
@@ -374,6 +399,32 @@ export function partnerRemoved(name: string, deleted: Record<string, number> | u
   const key = partnerKey(name);
   const off = deleted?.[PARTNER_OFF + key] ?? 0;
   return off > 0 && off > (deleted?.[PARTNER_ON + key] ?? 0);
+}
+
+/* The same off/on stamp law for the string classes the merge unions —
+ * custom values and story mutes (Round 2, RT2-H1 B2): a union can only
+ * add, so a removal survives only as a stamp the union reads. Removing
+ * writes the off stamp, re-adding writes the on stamp; the newer one
+ * wins on every device because `deleted` merges by max. A value nobody
+ * ever stamped (it predates the stamps) is kept — the law removes only
+ * what a removal actually named. */
+const CUSTOM_OFF = "custom-:";
+const CUSTOM_ON = "custom+:";
+export function customKey(kind: "places" | "positions" | "problems", value: string) {
+  return `${kind}:${value}`;
+}
+export function customRemoved(kind: "places" | "positions" | "problems", value: string, deleted: Record<string, number> | undefined) {
+  const key = customKey(kind, value);
+  return (deleted?.[CUSTOM_OFF + key] ?? 0) > (deleted?.[CUSTOM_ON + key] ?? 0);
+}
+const MUTE_OFF = "mute-:";
+const MUTE_ON = "mute+:";
+export function muteKey(kind: "person" | "day", value: string) {
+  return kind === "person" ? `person:${partnerKey(value)}` : `day:${value}`;
+}
+export function muteRemoved(kind: "person" | "day", value: string, deleted: Record<string, number> | undefined) {
+  const key = muteKey(kind, value);
+  return (deleted?.[MUTE_OFF + key] ?? 0) > (deleted?.[MUTE_ON + key] ?? 0);
 }
 
 /** Trackers the cap left behind in a merge: ids present on either side but absent from the result.
@@ -401,6 +452,13 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
   const partnerCut = Math.max(local.partnersClearedAt ?? 0, remote.partnersClearedAt ?? 0, local.clearedAt ?? 0, remote.clearedAt ?? 0);
   const deleted = { ...(older.deleted ?? {}) };
   for (const [id, at] of Object.entries(newer.deleted ?? {})) deleted[id] = Math.max(deleted[id] ?? 0, at);
+  /* The wipe's high-water mark (Round 2, RT2-H1 B1): a side journaled
+   * at or before it predates a deliberate erasure, so what it alone
+   * carries — a profile, people, a couple mode switched on before the
+   * wipe — is the wipe's target, not news. Classes with their own cuts
+   * or tombstones resolve below; this stamp guards the wholesale
+   * riders. Life journaled AFTER the mark is untouched by it. */
+  const wipeStamp = Math.max(local.clearedAt ?? 0, remote.clearedAt ?? 0);
   // Per item: the copy with the newer updatedAt wins; a deletion marker newer than the item removes it.
   const keep = <T extends { id: string; createdAt: number; updatedAt?: number }>(items: T[], cut: number) => {
     const map = new Map<string, T>();
@@ -473,19 +531,39 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     cycleSelected: selectedId(cycles, newer.settings.cycleSelected),
     anniversaries: byId(older.settings.anniversaries, newer.settings.anniversaries),
     children: byId(older.settings.children, newer.settings.children),
-    customPlaces: unionList(older.settings.customPlaces, newer.settings.customPlaces),
-    customPositions: unionList(older.settings.customPositions, newer.settings.customPositions),
-    customProblems: unionList(older.settings.customProblems, newer.settings.customProblems),
+    customPlaces: unionList(older.settings.customPlaces, newer.settings.customPlaces).filter((v) => !customRemoved("places", v, deleted)),
+    customPositions: unionList(older.settings.customPositions, newer.settings.customPositions).filter((v) => !customRemoved("positions", v, deleted)),
+    customProblems: unionList(older.settings.customProblems, newer.settings.customProblems).filter((v) => !customRemoved("problems", v, deleted)),
     archivedPeople: [...archivedByKey.values()],
-    storiesMuted: { people: unionList(mutedOlder.people, mutedNewer.people), days: unionList(mutedOlder.days, mutedNewer.days) },
-    ...(draftOlder || draftNewer
-      ? { batchDraft: draftOlder && draftNewer ? (draftNewer.at >= draftOlder.at ? draftNewer : draftOlder) : (draftNewer ?? draftOlder) }
-      : {}),
-    ...(newer.settings.coupleMode ? {} : older.settings.coupleMode ? { coupleMode: older.settings.coupleMode } : {}),
+    storiesMuted: {
+      people: unionList(mutedOlder.people, mutedNewer.people).filter((v) => !muteRemoved("person", v, deleted)),
+      days: unionList(mutedOlder.days, mutedNewer.days).filter((v) => !muteRemoved("day", v, deleted)),
+    },
+    /* The default partner is a claim about the roster: it survives
+     * only if the merged roster still holds her (RT2-H1 B4 — a removed
+     * partner rode the newer settings back in as the default). */
+    defaultPartner: livePartners.has(newer.settings.defaultPartner)
+      ? newer.settings.defaultPartner
+      : livePartners.has(older.settings.defaultPartner)
+        ? older.settings.defaultPartner
+        : "",
+    ...(() => {
+      const draftCut = deleted["batchDraft"] ?? 0;
+      const live = [draftOlder, draftNewer].filter((d) => d && d.at > draftCut);
+      return live.length ? { batchDraft: live.reduce((a, b) => (b!.at >= a!.at ? b : a)) } : { batchDraft: undefined };
+    })(),
+    ...(() => {
+      const modes = [local.settings.coupleMode, remote.settings.coupleMode].filter((m) => m && m.enabledAt > wipeStamp);
+      return modes.length ? { coupleMode: modes.reduce((a, b) => (b!.enabledAt >= a!.enabledAt ? b : a)) } : { coupleMode: undefined };
+    })(),
   };
   // People resolve through mergePeople; whoever the resolution displaces is
-  // tombstoned so the other device resolves identically (V4 B7).
-  const people = mergePeople(local.people, remote.people, deleted);
+  // tombstoned so the other device resolves identically (V4 B7). A person
+  // whose record predates a wipe is filtered before the resolution —
+  // mergePeople's own tombstone filter covers the wiped side's ids, and
+  // this covers the stale side's (RT2-H1 B1).
+  const peopleSide = (list: Journal["people"]) => (wipeStamp > 0 ? (list ?? []).filter((p) => p.updatedAt > wipeStamp) : list);
+  const people = mergePeople(peopleSide(local.people), peopleSide(remote.people), deleted);
   if (people) {
     const keptIds = new Set(people.map((person) => person.id));
     const stamp = Math.max(local.updatedAt, remote.updatedAt);
@@ -495,7 +573,9 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
   }
   return {
     ...newer,
-    profile: newer.profile ?? older.profile,
+    /* A profile journaled after the wipe is a new life; one that only
+     * predates it was erased on purpose (RT2-H1 B1). */
+    profile: [newer, older].find((side) => side.profile && side.updatedAt > wipeStamp)?.profile ?? null,
     settings,
     partners: [...livePartners],
     sessions: renumber(sessions),
@@ -507,7 +587,9 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     deleted,
     migrations: [...new Set([...(local.migrations ?? []), ...(remote.migrations ?? [])])],
     // People merge by id, per person (2.2) — never wholesale like settings.
-    ...(people ? { people } : {}),
+    // mergePeople returns undefined for two empty lists; after a wipe that
+    // emptiness is the answer, not a gap the spread may fill (RT2-H1 B1).
+    ...(people ? { people } : wipeStamp > 0 ? { people: [] } : {}),
     // Proposals union by id (2.2.3): the copy that knows more about a
     // proposal (decided beats proposed) wins; a tombstoned proposal — one
     // already decided, declined, cancelled or executed — never resurfaces.
@@ -518,7 +600,7 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
         if (!prev || (p.decidedAt ?? p.proposedAt) >= (prev.decidedAt ?? prev.proposedAt)) byId.set(p.id, p);
       }
       const merged = [...byId.values()].filter((p) => !(deleted[p.id] >= p.proposedAt));
-      return merged.length ? { proposals: merged } : {};
+      return { proposals: merged };
     })(),
     // Quiet marks union by id (2.2.4): the later writing wins; a tombstoned
     // mark — one that was removed — never resurfaces.
@@ -529,7 +611,7 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
         if (!prev || (m.updatedAt ?? m.createdAt) >= (prev.updatedAt ?? prev.createdAt)) byId.set(m.id, m);
       }
       const merged = [...byId.values()].filter((m) => !(deleted[m.id] >= (m.updatedAt ?? m.createdAt)));
-      return merged.length ? { quietDays: merged } : {};
+      return { quietDays: merged };
     })(),
     // Pregnancy tests union by id (2.2.7): stated events never edit each
     // other, so the union is the whole merge; a tombstone still wins.
@@ -537,7 +619,7 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       const byId = new Map<string, PregnancyTestEvent>();
       for (const t of [...(local.pregnancyTests ?? []), ...(remote.pregnancyTests ?? [])]) byId.set(t.id, t);
       const merged = [...byId.values()].filter((t) => !(deleted[t.id] >= t.createdAt));
-      return merged.length ? { pregnancyTests: cleanPregnancyTests(merged) } : {};
+      return { pregnancyTests: cleanPregnancyTests(merged) };
     })(),
     updatedAt: Math.max(local.updatedAt, remote.updatedAt),
   };
@@ -979,7 +1061,7 @@ type Store = {
   removeTracker: (id: string) => void;
   logPeriodStart: (date: string) => void;
   removePeriodStart: (date: string, id?: string) => void;
-  restoreCycleDates: (snap: { id: string; starts: string[]; ends: Record<string, string>; reasons?: Record<string, CycleReason> }) => void;
+  restoreCycleDates: (snap: { id: string; starts: string[]; ends: Record<string, string>; reasons?: Record<string, CycleReason> }, after?: { id: string; starts: string[]; ends: Record<string, string>; reasons?: Record<string, CycleReason> }) => void;
   setPeriodEnd: (start: string, end: string | null) => void;
   logCycleDay: (date: string, log: Partial<DayLog> | null) => void;
   /** Date whose cycle day log sheet is open. */
@@ -1807,20 +1889,40 @@ export const useJournal = create<Store>((set, get) => {
     toggleMode: () => patchSettings({ mode: get().journal.settings.mode === "night" ? "day" : "night" }),
     setRatingStyle: (ratingStyle) => patchSettings({ ratingStyle }),
     muteStoryDay: (date) => {
-      const m = cleanMuted(get().journal.settings.storiesMuted);
-      if (!m.days.includes(date)) patchSettings({ storiesMuted: { ...m, days: [...m.days, date] } });
+      const journal = get().journal;
+      const m = cleanMuted(journal.settings.storiesMuted);
+      if (m.days.includes(date)) return;
+      commit({
+        ...journal,
+        settings: { ...journal.settings, storiesMuted: { ...m, days: [...m.days, date] } },
+        deleted: { ...(journal.deleted ?? {}), [MUTE_ON + muteKey("day", date)]: stampNow(journal) },
+      });
     },
     muteStoryPerson: (name) => {
-      const m = cleanMuted(get().journal.settings.storiesMuted);
-      if (!m.people.some((p) => p.toLowerCase() === name.toLowerCase())) patchSettings({ storiesMuted: { ...m, people: [...m.people, name] } });
+      const journal = get().journal;
+      const m = cleanMuted(journal.settings.storiesMuted);
+      if (m.people.some((p) => p.toLowerCase() === name.toLowerCase())) return;
+      commit({
+        ...journal,
+        settings: { ...journal.settings, storiesMuted: { ...m, people: [...m.people, name] } },
+        deleted: { ...(journal.deleted ?? {}), [MUTE_ON + muteKey("person", name)]: stampNow(journal) },
+      });
     },
     unmuteStory: (kind, value) => {
-      const m = cleanMuted(get().journal.settings.storiesMuted);
-      patchSettings({
-        storiesMuted:
-          kind === "person"
-            ? { ...m, people: m.people.filter((p) => p.toLowerCase() !== value.toLowerCase()) }
-            : { ...m, days: m.days.filter((d) => d !== value) },
+      const journal = get().journal;
+      const m = cleanMuted(journal.settings.storiesMuted);
+      /* Un-muting mints the off stamp (RT2-H1 B2): the merge unions
+       * the mute lists, so only the stamp keeps the un-mute true. */
+      commit({
+        ...journal,
+        settings: {
+          ...journal.settings,
+          storiesMuted:
+            kind === "person"
+              ? { ...m, people: m.people.filter((p) => p.toLowerCase() !== value.toLowerCase()) }
+              : { ...m, days: m.days.filter((d) => d !== value) },
+        },
+        deleted: { ...(journal.deleted ?? {}), [MUTE_OFF + muteKey(kind, value)]: stampNow(journal) },
       });
     },
     saveAnniversary: (a) => {
@@ -1828,16 +1930,21 @@ export const useJournal = create<Store>((set, get) => {
       patchSettings({ anniversaries: [...list.filter((x) => x.id !== a.id), a] });
     },
     deleteAnniversary: (id) => {
-      const list = cleanAnniversaries(get().journal.settings.anniversaries);
-      patchSettings({ anniversaries: list.filter((x) => x.id !== id) });
+      const journal = get().journal;
+      const list = cleanAnniversaries(journal.settings.anniversaries);
+      /* A deletion without a tombstone is a suggestion the next merge
+       * overrules (RT2-H6-1): the byId union honors `deleted[id]`, so
+       * the removal mints one. */
+      commit({ ...journal, settings: { ...journal.settings, anniversaries: list.filter((x) => x.id !== id) }, deleted: tombstone(journal, [id]) });
     },
     saveChild: (c) => {
       const list = cleanChildren(get().journal.settings.children);
       patchSettings({ children: [...list.filter((x) => x.id !== c.id), c] });
     },
     deleteChild: (id) => {
-      const list = cleanChildren(get().journal.settings.children);
-      patchSettings({ children: list.filter((x) => x.id !== id) });
+      const journal = get().journal;
+      const list = cleanChildren(journal.settings.children);
+      commit({ ...journal, settings: { ...journal.settings, children: list.filter((x) => x.id !== id) }, deleted: tombstone(journal, [id]) });
     },
     setSpeakAs: (speakAs) => {
       const journal = get().journal;
@@ -2066,25 +2173,40 @@ export const useJournal = create<Store>((set, get) => {
       commit({
         ...journal,
         quietDays: (journal.quietDays ?? []).filter((m) => m.id !== id),
-        deleted: { ...journal.deleted, [id]: Date.now() },
+        /* stampNow, not the raw clock (RT2-H3-05): this was the one
+         * tombstone that never got the monotone stamp, so a set-back
+         * clock minted a removal older than the mark it removed. */
+        deleted: tombstone(journal, [id]),
       });
     },
     archivePerson: (name) => {
-      const settings = get().journal.settings;
-      const list = cleanArchived(settings.archivedPeople);
+      const journal = get().journal;
+      const list = cleanArchived(journal.settings.archivedPeople);
       if (list.some((p) => p.name.toLowerCase() === name.trim().toLowerCase())) return;
       patchSettings({
-        archivedPeople: [...list, { name: name.trim(), archivedAt: Date.now(), showInHistory: false, countInStats: false, resurface: false }],
+        archivedPeople: [...list, { name: name.trim(), archivedAt: stampNow(journal), showInHistory: false, countInStats: false, resurface: false }],
       });
     },
     unarchivePerson: (name) => {
-      const list = cleanArchived(get().journal.settings.archivedPeople);
-      patchSettings({ archivedPeople: list.filter((p) => p.name.toLowerCase() !== name.trim().toLowerCase()) });
+      const journal = get().journal;
+      const list = cleanArchived(journal.settings.archivedPeople);
+      /* Un-archiving is a removal too (RT2-H4 B2): it mints the
+       * `archived:` tombstone the merge's archive union reads, or the
+       * other device's copy re-archives her at the next sync. */
+      commit({
+        ...journal,
+        settings: { ...journal.settings, archivedPeople: list.filter((p) => p.name.toLowerCase() !== name.trim().toLowerCase()) },
+        deleted: { ...(journal.deleted ?? {}), [`archived:${partnerKey(name)}`]: stampNow(journal) },
+      });
     },
     setArchivedPref: (name, key, value) => {
-      const list = cleanArchived(get().journal.settings.archivedPeople);
+      const journal = get().journal;
+      const list = cleanArchived(journal.settings.archivedPeople);
+      /* A pref flip is a change to the entry, so the entry's stamp
+       * moves (RT2-H4 B3): the merge resolves equal-stamp copies by
+       * side order, and an unmoved archivedAt lost flips it won. */
       patchSettings({
-        archivedPeople: list.map((p) => (p.name.toLowerCase() === name.trim().toLowerCase() ? { ...p, [key]: value } : p)),
+        archivedPeople: list.map((p) => (p.name.toLowerCase() === name.trim().toLowerCase() ? { ...p, [key]: value, archivedAt: stampNow(journal) } : p)),
       });
     },
     /* The Deletion Law: a person deleted is deleted whole — every session,
@@ -2168,7 +2290,17 @@ export const useJournal = create<Store>((set, get) => {
     setWeekStart: (weekStart) => patchSettings({ weekStart }),
     setDiscreet: (discreet) => patchSettings({ discreet }),
     setAutoLock: (autoLockMins) => patchSettings({ autoLockMins }),
-    setBatchDraft: (batchDraft) => patchSettings({ batchDraft }),
+    setBatchDraft: (batchDraft) => {
+      if (batchDraft) {
+        patchSettings({ batchDraft });
+        return;
+      }
+      /* Clearing the draft mints its tombstone (RT2-H1 B2): the merge
+       * prefers any surviving copy, so only the stamp makes the
+       * clearing stick on the other device. */
+      const journal = get().journal;
+      commit({ ...journal, settings: { ...journal.settings, batchDraft: undefined }, deleted: tombstone(journal, ["batchDraft"]) });
+    },
     setDefaultPartner: (defaultPartner) => patchSettings({ defaultPartner: defaultPartner.trim() }),
     setCycle: (partial, id) => {
       patchTracker((cycle) => cleanCycle({ ...cycle, ...partial }), id, partial);
@@ -2179,12 +2311,36 @@ export const useJournal = create<Store>((set, get) => {
     removePeriodStart: (date, id) => {
       patchTracker((cycle) => withoutStart(cycle, date), id);
     },
-    restoreCycleDates: (snap) => {
+    restoreCycleDates: (snap, after) => {
       // Undo: put back exactly the starts, ends and reasons the tracker had
       // before the change — testimony is part of the dates (V3-04).
       if (!get().journal.settings.cycles.some((tracker) => tracker.id === snap.id)) return;
       patchTracker(
-        (cycle) => cleanCycle({ ...cycle, starts: snap.starts.slice(), ends: { ...snap.ends }, reasons: { ...(snap.reasons ?? {}) } }),
+        (cycle) => {
+          const starts = snap.starts.slice();
+          const ends = { ...snap.ends };
+          const reasons = { ...(snap.reasons ?? {}) };
+          if (after) {
+            /* A sync merge may have landed between the change and the
+             * undo (RT2-H3-03): entries the current tracker carries
+             * that belong to NEITHER the before-state nor the change
+             * itself are the other device's, and the undo does not own
+             * them — they stay. Everything the change touched returns
+             * to the before-state, and the restamp makes that win. */
+            const owned = new Set<string>([
+              ...snap.starts.map((d) => `s:${d}`),
+              ...Object.keys(snap.ends).map((d) => `e:${d}`),
+              ...Object.keys(snap.reasons ?? {}).map((d) => `r:${d}`),
+              ...after.starts.map((d) => `s:${d}`),
+              ...Object.keys(after.ends).map((d) => `e:${d}`),
+              ...Object.keys(after.reasons ?? {}).map((d) => `r:${d}`),
+            ]);
+            for (const d of cycle.starts) if (!owned.has(`s:${d}`) && !starts.includes(d)) starts.push(d);
+            for (const [d, e] of Object.entries(cycle.ends)) if (!owned.has(`e:${d}`)) ends[d] = e;
+            for (const [d, r] of Object.entries(cycle.reasons ?? {})) if (!owned.has(`r:${d}`)) reasons[d] = r;
+          }
+          return cleanCycle({ ...cycle, starts, ends, reasons });
+        },
         snap.id,
       );
     },
@@ -2273,12 +2429,21 @@ export const useJournal = create<Store>((set, get) => {
       const key = kind === "places" ? "customPlaces" : kind === "positions" ? "customPositions" : "customProblems";
       const builtins = kind === "places" ? PLACES : kind === "positions" ? POSITIONS : PROBLEMS.map((item) => item[0]);
       if (journal.settings[key].includes(trimmed) || (builtins as readonly string[]).includes(trimmed)) return;
-      patchSettings({ [key]: [...journal.settings[key], trimmed] });
+      commit({
+        ...journal,
+        settings: { ...journal.settings, [key]: [...journal.settings[key], trimmed] },
+        deleted: { ...(journal.deleted ?? {}), [CUSTOM_ON + customKey(kind, trimmed)]: stampNow(journal) },
+      });
     },
     removeCustom: (kind, value) => {
       const journal = get().journal;
       const key = kind === "places" ? "customPlaces" : kind === "positions" ? "customPositions" : "customProblems";
-      patchSettings({ [key]: journal.settings[key].filter((item) => item !== value) });
+      /* The off stamp is what the merge's union reads (RT2-H1 B2). */
+      commit({
+        ...journal,
+        settings: { ...journal.settings, [key]: journal.settings[key].filter((item) => item !== value) },
+        deleted: { ...(journal.deleted ?? {}), [CUSTOM_OFF + customKey(kind, value)]: stampNow(journal) },
+      });
     },
     eraseAll: (choice) => {
       const journal = get().journal;
@@ -2296,12 +2461,19 @@ export const useJournal = create<Store>((set, get) => {
         ? []
         : journal.sessions.map((session) => (choice.encounters ? { ...session, encounterId: "", updatedAt: now } : session));
       const encounters = choice.sessions ? [] : choice.encounters ? attachOrphans(sessions, [], now) : journal.encounters;
+      /* Customs erased here get the same off stamps removeCustom mints
+       * (RT2-H1 B2): the ceremony is a removal like any other. */
+      const erasedStamps: Record<string, number> = {};
+      if (choice.places) for (const v of journal.settings.customPlaces) erasedStamps[CUSTOM_OFF + customKey("places", v)] = stampNow(journal);
+      if (choice.positions) for (const v of journal.settings.customPositions) erasedStamps[CUSTOM_OFF + customKey("positions", v)] = stampNow(journal);
+      if (choice.problems) for (const v of journal.settings.customProblems) erasedStamps[CUSTOM_OFF + customKey("problems", v)] = stampNow(journal);
       commit({
         ...journal,
         settings,
         partners: choice.partners ? [] : journal.partners,
         sessions,
         encounters,
+        ...(Object.keys(erasedStamps).length ? { deleted: { ...(journal.deleted ?? {}), ...erasedStamps } } : {}),
         sessionsClearedAt: choice.sessions ? now : journal.sessionsClearedAt,
         encountersClearedAt: dropEncounters ? now : journal.encountersClearedAt,
         partnersClearedAt: choice.partners ? now : journal.partnersClearedAt,

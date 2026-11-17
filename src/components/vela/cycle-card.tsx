@@ -132,7 +132,7 @@ export function useCycleUndo() {
   const restore = useJournal((s) => s.restoreCycleDates);
   const showToast = useJournal((s) => s.showToast);
   const t = useT();
-  const [snap, setSnap] = useState<CycleDates | null>(null);
+  const [snap, setSnap] = useState<{ before: CycleDates; after: CycleDates } | null>(null);
   useEffect(() => {
     if (!snap) return;
     const id = setTimeout(() => setSnap(null), 8000);
@@ -143,11 +143,14 @@ export function useCycleUndo() {
     change: (run: () => void, trackerId?: string) => {
       const before = datesOf(trackerId);
       run();
-      setSnap(before);
+      /* The after-state rides along (RT2-H3-03): at undo time the store
+       * tells the change's own entries apart from a merged-in foreign
+       * entry by membership in one of these two snapshots. */
+      setSnap({ before, after: datesOf(trackerId ?? before.id) });
     },
     undo: () => {
       if (snap) {
-        restore(snap);
+        restore(snap.before, snap.after);
         showToast(t("cyUndone"));
       }
       setSnap(null);

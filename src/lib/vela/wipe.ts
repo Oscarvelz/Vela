@@ -93,6 +93,29 @@ export function wipedJournal(journal: Journal, now: number): Journal {
   };
   const deleted: Record<string, number> = { ...(journal.deleted ?? {}) };
   for (const proposal of journal.proposals ?? []) deleted[proposal.id] = now;
+  /* Every other class the merge unions by id or by value gets its
+   * tombstone too (Round 2, RT2-H1 B1): without one, a stale device's
+   * copy walks straight back in — trackers (the `cycle:` key format is
+   * trackerTombstone's, cycle-trackers.ts), quiet marks, pregnancy
+   * tests, anniversaries, children, people, the archive (`archived:`
+   * + partnerKey), and the value classes the merge unions as strings
+   * (customs and story mutes ride the off/on stamp pairs the store's
+   * merge reads: `custom-:` / `mute-:`, keyed exactly as the actions
+   * mint them). The clearedAt stamps in the return below remain the
+   * armor for the cut classes (sessions, encounters, partners). */
+  for (const tracker of journal.settings.cycles ?? []) deleted[`cycle:${tracker.id}`] = now;
+  for (const mark of journal.quietDays ?? []) deleted[mark.id] = now;
+  for (const test of journal.pregnancyTests ?? []) deleted[test.id] = now;
+  for (const item of journal.settings.anniversaries ?? []) deleted[item.id] = now;
+  for (const item of journal.settings.children ?? []) deleted[item.id] = now;
+  for (const person of journal.people ?? []) deleted[person.id] = now;
+  for (const person of journal.settings.archivedPeople ?? []) deleted[`archived:${person.name.trim().toLocaleLowerCase()}`] = now;
+  for (const value of journal.settings.customPlaces ?? []) deleted[`custom-:places:${value}`] = now;
+  for (const value of journal.settings.customPositions ?? []) deleted[`custom-:positions:${value}`] = now;
+  for (const value of journal.settings.customProblems ?? []) deleted[`custom-:problems:${value}`] = now;
+  for (const value of journal.settings.storiesMuted?.people ?? []) deleted[`mute-:person:${value.trim().toLocaleLowerCase()}`] = now;
+  for (const value of journal.settings.storiesMuted?.days ?? []) deleted[`mute-:day:${value}`] = now;
+  if (journal.settings.batchDraft) deleted["batchDraft"] = now;
   return {
     profile: null,
     settings,
