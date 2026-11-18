@@ -148,7 +148,20 @@ export function selectedId(trackers: CycleTracker[], wanted: unknown): string {
  * object on every call, which zustand's identity check reads as a
  * change — the wiped journal (cycles: []) was the one state that hit
  * it on every render, rescued only by the wipe's synchronous lock. */
-const EMPTY_ACTIVE = defaultTracker();
+/* Frozen (Round 4, H5-L6): this singleton is THE object every
+ * empty-list read returns for the life of the page, consumed by the
+ * calendar and the cycle card. It was safe by convention only — no
+ * in-place writes exist today — and the first future direct write
+ * would have corrupted the shared c1 shape for the whole session.
+ * The freeze covers the tracker and its nested records. */
+const EMPTY_ACTIVE = (() => {
+  const t = defaultTracker();
+  Object.freeze(t.stamps);
+  Object.freeze(t.starts);
+  Object.freeze(t.ends);
+  Object.freeze(t.days);
+  return Object.freeze(t);
+})();
 
 export function activeTracker(trackers: CycleTracker[], wanted: unknown): CycleTracker {
   const id = selectedId(trackers, wanted);

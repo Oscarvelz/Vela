@@ -70,7 +70,9 @@ export function goToGo(go: Go, topicId: string) {
             ? "home-top"
             : go.tab === "history"
               ? "hist-search"
-              : undefined;
+              : go.tab === "calendar"
+                ? "quiet-block"
+                : undefined;
   requestSpotFocus(go.spot, topicId, fallbackSpot);
 }
 

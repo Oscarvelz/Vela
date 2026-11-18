@@ -49,11 +49,12 @@ export function SpotFocus() {
       alive.current = false;
       const gen = (genRef.current += 1);
       const started = Date.now();
-      const poll = window.setInterval(() => {
-        if (gen !== genRef.current) {
-          window.clearInterval(poll);
-          return;
-        }
+      /* ONE resolver for every chain (Round 4, H5-L1): the poll and
+       * the settle's re-resolve used to be two hand-copied chains,
+       * and the copy omitted the bubble tier — a door that landed on
+       * its bubble and lost the node mid-settle rang the fallback
+       * element instead, a confident ring on the wrong control. */
+      const resolve = (): Element | null => {
         let el: Element | null = null;
         if (req.spot) el = document.querySelector(`[data-spot~="${req.spot}"]`);
         if (!el && req.topicId) {
@@ -68,6 +69,14 @@ export function SpotFocus() {
           }
         }
         if (!el && req.fallbackSpot) el = document.querySelector(`[data-spot~="${req.fallbackSpot}"]`);
+        return el;
+      };
+      const poll = window.setInterval(() => {
+        if (gen !== genRef.current) {
+          window.clearInterval(poll);
+          return;
+        }
+        const el = resolve();
         if (!el) {
           if (Date.now() - started > 6000) window.clearInterval(poll);
           return;
@@ -92,10 +101,7 @@ export function SpotFocus() {
           // measures as zeros forever and the ring would freeze at
           // its birth rect. Re-resolve through the same chain.
           if (!target.isConnected) {
-            const again =
-              (req.spot && document.querySelector(`[data-spot~="${req.spot}"]`)) ||
-              (req.fallbackSpot && document.querySelector(`[data-spot~="${req.fallbackSpot}"]`)) ||
-              null;
+            const again = resolve();
             if (!again) return null;
             target = again;
           }

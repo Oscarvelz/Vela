@@ -187,5 +187,63 @@ console.log(`(g) copy keys EN=${enKeys.length} ES=${esKeys.length}, mn keys=${en
   ok(`(i) ${segments} where-line names checked against the copy inventory`);
 }
 
+// (j) check (i)'s blind spots close (RT4-H5 L2): LINKS carries its own
+// where-lines, judged by the same rule — the [["Statistics"]] pair
+// named a tab that does not exist ("Insights"/"Análisis") while the
+// topic where-lines beside it had already been corrected. And BODY
+// PROSE speaks arrow paths too (bloqueo's "→ Privacy" named no
+// section): every arrow segment in how/example/what must OPEN with a
+// name the app speaks — a copy value as a word-prefix of the segment.
+{
+  const inventory: [Set<string>, Set<string>] = [
+    new Set(Object.values(STR.en) as string[]),
+    new Set(Object.values(STR.es) as string[]),
+  ];
+  const whitelist: [Set<string>, Set<string>] = [new Set(["Settings"]), new Set(["Ajustes"])];
+  let linkSegments = 0;
+  for (const [term, link] of Object.entries(LINKS)) {
+    if (!link.go?.where) continue;
+    for (const lang of LANGS) {
+      const line = link.go.where[lang];
+      for (const rawSegment of line.split("→")) {
+        const head = rawSegment.split(",")[0].trim();
+        if (!head) continue;
+        linkSegments += 1;
+        if (!inventory[lang].has(head) && !whitelist[lang].has(head)) {
+          fail(`link ${term} where[${lang}] names "${head}", which no copy string speaks`);
+        }
+      }
+    }
+  }
+  ok(`(j) ${linkSegments} LINKS where-line names checked against the copy inventory`);
+  let prosePaths = 0;
+  const opensWithName = (segment: string, lang: 0 | 1) => {
+    const words = segment.replace(/\[\[|\]\]/g, "").split(/\s+/).filter(Boolean);
+    for (let n = Math.min(5, words.length); n >= 1; n -= 1) {
+      const prefix = words.slice(0, n).join(" ").replace(/[.,:;]$/, "");
+      if (inventory[lang].has(prefix) || whitelist[lang].has(prefix)) return true;
+    }
+    return false;
+  };
+  for (const topic of MANUAL_TOPICS) {
+    // Every prose field the topic carries (what/how/calc/example/
+    // cases): a field list would blind the check to the next field
+    // the manual grows, so the census walks whatever pairs exist.
+    for (const field of Object.keys(topic)) {
+      const pair = (topic as unknown as Record<string, unknown>)[field] as [string, string] | undefined;
+      if (!Array.isArray(pair) || typeof pair[0] !== "string" || typeof pair[1] !== "string") continue;
+      for (const lang of LANGS) {
+        for (const m of pair[lang].matchAll(/→\s*([^→\n]+)/g)) {
+          prosePaths += 1;
+          if (!opensWithName(m[1].trim(), lang)) {
+            fail(`topic ${topic.id} ${field}[${lang}] arrow path opens with "${m[1].trim().slice(0, 40)}", which no copy string speaks`);
+          }
+        }
+      }
+    }
+  }
+  ok(`(j) ${prosePaths} body-prose arrow paths checked against the copy inventory`);
+}
+
 console.log(failures === 0 ? "MANUAL LINT: ALL PASS" : `MANUAL LINT: ${failures} FAILURES`);
 process.exit(failures === 0 ? 0 : 1);

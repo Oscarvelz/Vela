@@ -134,7 +134,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "La huella solo desbloquea este dispositivo, rápido. No prueba nada ante la nube, y quien sepa la frase seguirá abriendo el diario.",
         ],
         how: [
-          "In [[Settings]] → Privacy you choose how soon Vela asks again: at once, after a while, or only when you tap Lock now.\nIf the fingerprint ever fails, the passphrase always works — the lock falls back to it.\nThe lock is per device: your phone and your tablet each keep their own.",
+          "In [[Settings]] → Privacy & Security you choose how soon Vela asks again: at once, after a while, or only when you tap Lock now.\nIf the fingerprint ever fails, the passphrase always works — the lock falls back to it.\nThe lock is per device: your phone and your tablet each keep their own.",
           "En [[Ajustes]] → Privacidad eliges cuánto tarda Vela en volver a pedir: enseguida, después de un rato, o solo cuando tocas Bloquear ahora.\nSi la huella falla alguna vez, la frase siempre funciona: el bloqueo vuelve a ella.\nEl bloqueo es por dispositivo: tu teléfono y tu tableta guardan cada uno el suyo.",
         ],
         example: [
@@ -1044,8 +1044,8 @@ export const LINKS: Record<string, { topic: string; go?: Go }> = {
   Inicio: { topic: "registrar", go: { tab: "home", where: ["Home", "Inicio"] } },
   Calendar: { topic: "dias-quietos", go: { tab: "calendar", where: ["Calendar", "Calendario"] } },
   Calendario: { topic: "dias-quietos", go: { tab: "calendar", where: ["Calendar", "Calendario"] } },
-  Statistics: { topic: "como-lee", go: { tab: "insights", where: ["Statistics", "Estadísticas"] } },
-  Estadísticas: { topic: "como-lee", go: { tab: "insights", where: ["Statistics", "Estadísticas"] } },
+  Statistics: { topic: "como-lee", go: { tab: "insights", where: ["Insights", "Análisis"] } },
+  Estadísticas: { topic: "como-lee", go: { tab: "insights", where: ["Insights", "Análisis"] } },
   "Log a batch": { topic: "lector-lotes" },
   "Registrar en lote": { topic: "lector-lotes" },
   "batch door": { topic: "lector-lotes" },
