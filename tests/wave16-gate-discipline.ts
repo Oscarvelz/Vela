@@ -135,19 +135,24 @@ function side(roster: string[], def: string, updatedAt: number): Journal {
   // specimen originally asserted a person-only tombstone executes.
   // RT4-H1 B2 proved the same bare shape is also a session's
   // tombstone whose session already died on its own device, and a
-  // flat stamp cannot tell the two apart. What CAN is the
-  // partner-off witness: the app's person-deletion door has minted
-  // it beside her id tombstone since 2.2.26, so a tombstone with
-  // the witness is provably hers and executes; one without it
-  // cannot prove its class, and the tombstone keeps only the
+  // flat stamp cannot tell the two apart. What CAN is the witness:
+  // a tombstone with it is provably hers and executes; one without
+  // it cannot prove its class, and the tombstone keeps only the
   // meaning it can prove — she is re-seated. A legacy (pre-witness)
   // person deletion is the accepted cost: she returns re-seated
   // and can be deleted again, now with the witness; an execution
   // by a session's tombstone would be silent and final.
+  // AMENDED AGAIN in Round 5 (2.2.46), correction stated: the
+  // witness is no longer the partner-off stamp — RT5-H1 B1/B2
+  // proved roster acts mint it too (arming a foreign tombstone)
+  // and the max-merge can outgrow it (the verdict then depends on
+  // merge grouping). The witness is now the dedicated
+  // `person-:<id>` key, minted only by person deletions and proven
+  // by presence. The law this control guards is unchanged.
   const ctrl = journalFromUnknown({ ...raw, sessions: [], deleted: { "shared-1": now } }, "en");
   check("B4 control (amended): a witness-less person-only tombstone cannot prove its class — she is re-seated", ctrl.people.some((p) => p.name === "Lucía" && p.id !== "shared-1"));
-  const ctrlW = journalFromUnknown({ ...raw, sessions: [], deleted: { "shared-1": now, "partner-:lucía": now } }, "en");
-  check("B4 control (amended): with the partner-off witness, a person-only tombstone still removes her", !ctrlW.people.some((p) => p.name === "Lucía"));
+  const ctrlW = journalFromUnknown({ ...raw, sessions: [], deleted: { "shared-1": now, "person-:shared-1": now } }, "en");
+  check("B4 control (amended): with the person-deletion witness, a person-only tombstone still removes her", !ctrlW.people.some((p) => p.name === "Lucía"));
 }
 
 /* ——— L4: the wiped journal's active tracker is a stored shape ——— */

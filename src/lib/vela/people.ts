@@ -192,8 +192,23 @@ function hash36(text: string): string {
 export function reseatPersonId(person: { id: string; name: string; createdAt: number }): string {
   return `p${hash36(`${person.id}:${person.createdAt}:${person.name}`)}`;
 }
-export function reseatRecordId(prefix: string, rec: { id: string; createdAt?: number }): string {
-  return `${prefix}${hash36(`${rec.id}:${rec.createdAt ?? 0}`)}`;
+export function reseatRecordId(prefix: string, rec: { id: string; createdAt?: number } & Record<string, unknown>): string {
+  /* The seat hashes the record's flat scalar identity in a FIXED
+   * field order (Round 5, RT5-H6 B3): two records sharing one id —
+   * twins the old id:createdAt seat mapped onto a single fresh id,
+   * so dedupe executed one of them — seat distinctly whenever any
+   * scalar tells them apart. Flat fields only, in canonical order:
+   * the hash must be identical at the gate (raw record) and at the
+   * merge (cleaned record), and nested key order is not stable
+   * across those doors. Twins identical in every scalar here are
+   * substance duplicates; their collapse is dedupe's own law. */
+  const FIELDS = ["createdAt", "updatedAt", "proposedAt", "date", "from", "to", "partnerName", "name", "monthDay", "birthdate"] as const;
+  const parts: string[] = [];
+  for (const f of FIELDS) {
+    const v = rec[f];
+    if (typeof v === "string" || typeof v === "number") parts.push(`${f}=${v}`);
+  }
+  return `${prefix}${hash36(`${rec.id}:${rec.createdAt ?? 0}:${parts.join("|")}`)}`;
 }
 
 /* ── Proposals (2.2.3) ────────────────────────────────────────────────────── */

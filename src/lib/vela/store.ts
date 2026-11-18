@@ -3,7 +3,7 @@ import { PLACES, POSITIONS, PROBLEMS, namedPlace, type Mode, type RatingStyle, t
 import { coverDates, coveringEncounter, partnerKey, samePartner, spanDays } from "./encounters";
 import { MIN_PASSPHRASE, asEnvelope, newVaultKey, open, openWithCandidates, randomBytes, seal, toB64, type Envelope, type VaultKey } from "./vault-crypto";
 import { deleteSync, deleteVault, readUi, readVault, writeUi, writeVault } from "./vault-db";
-import { addDays, finiteStamp, isRealDate, nowTime, pad, todayStr } from "./dates";
+import { addDays, finiteStamp, isRealDate, nowTime, pad, setStamp, todayStr } from "./dates";
 import type { BatchEntry } from "./batch";
 import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
@@ -319,13 +319,14 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
      * tombstone would execute her at this gate. When a tombstone is
      * about to execute a person whose id ANY other class in the same
      * journal also carries, the collision is repaired, not obeyed.
-     * Direction is proven by the partner-off witness (Round 4): a
-     * person deletion mints `partner-:<key>` beside her id tombstone,
-     * so when the witness matches, the tombstone is HERS — the other
-     * records are re-seated and she still dies. Without it, she is
-     * re-seated under a deterministic fresh id and every reference
-     * (proposal signatures, voice attributions, tracker ownership)
-     * is re-pointed, so the tombstone keeps only the meaning it can
+     * Direction is proven by the person-deletion witness (Round 5):
+     * a person deletion mints `person-:<her id>` beside her id
+     * tombstone — a key no roster act can mint — so its presence
+     * proves the tombstone is HERS: the other records are re-seated
+     * and she still dies. Without it, she is re-seated under a
+     * deterministic fresh id and every reference (proposal
+     * signatures, voice attributions, tracker ownership) is
+     * re-pointed, so the tombstone keeps only the meaning it can
      * prove — the record of its own class. */
     let peopleSource = data.people;
     let proposalsSource = data.proposals;
@@ -345,6 +346,57 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
         ...(settings.anniversaries ?? []).map((a) => a.id),
         ...(settings.children ?? []).map((c) => c.id),
       ]);
+      /* Direction B's work, shared by the person loop and the
+       * person-less pass below: re-seat EVERY record of another
+       * class carrying the id (Round 5, RT5-H6 B3 — the old find()
+       * seated only the first twin and the tombstone filter then
+       * executed the second). */
+      const reseatOthersAtGate = (oldId: string) => {
+        const sessionSeats = new Map<string, string>();
+        for (const sRec of sessions.filter((s) => s.id === oldId)) {
+          const fresh = reseatRecordId("s", sRec);
+          if (!sessionSeats.has(oldId)) sessionSeats.set(oldId, fresh);
+          sRec.id = fresh;
+        }
+        if (sessionSeats.size > 0) {
+          proposalsSource = (Array.isArray(proposalsSource) ? proposalsSource : []).map((q) =>
+            q && typeof q === "object" && (q as { kind?: unknown }).kind === "delete-session" && (q as { targetId?: unknown }).targetId === oldId
+              ? { ...(q as object), targetId: sessionSeats.get(oldId) }
+              : q,
+          ) as Journal["proposals"];
+        }
+        const encounterSeats = new Map<string, string>();
+        for (const eRec of encounters.filter((e) => e.id === oldId)) {
+          const fresh = reseatRecordId("e", eRec);
+          if (!encounterSeats.has(oldId)) encounterSeats.set(oldId, fresh);
+          eRec.id = fresh;
+        }
+        if (encounterSeats.size > 0) {
+          for (const s of sessions) if (s.encounterId === oldId) s.encounterId = encounterSeats.get(oldId)!;
+          proposalsSource = (Array.isArray(proposalsSource) ? proposalsSource : []).map((q) =>
+            q && typeof q === "object" && (q as { kind?: unknown }).kind === "delete-encounter" && (q as { targetId?: unknown }).targetId === oldId
+              ? { ...(q as object), targetId: encounterSeats.get(oldId) }
+              : q,
+          ) as Journal["proposals"];
+        }
+        quietSource = (Array.isArray(quietSource) ? quietSource : []).map((q) =>
+          q && typeof q === "object" && (q as { id?: unknown }).id === oldId
+            ? { ...(q as object), id: reseatRecordId("q", { id: oldId, createdAt: finiteStamp((q as { createdAt?: unknown }).createdAt) ?? 0 }) }
+            : q,
+        ) as Journal["quietDays"];
+        testsSource = (Array.isArray(testsSource) ? testsSource : []).map((q) =>
+          q && typeof q === "object" && (q as { id?: unknown }).id === oldId
+            ? { ...(q as object), id: reseatRecordId("t", { id: oldId, createdAt: finiteStamp((q as { createdAt?: unknown }).createdAt) ?? 0 }) }
+            : q,
+        ) as Journal["pregnancyTests"];
+        proposalsSource = (Array.isArray(proposalsSource) ? proposalsSource : []).map((q) =>
+          q && typeof q === "object" && (q as { id?: unknown }).id === oldId
+            ? { ...(q as object), id: reseatRecordId("prop-", { id: oldId, createdAt: finiteStamp((q as { proposedAt?: unknown }).proposedAt) ?? 0 }) }
+            : q,
+        ) as Journal["proposals"];
+        settings.anniversaries = (settings.anniversaries ?? []).map((a) => (a.id === oldId ? { ...a, id: reseatRecordId("a", a) } : a));
+        settings.children = (settings.children ?? []).map((c) => (c.id === oldId ? { ...c, id: reseatRecordId("c", c) } : c));
+      };
       for (const item of data.people) {
         if (!item || typeof item !== "object") continue;
         const p = item as { id?: unknown; updatedAt?: unknown; name?: unknown; createdAt?: unknown };
@@ -352,48 +404,10 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
         const at = deletedMap[p.id] ?? 0;
         if (!(at > 0 && at >= (finiteStamp(p.updatedAt) ?? 0))) continue;
         const oldId = p.id;
-        const witness = typeof p.name === "string" && (deletedMap[PARTNER_OFF + partnerKey(p.name)] ?? 0) >= at;
+        const witness = personWitnessed(deletedMap, oldId);
         if (witness && !otherIds.has(oldId)) continue; // a true person deletion, no collision: the filter below executes her
         if (witness) {
-          /* Direction B: the tombstone is hers — re-seat the others. */
-          const sRec = sessions.find((s) => s.id === oldId);
-          if (sRec) {
-            const fresh = reseatRecordId("s", sRec);
-            sRec.id = fresh;
-            proposalsSource = (Array.isArray(proposalsSource) ? proposalsSource : []).map((q) =>
-              q && typeof q === "object" && (q as { kind?: unknown }).kind === "delete-session" && (q as { targetId?: unknown }).targetId === oldId
-                ? { ...(q as object), targetId: fresh }
-                : q,
-            ) as Journal["proposals"];
-          }
-          const eRec = encounters.find((e) => e.id === oldId);
-          if (eRec) {
-            const fresh = reseatRecordId("e", eRec);
-            eRec.id = fresh;
-            for (const s of sessions) if (s.encounterId === oldId) s.encounterId = fresh;
-            proposalsSource = (Array.isArray(proposalsSource) ? proposalsSource : []).map((q) =>
-              q && typeof q === "object" && (q as { kind?: unknown }).kind === "delete-encounter" && (q as { targetId?: unknown }).targetId === oldId
-                ? { ...(q as object), targetId: fresh }
-                : q,
-            ) as Journal["proposals"];
-          }
-          quietSource = (Array.isArray(quietSource) ? quietSource : []).map((q) =>
-            q && typeof q === "object" && (q as { id?: unknown }).id === oldId
-              ? { ...(q as object), id: reseatRecordId("q", { id: oldId, createdAt: finiteStamp((q as { createdAt?: unknown }).createdAt) ?? 0 }) }
-              : q,
-          ) as Journal["quietDays"];
-          testsSource = (Array.isArray(testsSource) ? testsSource : []).map((q) =>
-            q && typeof q === "object" && (q as { id?: unknown }).id === oldId
-              ? { ...(q as object), id: reseatRecordId("t", { id: oldId, createdAt: finiteStamp((q as { createdAt?: unknown }).createdAt) ?? 0 }) }
-              : q,
-          ) as Journal["pregnancyTests"];
-          proposalsSource = (Array.isArray(proposalsSource) ? proposalsSource : []).map((q) =>
-            q && typeof q === "object" && (q as { id?: unknown }).id === oldId
-              ? { ...(q as object), id: reseatRecordId("prop-", { id: oldId, createdAt: finiteStamp((q as { proposedAt?: unknown }).proposedAt) ?? 0 }) }
-              : q,
-          ) as Journal["proposals"];
-          settings.anniversaries = (settings.anniversaries ?? []).map((a) => (a.id === oldId ? { ...a, id: reseatRecordId("a", a) } : a));
-          settings.children = (settings.children ?? []).map((c) => (c.id === oldId ? { ...c, id: reseatRecordId("c", c) } : c));
+          reseatOthersAtGate(oldId);
           continue;
         }
         /* Direction A: she is re-seated; the tombstone keeps its class. */
@@ -419,6 +433,18 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
           if (s.partnerVoice && s.partnerVoice.by === oldId) s.partnerVoice = { ...s.partnerVoice, by: fresh };
         }
         settings.cycles = (settings.cycles ?? []).map((t) => (t.ownerId === oldId ? { ...t, ownerId: fresh } : t));
+      }
+      /* A witnessed tombstone whose person is not in this blob at
+       * all (Round 5, RT5-H1 B2's other grouping): the witness
+       * still proves the tombstone is a person's, so the records
+       * of other classes carrying the id are re-seated here too —
+       * otherwise the class filters below execute them by a
+       * tombstone that was never theirs, and the verdict depends
+       * on which records happen to share the journal. */
+      for (const key of Object.keys(deletedMap)) {
+        if (!key.startsWith(PERSON_OFF)) continue;
+        const id = key.slice(PERSON_OFF.length);
+        if ((deletedMap[id] ?? 0) > 0) reseatOthersAtGate(id);
       }
     }
     // A tombstoned person never takes a seat at the gate: the filter runs
@@ -531,12 +557,15 @@ export function repairPersonIdCollision(journal: Journal, oldId: string): Journa
 
 /**
  * The mirror repair (Round 4, RT4-H6 B1): when the tombstone's
- * proven owner is the PERSON — her deletion also mints the
- * partner-off witness — the records of other classes that share her
- * id are the ones re-seated, each under a deterministic fresh id,
- * with the references that name them re-pointed (a session's
- * proposal target, an encounter's sessions). She keeps her id, so
- * her own tombstone executes exactly her.
+ * proven owner is the PERSON — her deletion mints the
+ * person-deletion witness — the records of other classes that
+ * share her id are the ones re-seated, each under its OWN
+ * deterministic fresh id (Round 5, RT5-H6 B3: twins sharing the id
+ * seat distinctly, or dedupe executes one), with the references
+ * that name them re-pointed (a session's proposal target, an
+ * encounter's sessions — to the first twin's seat, the only honest
+ * reading of a target that named the shared id). She keeps her id,
+ * so her own tombstone executes exactly her.
  */
 export function reseatOtherClasses(journal: Journal, personId: string): Journal {
   const has = {
@@ -554,12 +583,17 @@ export function reseatOtherClasses(journal: Journal, personId: string): Journal 
   return {
     ...journal,
     sessions: journal.sessions.map((s) => ({
-      ...(s.id === personId ? { ...s, id: sessionFresh } : s),
+      ...(s.id === personId ? { ...s, id: reseatRecordId("s", s) } : s),
       ...(has.encounter && s.encounterId === personId ? { encounterId: encounterFresh } : {}),
     })),
-    encounters: journal.encounters.map((e) => (e.id === personId ? { ...e, id: encounterFresh } : e)),
-    quietDays: journal.quietDays?.map((m) => (m.id === personId ? { ...m, id: reseatRecordId("q", m) } : m)),
-    pregnancyTests: journal.pregnancyTests?.map((t) => (t.id === personId ? { ...t, id: reseatRecordId("t", t) } : t)),
+    encounters: journal.encounters.map((e) => (e.id === personId ? { ...e, id: reseatRecordId("e", e) } : e)),
+    /* Quiet marks, tests and proposals seat from the SAME
+     * synthetic shape the gate uses ({id, createdAt} — proposals
+     * carry proposedAt in that slot): the seat hash reads scalar
+     * fields, so the two doors must hash the same record shape or
+     * the same record lands on two seats (Round 5 fence catch). */
+    quietDays: journal.quietDays?.map((m) => (m.id === personId ? { ...m, id: reseatRecordId("q", { id: m.id, createdAt: m.createdAt }) } : m)),
+    pregnancyTests: journal.pregnancyTests?.map((t) => (t.id === personId ? { ...t, id: reseatRecordId("t", { id: t.id, createdAt: t.createdAt }) } : t)),
     proposals: journal.proposals?.map((p) => ({
       ...(p.id === personId ? { ...p, id: reseatRecordId("prop-", { id: p.id, createdAt: p.proposedAt }) } : p),
       ...(has.session && p.kind === "delete-session" && p.targetId === personId ? { targetId: sessionFresh } : {}),
@@ -631,14 +665,6 @@ export function stampNow(journal: Journal): number {
   return Math.max(Date.now(), max + 1);
 }
 
-/* A stamp write that treats "__proto__" as data (Round 4,
- * RT4-H6 B8): a plain assignment to that key sets the object's
- * prototype instead of recording the tombstone, so the deletion
- * silently never happened. */
-function setStamp(map: Record<string, number>, id: string, at: number) {
-  Object.defineProperty(map, id, { value: at, enumerable: true, writable: true, configurable: true });
-}
-
 function tombstone(journal: Journal, ids: string[]) {
   const deleted = { ...(journal.deleted ?? {}) };
   const at = stampNow(journal);
@@ -653,6 +679,21 @@ function tombstone(journal: Journal, ids: string[]) {
  */
 const PARTNER_OFF = "partner-:";
 const PARTNER_ON = "partner+:";
+/* The person-deletion witness (Round 5, RT5-H1 B1/B2): a dedicated
+ * key minted ONLY by acts that delete a PERSON record forever —
+ * deletePersonForever and the merge's own displacement — never by
+ * roster acts. Direction at a collision is proven by its PRESENCE,
+ * not by a stamp comparison: the Round 4 partner-off witness could
+ * be minted by a roster removal (arming a foreign session tombstone
+ * to execute her) and could be outgrown by the flat map's max-merge
+ * (a later bare tombstone folded into her key and the witness
+ * "failed", so the verdict depended on merge grouping). A key only
+ * a person deletion can mint has neither failure: wherever it is
+ * present, the tombstone is hers. */
+const PERSON_OFF = "person-:";
+function personWitnessed(deleted: Record<string, number> | undefined, id: string): boolean {
+  return ((deleted ?? {})[PERSON_OFF + id] ?? 0) > 0;
+}
 /* Couple mode switched OFF mints this stamp (Round 3, RT3-H1 B8):
  * without it, the merge's mode rule could not tell a deliberate off
  * from a device that simply had not heard yet, and any merge with a
@@ -718,10 +759,13 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
    * session with her id there, the tombstone on either side — and
    * no single device's gate ever saw the whole shape. Before any
    * class resolves, a tombstoned id shared by a person and another
-   * class is repaired on BOTH sides: if the partner-off witness
-   * proves the tombstone is hers, the other records are re-seated;
-   * otherwise she is — deterministically, so both devices land on
-   * the same seats and the merge converges. */
+   * class is repaired on BOTH sides: if the person-deletion witness
+   * (`person-:<id>`, present in either side's map) proves the
+   * tombstone is hers, the other records are re-seated; otherwise
+   * she is — deterministically, so both devices land on the same
+   * seats and the merge converges. Presence, not a stamp race: the
+   * Round 4 partner-off witness could be minted by roster acts and
+   * outgrown by this very max-merge (RT5-H1 B1/B2). */
   {
     const otherIds = (j: Journal) =>
       new Set([
@@ -743,7 +787,7 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     for (const [id, person] of peopleById) {
       const at = deleted[id] ?? 0;
       if (at <= 0) continue;
-      const witness = (deleted[PARTNER_OFF + partnerKey(person.name)] ?? 0) >= at;
+      const witness = personWitnessed(deleted, id);
       if (witness) {
         /* The tombstone is provably hers: the other records are
          * re-seated (when any are here) and she still dies. */
@@ -759,6 +803,19 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
          * record is still here to be seen. */
         local = repairPersonIdCollision(local, id);
         remote = repairPersonIdCollision(remote, id);
+      }
+    }
+    /* A witnessed tombstone whose person is on NEITHER side of
+     * this pair (Round 5, RT5-H1 B2): the witness still proves the
+     * tombstone is a person's, so other-class records carrying the
+     * id are re-seated before keep() can execute them by it — the
+     * verdict must not depend on merge grouping. */
+    for (const key of Object.keys(deleted)) {
+      if (!key.startsWith(PERSON_OFF)) continue;
+      const id = key.slice(PERSON_OFF.length);
+      if ((deleted[id] ?? 0) > 0 && others.has(id)) {
+        local = reseatOtherClasses(local, id);
+        remote = reseatOtherClasses(remote, id);
       }
     }
   }
@@ -939,7 +996,17 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     const keptIds = new Set(people.map((person) => person.id));
     const stamp = Math.max(local.updatedAt, remote.updatedAt);
     for (const person of [...(local.people ?? []), ...(remote.people ?? [])]) {
-      if (!keptIds.has(person.id)) deleted[person.id] = Math.max(deleted[person.id] ?? 0, stamp, person.updatedAt);
+      if (!keptIds.has(person.id)) {
+        /* A displaced person is a person deletion (Round 5,
+         * RT5-H6 B4 + RT5-H1 B6): the write goes through setStamp
+         * (a "__proto__" id recorded nothing) and mints the
+         * person-deletion witness — the Round 4 bare tombstone let
+         * the collision pre-pass re-seat her back to life at the
+         * next merge. */
+        const at = Math.max(deleted[person.id] ?? 0, stamp, person.updatedAt);
+        setStamp(deleted, person.id, at);
+        setStamp(deleted, PERSON_OFF + person.id, at);
+      }
     }
   }
   return {
@@ -2779,7 +2846,7 @@ export const useJournal = create<Store>((set, get) => {
           // Her person id is tombstoned too, so her record (and PIN) can
           // never merge back either (V4 B3).
           PARTNER_OFF + partnerKey(name),
-          ...(herId ? [herId] : []),
+          ...(herId ? [herId, PERSON_OFF + herId] : []),
         ]),
       });
     },

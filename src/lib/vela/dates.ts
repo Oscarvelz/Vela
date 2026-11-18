@@ -5,6 +5,15 @@ export function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
+/* A stamp write that treats "__proto__" as data (Round 4,
+ * RT4-H6 B8): a plain assignment to that key sets the object's
+ * prototype instead of recording the tombstone, so the deletion
+ * silently never happened. Every tombstone writer goes through
+ * here — the store's, the wipe's, the merge's. */
+export function setStamp(map: Record<string, number>, id: string, at: number) {
+  Object.defineProperty(map, id, { value: at, enumerable: true, writable: true, configurable: true });
+}
+
 export function todayStr(d = new Date()) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }

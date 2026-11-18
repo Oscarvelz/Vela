@@ -6,6 +6,7 @@
  * tests/wave0-wipe.ts — the 2.1.27 lesson, generalized: what the inventory
  * does not name, an erasure silently leaves behind. */
 import { defaultCycle } from "./cycle";
+import { setStamp } from "./dates";
 import type { Journal, Settings } from "./types";
 
 /** Journal-level data: the recorded life. A wipe empties every one. */
@@ -92,7 +93,11 @@ export function wipedJournal(journal: Journal, now: number): Journal {
     archivedPeople: [],
   };
   const deleted: Record<string, number> = { ...(journal.deleted ?? {}) };
-  for (const proposal of journal.proposals ?? []) deleted[proposal.id] = now;
+  /* Every write goes through setStamp (Round 5, RT5-H1 B6): a
+   * proposal whose id is "__proto__" got NO tombstone from a plain
+   * assignment, and proposals are the one wiped class with no
+   * clearedAt backstop — it resurrected at the first merge. */
+  for (const proposal of journal.proposals ?? []) setStamp(deleted, proposal.id, now);
   /* Every other class the merge unions by id or by value gets its
    * tombstone too (Round 2, RT2-H1 B1): without one, a stale device's
    * copy walks straight back in — trackers (the `cycle:` key format is
@@ -103,19 +108,19 @@ export function wipedJournal(journal: Journal, now: number): Journal {
    * merge reads: `custom-:` / `mute-:`, keyed exactly as the actions
    * mint them). The clearedAt stamps in the return below remain the
    * armor for the cut classes (sessions, encounters, partners). */
-  for (const tracker of journal.settings.cycles ?? []) deleted[`cycle:${tracker.id}`] = now;
-  for (const mark of journal.quietDays ?? []) deleted[mark.id] = now;
-  for (const test of journal.pregnancyTests ?? []) deleted[test.id] = now;
-  for (const item of journal.settings.anniversaries ?? []) deleted[item.id] = now;
-  for (const item of journal.settings.children ?? []) deleted[item.id] = now;
-  for (const person of journal.people ?? []) deleted[person.id] = now;
-  for (const person of journal.settings.archivedPeople ?? []) deleted[`archived:${person.name.trim().toLocaleLowerCase()}`] = now;
-  for (const value of journal.settings.customPlaces ?? []) deleted[`custom-:places:${value}`] = now;
-  for (const value of journal.settings.customPositions ?? []) deleted[`custom-:positions:${value}`] = now;
-  for (const value of journal.settings.customProblems ?? []) deleted[`custom-:problems:${value}`] = now;
-  for (const value of journal.settings.storiesMuted?.people ?? []) deleted[`mute-:person:${value.trim().toLocaleLowerCase()}`] = now;
-  for (const value of journal.settings.storiesMuted?.days ?? []) deleted[`mute-:day:${value}`] = now;
-  if (journal.settings.batchDraft) deleted["batchDraft"] = now;
+  for (const tracker of journal.settings.cycles ?? []) setStamp(deleted, `cycle:${tracker.id}`, now);
+  for (const mark of journal.quietDays ?? []) setStamp(deleted, mark.id, now);
+  for (const test of journal.pregnancyTests ?? []) setStamp(deleted, test.id, now);
+  for (const item of journal.settings.anniversaries ?? []) setStamp(deleted, item.id, now);
+  for (const item of journal.settings.children ?? []) setStamp(deleted, item.id, now);
+  for (const person of journal.people ?? []) setStamp(deleted, person.id, now);
+  for (const person of journal.settings.archivedPeople ?? []) setStamp(deleted, `archived:${person.name.trim().toLocaleLowerCase()}`, now);
+  for (const value of journal.settings.customPlaces ?? []) setStamp(deleted, `custom-:places:${value}`, now);
+  for (const value of journal.settings.customPositions ?? []) setStamp(deleted, `custom-:positions:${value}`, now);
+  for (const value of journal.settings.customProblems ?? []) setStamp(deleted, `custom-:problems:${value}`, now);
+  for (const value of journal.settings.storiesMuted?.people ?? []) setStamp(deleted, `mute-:person:${value.trim().toLocaleLowerCase()}`, now);
+  for (const value of journal.settings.storiesMuted?.days ?? []) setStamp(deleted, `mute-:day:${value}`, now);
+  if (journal.settings.batchDraft) setStamp(deleted, "batchDraft", now);
   return {
     profile: null,
     settings,

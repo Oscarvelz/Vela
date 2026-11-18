@@ -75,7 +75,11 @@ const J = () => S().journal;
       { id: "p-sofia", name: "Sofía", role: "partner", createdAt: 150, updatedAt: 150 },
       { id: "p-lucia", name: "Lucía", role: "partner", createdAt: 200, updatedAt: 200 },
     ],
-    deleted: { "p-sofia": T, "partner-:sofía": T },
+    /* Amended 2.2.46: the person-deletion witness is the dedicated
+     * person-: key (it was partner-: until Round 5 proved roster
+     * acts could mint it too). The law — a tombstoned person loses
+     * her seat at the gate — is unchanged. */
+    deleted: { "p-sofia": T, "person-:p-sofia": T },
   }), "en");
   const ids = (j.people ?? []).map((p) => p.id).join();
   if (ids === "p-owner,p-lucia") hold("R2 a tombstoned person loses her seat at the gate; the next in ceremony order takes it");

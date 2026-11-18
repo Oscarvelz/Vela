@@ -4,11 +4,18 @@
  * repair guarded two doors and two classes. Now: the merge repairs
  * collisions on both sides before resolving (the person re-seated
  * under a DETERMINISTIC fresh id, references incl. proposal targetId
- * re-pointed); when the partner-off witness proves the tombstone is
- * the person's own, the OTHER record is re-seated instead; every
- * deletion action guards its tombstone; the gate applies tombstones
- * to every class, not only people, and clears a ghost default the
- * roster does not hold; "__proto__" is a tombstoneable id.
+ * re-pointed); when the person-deletion witness proves the
+ * tombstone is the person's own, the OTHER record is re-seated
+ * instead; every deletion action guards its tombstone; the gate
+ * applies tombstones to every class, not only people, and clears a
+ * ghost default the roster does not hold; "__proto__" is a
+ * tombstoneable id.
+ * AMENDED 2.2.46 (Round 5, RT5-H1 B1/B2): the witness is now the
+ * dedicated `person-:<id>` key, proven by PRESENCE — the partner-off
+ * stamp this fence originally used is minted by roster acts too and
+ * could be outgrown by the max-merge, so it no longer proves
+ * direction. The fixtures below mint the new witness; the laws they
+ * guard are unchanged.
  * Fake data only.
  * Run: node ../run-ts-test.mjs tests/wave18-collision.ts */
 import { journalFromUnknown, mergeJournals, useJournal } from "../src/lib/vela/store";
@@ -61,7 +68,7 @@ const LUCIA = { id: "shared-1", name: "Lucía", role: "partner", createdAt: T0 +
   const deletedHer = gate({
     people: [OWNER],
     quietDays: [{ id: "shared-1", from: "2026-10-01", to: "2026-10-03", reason: "travel", source: "manual", createdAt: T0 + 15, updatedAt: T0 + 15 }],
-    deleted: { "shared-1": T0 + 40, "partner-:lucía": T0 + 40 },
+    deleted: { "shared-1": T0 + 40, "person-:shared-1": T0 + 40 },
   });
   const staleHer = gate({
     people: [OWNER, LUCIA],
@@ -91,7 +98,7 @@ const LUCIA = { id: "shared-1", name: "Lucía", role: "partner", createdAt: T0 +
   const j = gate({
     people: [OWNER, LUCIA],
     quietDays: [{ id: "shared-1", from: "2026-10-01", to: "2026-10-03", reason: "travel", source: "manual", createdAt: T0 + 15, updatedAt: T0 + 15 }],
-    deleted: { "shared-1": T0 + 40, "partner-:lucía": T0 + 40 },
+    deleted: { "shared-1": T0 + 40, "person-:shared-1": T0 + 40 },
   });
   check("S4 she stays out at the gate", !(j.people ?? []).some((p) => p.name === "Lucía"));
   check("S4 the mark survives the gate, re-seated", (j.quietDays ?? []).length === 1 && (j.quietDays ?? [])[0].id !== "shared-1", JSON.stringify(j.quietDays));
@@ -204,8 +211,8 @@ const LUCIA = { id: "shared-1", name: "Lucía", role: "partner", createdAt: T0 +
   check("S11 same verdict, arguments swapped", (m2.people ?? []).some((p) => p.name === "Lucía"));
   const g = gate({ people: [OWNER, LUCIA], deleted: { "shared-1": T0 + 40 } });
   check("S11 the gate agrees: she is re-seated, not executed", (g.people ?? []).some((p) => p.name === "Lucía" && p.id !== "shared-1"));
-  const gw = gate({ people: [OWNER, LUCIA], deleted: { "shared-1": T0 + 40, "partner-:lucía": T0 + 40 } });
-  check("S11 control: with the witness, the same tombstone removes her", !(gw.people ?? []).some((p) => p.name === "Lucía"));
+  const gw = gate({ people: [OWNER, LUCIA], deleted: { "shared-1": T0 + 40, "person-:shared-1": T0 + 40 } });
+  check("S11 control: with the person-deletion witness, the same tombstone removes her", !(gw.people ?? []).some((p) => p.name === "Lucía"));
 }
 
 console.log(`WAVE18-COLLISION: ${breaks} break(s), ${holds} hold(s)`);
