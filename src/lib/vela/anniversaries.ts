@@ -44,6 +44,7 @@ export function cleanAnniversaries(raw: unknown): Anniversary[] {
       milestone: a.milestone === true,
       note: typeof a.note === "string" && a.note.trim() ? a.note.trim() : undefined,
       createdAt: finiteStamp(a.createdAt) ?? 0,
+      ...(finiteStamp(a.updatedAt) !== undefined ? { updatedAt: a.updatedAt } : {}),
     });
   }
   return out;
@@ -66,6 +67,7 @@ export function cleanChildren(raw: unknown): ChildEntry[] {
       birthdate: c.birthdate,
       refAs: REFS.includes(c.refAs as ChildRef) ? (c.refAs as ChildRef) : "child",
       createdAt: finiteStamp(c.createdAt) ?? 0,
+      ...(finiteStamp(c.updatedAt) !== undefined ? { updatedAt: c.updatedAt } : {}),
     });
   }
   return out;

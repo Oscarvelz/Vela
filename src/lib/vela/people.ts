@@ -187,7 +187,11 @@ export function cleanProposals(raw: unknown, people?: readonly { id: string }[])
     // people are known to the gate, an approval signed by an id that is
     // none of them is a ghost signature — the proposal is void here, the
     // same way a self-signed one is. An empty people list signs nothing.
-    if (people && p.state === "approved" && typeof p.decidedBy === "string" && !people.some((person) => person.id === p.decidedBy)) continue;
+    // BOTH signatures belong to the diary (Round 3, RT3-H1 B5): the
+    // proposer's membership is checked here too, not only in
+    // decideProposal — a wipe nobody in the diary proposed is void at
+    // the gate, however genuine its second signature looks.
+    if (people && p.state === "approved" && typeof p.decidedBy === "string" && (!people.some((person) => person.id === p.decidedBy) || !people.some((person) => person.id === p.proposedBy))) continue;
     // A pending proposal whose week has lapsed caduces silently (the law):
     // it is dropped here, at the gate, and never resurfaces.
     if (p.state !== "approved" && expiresAt < now) continue;

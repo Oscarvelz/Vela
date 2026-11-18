@@ -388,8 +388,14 @@ export function stampNow(journal: Journal): number {
     if (p.proposedAt > max) max = p.proposedAt;
     if ((p.decidedAt ?? 0) > max) max = p.decidedAt ?? 0;
   }
-  for (const a of journal.settings.anniversaries ?? []) if (a.createdAt > max) max = a.createdAt;
-  for (const c of journal.settings.children ?? []) if (c.createdAt > max) max = c.createdAt;
+  for (const a of journal.settings.anniversaries ?? []) {
+    if (a.createdAt > max) max = a.createdAt;
+    if ((a.updatedAt ?? 0) > max) max = a.updatedAt ?? 0;
+  }
+  for (const c of journal.settings.children ?? []) {
+    if (c.createdAt > max) max = c.createdAt;
+    if ((c.updatedAt ?? 0) > max) max = c.updatedAt ?? 0;
+  }
   for (const p of journal.settings.archivedPeople ?? []) if (p.archivedAt > max) max = p.archivedAt;
   if ((journal.settings.batchDraft?.at ?? 0) > max) max = journal.settings.batchDraft?.at ?? 0;
   if ((journal.settings.coupleMode?.enabledAt ?? 0) > max) max = journal.settings.coupleMode?.enabledAt ?? 0;
@@ -410,6 +416,11 @@ function tombstone(journal: Journal, ids: string[]) {
  */
 const PARTNER_OFF = "partner-:";
 const PARTNER_ON = "partner+:";
+/* Couple mode switched OFF mints this stamp (Round 3, RT3-H1 B8):
+ * without it, the merge's mode rule could not tell a deliberate off
+ * from a device that simply had not heard yet, and any merge with a
+ * stale still-on copy switched the mode back on. */
+const COUPLE_OFF = "couple-:mode";
 export function partnerRemoved(name: string, deleted: Record<string, number> | undefined) {
   const key = partnerKey(name);
   const off = deleted?.[PARTNER_OFF + key] ?? 0;
@@ -526,8 +537,9 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
   // Settings-borne data classes merge per item, like journal data — they
   // are data, not furniture (prejudice hunt V1 B-4). Stated scalars (theme,
   // defaultPartner…) still ride the newer settings wholesale.
-  const byId = <T extends { id: string; createdAt?: number }>(a: T[] | undefined, b: T[] | undefined): T[] => {
+  const byId = <T extends { id: string; createdAt?: number; updatedAt?: number }>(a: T[] | undefined, b: T[] | undefined): T[] => {
     const map = new Map<string, T>();
+    const stampOf = (x: T) => x.updatedAt ?? x.createdAt ?? 0;
     for (const item of [...(a ?? []), ...(b ?? [])]) {
       // A tombstoned item never resurfaces through the union (re-hunt R1).
       const goneAt = deleted[item.id] ?? 0;
@@ -539,7 +551,13 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
        * straight back in. What was born at or before the wipe is the
        * wipe's, whoever holds it; life born after it is untouched. */
       if (wipeStamp > 0 && (item.createdAt ?? 0) <= wipeStamp) continue;
-      map.set(item.id, item);
+      /* Two copies of one item resolve by the ITEM's edit stamp, never
+       * by which journal was saved last (Round 3, RT3-H6 B2): an
+       * unrelated later save on the other device used to revert the
+       * edit wholesale. Unstamped copies fall back to their birth
+       * stamp; a tie keeps the newer side's copy, as before. */
+      const prev = map.get(item.id);
+      if (!prev || stampOf(item) >= stampOf(prev)) map.set(item.id, item);
     }
     return [...map.values()];
   };
@@ -588,7 +606,11 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       return live.length ? { batchDraft: live.reduce((a, b) => (b!.at >= a!.at ? b : a)) } : { batchDraft: undefined };
     })(),
     ...(() => {
-      const modes = [local.settings.coupleMode, remote.settings.coupleMode].filter((m) => m && m.enabledAt > wipeStamp);
+      /* A mode survives only if its enable stamp beats both the wipe
+       * and the OFF stamp (RT3-H1 B8): switched off is a decision with
+       * a stamp of its own, not an absence the stale side can fill. */
+      const modeFloor = Math.max(wipeStamp, deleted[COUPLE_OFF] ?? 0);
+      const modes = [local.settings.coupleMode, remote.settings.coupleMode].filter((m) => m && m.enabledAt > modeFloor);
       return modes.length ? { coupleMode: modes.reduce((a, b) => (b!.enabledAt >= a!.enabledAt ? b : a)) } : { coupleMode: undefined };
     })(),
   };
@@ -646,10 +668,12 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       /* The merge applies the gate's consent law too (RT2-H1 B3): an
        * approved proposal whose decider is none of the merged people
        * does not cross — a ghost signature gains nothing by arriving
-       * through sync instead of through the load gate. */
+       * through sync instead of through the load gate. BOTH signatures
+       * are checked (Round 3, RT3-H1 B5): the proposer's membership
+       * rides the same filter, not only decideProposal's. */
       const memberIds = new Set((people ?? []).map((person) => person.id));
       const merged = [...byId.values()].filter(
-        (p) => !(deleted[p.id] >= p.proposedAt) && (p.state !== "approved" || (p.decidedBy !== undefined && memberIds.has(p.decidedBy))),
+        (p) => !(deleted[p.id] >= p.proposedAt) && (p.state !== "approved" || (p.decidedBy !== undefined && memberIds.has(p.decidedBy) && memberIds.has(p.proposedBy))),
       );
       return { proposals: merged };
     })(),
@@ -1991,8 +2015,9 @@ export const useJournal = create<Store>((set, get) => {
       });
     },
     saveAnniversary: (a) => {
-      const list = cleanAnniversaries(get().journal.settings.anniversaries);
-      patchSettings({ anniversaries: [...list.filter((x) => x.id !== a.id), a] });
+      const journal = get().journal;
+      const list = cleanAnniversaries(journal.settings.anniversaries);
+      patchSettings({ anniversaries: [...list.filter((x) => x.id !== a.id), { ...a, updatedAt: stampNow(journal) }] });
     },
     deleteAnniversary: (id) => {
       const journal = get().journal;
@@ -2003,8 +2028,9 @@ export const useJournal = create<Store>((set, get) => {
       commit({ ...journal, settings: { ...journal.settings, anniversaries: list.filter((x) => x.id !== id) }, deleted: tombstone(journal, [id]) });
     },
     saveChild: (c) => {
-      const list = cleanChildren(get().journal.settings.children);
-      patchSettings({ children: [...list.filter((x) => x.id !== c.id), c] });
+      const journal = get().journal;
+      const list = cleanChildren(journal.settings.children);
+      patchSettings({ children: [...list.filter((x) => x.id !== c.id), { ...c, updatedAt: stampNow(journal) }] });
     },
     deleteChild: (id) => {
       const journal = get().journal;
@@ -2019,7 +2045,7 @@ export const useJournal = create<Store>((set, get) => {
     enableCoupleMode: ({ partnerName, sharedFrom, ownerPinHash, partnerPinHash }) => {
       const journal = get().journal;
       if (!journal.profile || journal.settings.coupleMode) return;
-      const now = Date.now();
+      const now = stampNow(journal);
       const owner: Person = {
         id: "p-owner",
         name: journal.profile.displayName || "Me",
@@ -2059,7 +2085,7 @@ export const useJournal = create<Store>((set, get) => {
       const journal = get().journal;
       const settings = { ...journal.settings };
       delete settings.coupleMode;
-      commit({ ...journal, settings });
+      commit({ ...journal, settings, deleted: { ...(journal.deleted ?? {}), [COUPLE_OFF]: stampNow(journal) } });
     },
     savePartnerVoice: (sessionId, voice) => {
       const journal = get().journal;
@@ -2193,7 +2219,7 @@ export const useJournal = create<Store>((set, get) => {
       // cancelled (tombstoned, so it cannot resurface as approved) and
       // nothing burns.
       const people = journal.people ?? [];
-      if (!proposal.decidedBy || proposal.decidedBy === proposal.proposedBy || !people.some((person) => person.id === proposal.decidedBy)) {
+      if (!proposal.decidedBy || proposal.decidedBy === proposal.proposedBy || !people.some((person) => person.id === proposal.decidedBy) || !people.some((person) => person.id === proposal.proposedBy)) {
         get().cancelProposal(id);
         return;
       }
@@ -2316,10 +2342,13 @@ export const useJournal = create<Store>((set, get) => {
       const keptSessions = sessions.map((s) =>
         herId && s.partnerVoice?.by === herId ? { ...s, partnerVoice: undefined } : s,
       );
-      // Her pending proposals die with her — and are tombstoned below, so a
-      // merge cannot bring them (or her) back.
+      // Her proposals die with her — pending AND approved (Round 3,
+      // RT3-H1 B5): an approved wipe used to survive its proposer's
+      // erasure and execute on a signature the diary no longer contains.
+      // All are tombstoned below, so a merge cannot bring them (or her)
+      // back.
       const herProposals = (journal.proposals ?? []).filter(
-        (p) => p.state === "pending" && herId !== undefined && p.proposedBy === herId,
+        (p) => herId !== undefined && p.proposedBy === herId,
       );
       // Her anniversaries and her archive entry go too — tombstoned below,
       // because the settings unions would otherwise resurrect them from a
@@ -2749,7 +2778,13 @@ function reopenAfterStale() {
       useJournal.setState({ lockNote: "stale" });
       return;
     }
-    if (pending?.profile) now.replaceJournal({ ...mergeJournals(now.journal, pending), profile: now.journal.profile, settings: now.journal.settings });
+    /* The fold-in keeps the MERGED settings (Round 3, RT3-H1 B10): the
+     * override that used to ride here discarded them wholesale — the
+     * held window's anniversary additions, custom removals and tracker
+     * work were silently dropped, the very losses this function exists
+     * to prevent. Only the profile is taken from the fresh read: it is
+     * the identity the new key just proved. */
+    if (pending?.profile) now.replaceJournal({ ...mergeJournals(now.journal, pending), profile: now.journal.profile });
   });
 }
 staleHandler = reopenAfterStale;

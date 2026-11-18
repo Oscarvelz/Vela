@@ -48,6 +48,9 @@ export type Anniversary = {
   milestone: boolean;
   note?: string;
   createdAt: number;
+  /** The last edit's stamp: merges resolve two copies of one anniversary
+   * by it, never by the journal's global stamp (Round 3, RT3-H6 B2). */
+  updatedAt?: number;
 };
 
 export type ChildRef = "son" | "daughter" | "child";
@@ -60,6 +63,8 @@ export type ChildEntry = {
   birthdate: string;
   refAs: ChildRef;
   createdAt: number;
+  /** The last edit's stamp, like the anniversary's (RT3-H6 B2). */
+  updatedAt?: number;
 };
 
 /** A person at rest (2.1.24, the Archive law): archived, never erased, and

@@ -76,14 +76,24 @@ function seedWipe(proposal: Proposal, peopleOverride?: unknown): void {
   else brk("R3 an orphaned signature executed the wipe");
 }
 
-/* R4 — the proposer's identity is not the consent: a wipe proposed by a
- * stranger id but genuinely approved by the partner still carries the
- * partner's signature — it fires (the second signature is the law). */
+/* R4 — AMENDED IN ROUND 3 (RT3-H1 B5), doctrine correction, declared:
+ * this specimen once read the proposer's identity as irrelevant ("the
+ * second signature is the law") and expected the wipe to FIRE. Round 3
+ * convicted the same shape: an approved record naming a proposer who
+ * is nobody in the diary can only have arrived as foreign data —
+ * decideProposal, the app's only mint of approvals, refuses to decide
+ * a proposal nobody in the diary made, so the "genuine approval" on
+ * such a record is unverifiable by construction. The older doctrine
+ * sentence in decideProposal itself states both halves: a proposal
+ * nobody in the diary made cannot be decided, and an approval no
+ * member gave is not an approval. Consent is TWO signatures, both of
+ * them members'. The specimen now expects the void; the honest
+ * two-member wipe still fires (wave7-consent-cycle carries it). */
 {
   seedWipe({ id: "w-stranger-proposer", kind: "wipe-vault", proposedBy: "p-nobody", proposedAt: now - 9 * DAY, expiresAt: now - 2 * DAY, state: "approved", decidedBy: "p-lucia", decidedAt: now - 8 * DAY });
   S().executeWipe("w-stranger-proposer");
-  if (J().sessions.length === 0 && S().unlocked === false) hold("R4 the partner's real signature fires regardless of the proposer's id");
-  else brk("R4 a partner-signed wipe did not fire", `sessions=${J().sessions.length} unlocked=${S().unlocked}`);
+  if (J().sessions.length === 1) hold("R4 a stranger-proposed wipe is void however it is signed");
+  else brk("R4 a stranger-proposed wipe executed", `sessions=${J().sessions.length} unlocked=${S().unlocked}`);
 }
 
 /* R5 — double execution: firing the same wipe twice (the second call lands
