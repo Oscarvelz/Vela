@@ -12,6 +12,7 @@ import {
   findTopic,
   pick,
   topicText,
+  type Go,
   type L,
   type Numbered,
   type Topic,
@@ -177,7 +178,20 @@ export function ManualView() {
     const dest = LINKS[term];
     if (!dest) return;
     const topic = findTopic(dest.topic);
-    const go = dest.go ?? topic?.go;
+    // A link's own go names the SURFACE (the tab, the Settings root);
+    // the destination topic's go names the CONTROL. The link's go used
+    // to shadow the topic's entirely, so [[Home]], [[Calendar]] and
+    // [[Statistics]] arrived with no spot at all and could never ring
+    // (RT2-H5 B5'). When both gos land on the same surface, the topic's
+    // spot completes the link's go; when they disagree (a generic
+    // [[Settings]] against a topic deep in a section), the link's own
+    // landing stands — the surface itself is the destination.
+    const sameSurface = (a?: Go, b?: Go) =>
+      Boolean(a && b && ((a.tab && a.tab === b.tab) || (a.settings !== undefined && a.settings === b.settings)));
+    const go =
+      dest.go && topic?.go && !dest.go.spot && topic.go.spot && sameSurface(dest.go, topic.go)
+        ? { ...topic.go, ...dest.go, spot: topic.go.spot }
+        : (dest.go ?? topic?.go);
     if (go) goToGo(go, dest.topic);
   };
 

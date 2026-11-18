@@ -49,6 +49,9 @@ export function goToGo(go: Go, topicId: string) {
   // for its ring instead of sitting hidden behind a local toggle
   // (RT-V5 B3).
   if (go.spot === "batch-card" || go.spot === "batch-save") s.setShowBatch(true);
+  // The registrar's door is the same shape: the log form sits hidden
+  // behind its hero toggle unless the door raises it (RT2-H5 B4').
+  if (go.spot === "log-form") s.setShowForm(true);
   // A chapter's doors share a last-resort landing: when neither the
   // named control nor the topic's bubble exists in the reader's state
   // (an empty journal has no statistics cards yet; no pregnancy is

@@ -20,18 +20,40 @@ export function SpotFocus() {
   const [ring, setRing] = useState<Ring | null>(null);
   const timer = useRef(0);
   const alive = useRef(false);
+  // The in-flight intervals live in refs so kill() can actually cancel
+  // them: they used to be locals of run(), unreachable from kill — a
+  // tap during the settle left the loop running, and it drew its ring
+  // AFTER the dismissal, resurrecting what the user had killed
+  // (RT2-H5 B2'). The generation counter retires every closure of a
+  // superseded or killed run, snap timeouts included.
+  const pollRef = useRef(0);
+  const settleRef = useRef(0);
+  const genRef = useRef(0);
 
   useEffect(() => {
     const kill = () => {
+      genRef.current += 1;
       window.clearTimeout(timer.current);
+      window.clearInterval(pollRef.current);
+      window.clearInterval(settleRef.current);
       alive.current = false;
       setRing(null);
     };
     const run = () => {
       const req = takeSpotRequest();
       if (!req) return;
+      // A new door supersedes whatever the last one left in flight.
+      window.clearInterval(pollRef.current);
+      window.clearInterval(settleRef.current);
+      window.clearTimeout(timer.current);
+      alive.current = false;
+      const gen = (genRef.current += 1);
       const started = Date.now();
       const poll = window.setInterval(() => {
+        if (gen !== genRef.current) {
+          window.clearInterval(poll);
+          return;
+        }
         let el: Element | null = null;
         if (req.spot) el = document.querySelector(`[data-spot~="${req.spot}"]`);
         if (!el && req.topicId) {
@@ -51,6 +73,7 @@ export function SpotFocus() {
           return;
         }
         window.clearInterval(poll);
+        pollRef.current = 0;
         let target = el;
         const foundAt = Date.now();
         target.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -83,16 +106,30 @@ export function SpotFocus() {
         };
         const inView = (ring: Ring) => ring.top + ring.height > 0 && ring.top < window.innerHeight;
         const settle = window.setInterval(() => {
+          if (gen !== genRef.current) {
+            window.clearInterval(settle);
+            return;
+          }
+          // The cap is checked FIRST: it used to sit behind the
+          // measure, so a target that measured null forever (a
+          // detached node, a zero-size control) kept this 90 ms loop
+          // alive for the whole life of the page (RT2-H5 B3').
+          const capped = Date.now() - foundAt > 6000;
           const next = measure();
-          if (!next) return;
+          if (!next) {
+            if (capped) window.clearInterval(settle);
+            return;
+          }
           if (last && Math.abs(next.left - last.left) <= 1 && Math.abs(next.top - last.top) <= 1 && Math.abs(next.width - last.width) <= 1 && Math.abs(next.height - last.height) <= 1) stable += 1;
           else stable = 0;
           last = next;
-          if ((stable >= 1 && inView(next)) || Date.now() - foundAt > 6000) {
+          if ((stable >= 1 && inView(next)) || capped) {
             window.clearInterval(settle);
+            settleRef.current = 0;
             alive.current = true;
             setRing(last);
             timer.current = window.setTimeout(() => {
+              if (gen !== genRef.current) return;
               alive.current = false;
               setRing(null);
             }, 2900);
@@ -104,14 +141,16 @@ export function SpotFocus() {
             // reasons card settling 38 px below its ring ~2 s in.)
             for (const delay of [450, 900, 1500, 2100, 2700]) {
               window.setTimeout(() => {
-                if (!alive.current) return;
+                if (!alive.current || gen !== genRef.current) return;
                 const again = measure();
                 if (again) setRing(again);
               }, delay);
             }
           }
         }, 90);
+        settleRef.current = settle;
       }, 120);
+      pollRef.current = poll;
     };
     const off = onSpotRequest(run);
     run();
@@ -119,6 +158,7 @@ export function SpotFocus() {
     document.addEventListener("pointerdown", onInteract, true);
     return () => {
       off();
+      kill();
       document.removeEventListener("pointerdown", onInteract, true);
     };
   }, []);

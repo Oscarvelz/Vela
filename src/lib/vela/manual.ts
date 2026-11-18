@@ -88,7 +88,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Cambias de teléfono: el dispositivo nuevo pide la frase antes que nada — sin ella, el diario sellado permanece sellado.",
         ],
         related: ["bloqueo", "copias"],
-        go: { settings: "privacy", spot: "change-passphrase", where: ["Settings → Privacy & data → Privacy", "Ajustes → Privacidad y datos → Privacidad"] },
+        go: { settings: "privacy", spot: "change-passphrase", where: ["Settings → Privacy & data → Privacy & Security", "Ajustes → Privacidad y datos → Privacidad"] },
         terms: [["password", "contraseña"], ["encryption", "cifrado"]],
       },
       {
@@ -119,7 +119,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Cerrar sesión para «probar» la puerta sin conexión. Cerrar sesión olvida el dispositivo a propósito: es la única salida que necesita la red para volver.",
         ],
         related: ["sincronizacion"],
-        go: { settings: "data", spot: "account-door", where: ["Settings → Privacy & data → Data & sync", "Ajustes → Privacidad y datos → Datos y sincronización"] },
+        go: { settings: "data", spot: "account-door", where: ["Settings → Privacy & data → Data & Backup", "Ajustes → Privacidad y datos → Datos y copias"] },
         terms: [["offline", "sin conexión"], ["airplane mode", "modo avión"]],
       },
       {
@@ -169,15 +169,15 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Toca cualquier (?) y lee la respuesta corta; toca «Más en el manual» para aterrizar aquí, en ese tema.\nDentro del manual, algunos nombres llevan un subrayado punteado: son puertas — tocar uno te lleva a ese lugar de la app y lo ilumina.\nCada entrada lleva además su propio botón «Ver en la app», con el lugar dicho en palabras llanas.",
         ],
         example: [
-          "Reading about quiet days, you tap [[Calendar]] and Vela takes you there and lights the day panel — the manual closes behind you, and Back returns to the entry.",
-          "Leyendo sobre los días quietos, tocas [[Calendario]] y Vela te lleva allí e ilumina el panel del día: el manual se cierra detrás de ti, y Atrás vuelve a la entrada.",
+          "Reading about quiet days, you tap [[Calendar]] and Vela takes you there and lights the day panel — the manual closes behind you.",
+          "Leyendo sobre los días quietos, tocas [[Calendario]] y Vela te lleva allí e ilumina el panel del día: el manual se cierra detrás de ti.",
         ],
         cases: [
           "You arrive from a (?) bubble: the manual opens on that exact entry, lit — you never land on a cover and hunt.\nYou open it from Settings instead: it opens at the cover, with every chapter and the A–Z index.",
           "Llegas desde una burbuja (?): el manual abre en esa entrada exacta, iluminada — nunca aterrizas en una portada a cazar.\nLo abres desde Ajustes: abre en la portada, con cada capítulo y el índice A–Z.",
         ],
         related: ["lector-lotes", "dias-quietos"],
-        go: { settings: "manual", where: ["Settings → Manual", "Ajustes → Manual"] },
+        go: { settings: "manual", where: ["Settings → Help & the app → User manual", "Ajustes → Ayuda y la app → Manual de uso"] },
         terms: [["help", "ayuda"], ["guide", "guía"]],
       },
     ],
@@ -937,7 +937,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "El reloj de tu teléfono está mal por horas: nada cambia — la sincronización nunca lee el reloj, solo la revisión del diario.\nEliges la copia de la nube en un conflicto: la copia de tu dispositivo no se destruye; espera como el respaldo cifrado que el conflicto guardó.",
         ],
         related: ["puerta-sin-conexion", "copias"],
-        go: { settings: "data", spot: "sync-section", where: ["Settings → Privacy & data → Data & sync", "Ajustes → Privacidad y datos → Datos y sincronización"] },
+        go: { settings: "data", spot: "sync-section", where: ["Settings → Privacy & data → Data & Backup", "Ajustes → Privacidad y datos → Datos y copias"] },
         terms: [["conflict", "conflicto"], ["cloud", "nube"]],
       },
       {
@@ -964,7 +964,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Un respaldo guardado solo en el teléfono que protege: guarda contra errores, no contra perder el teléfono — guarda una copia en otro lugar.\nRestaurar un respaldo viejo sobre trabajo más nuevo: la revisión decide, y el estado más nuevo se guarda como respaldo antes de que nada se reemplace.",
         ],
         related: ["sincronizacion", "salir", "tu-frase"],
-        go: { settings: "data", spot: "backup-section", where: ["Settings → Privacy & data → Data & sync", "Ajustes → Privacidad y datos → Datos y sincronización"] },
+        go: { settings: "data", spot: "backup-section", where: ["Settings → Privacy & data → Data & Backup", "Ajustes → Privacidad y datos → Datos y copias"] },
         terms: [["restore", "restaurar"], ["download", "descargar"]],
       },
       {
@@ -991,7 +991,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Solo quieres limpio este dispositivo: cerrar sesión con «olvidar este dispositivo» hace eso sin tocar el diario — borrar todo es para el diario mismo.\nUna exportación hecha el mismo día: sobrevive al borrado, porque ya salió — el borrado alcanza al diario, nunca a las copias que sacaste.",
         ],
         related: ["decisiones", "archivar", "copias"],
-        go: { settings: "data", spot: "erase-all", where: ["Settings → Privacy & data → Data & sync", "Ajustes → Privacidad y datos → Datos y sincronización"] },
+        go: { settings: "data", spot: "erase-all", where: ["Settings → Privacy & data → Data & Backup", "Ajustes → Privacidad y datos → Datos y copias"] },
         terms: [["delete everything", "eliminar todo"], ["wipe", "borrado"]],
       },
     ],

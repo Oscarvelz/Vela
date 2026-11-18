@@ -185,7 +185,9 @@ function asSession(raw: unknown, index: number): Session | null {
     time: typeof s.time === "string" ? s.time : "21:00",
     place: typeof s.place === "string" ? s.place : "Bedroom",
     durationMins: duration,
-    positions: Array.isArray(s.positions) ? s.positions.map(String) : [],
+    // Strings only, like contraception and problems below: String()
+    // used to file "[object Object]" and "7" as positions (RT2-H6-7).
+    positions: Array.isArray(s.positions) ? s.positions.filter((item) => typeof item === "string") : [],
     intensity: dial(s.intensity),
     connection: dial(s.connection),
     satisfaction: dial(s.satisfaction),
@@ -243,16 +245,31 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
         .filter((s): s is Session => Boolean(s)),
     );
     const deletedMarks = cleanDeleted(data.deleted);
-    const partners = Array.isArray(data.partners)
-      ? data.partners.filter((p) => typeof p === "string" && !partnerRemoved(p, deletedMarks))
-      : [];
+    // One row per person, by the roster's own identity (partnerKey):
+    // "Lucía", "lucía" and "LUCÍA" in a stored list used to seat three
+    // rows for one person at every unlock (RT2-H4 B5). The first
+    // spelling wins; sessions keep their own spellings as facts.
+    const partners: string[] = [];
+    const rosterKeys = new Set<string>();
+    if (Array.isArray(data.partners)) {
+      for (const p of data.partners) {
+        if (typeof p !== "string" || partnerRemoved(p, deletedMarks)) continue;
+        const key = partnerKey(p);
+        if (!key || rosterKeys.has(key)) continue;
+        rosterKeys.add(key);
+        partners.push(p);
+      }
+    }
     const partnersClearedAt = Math.max(
       typeof data.partnersClearedAt === "number" ? data.partnersClearedAt : 0,
       typeof data.clearedAt === "number" ? data.clearedAt : 0,
     );
     for (const s of sessions) {
       if (s.createdAt <= partnersClearedAt) continue;
-      if (s.partnerName && !partners.includes(s.partnerName) && !partnerRemoved(s.partnerName, deletedMarks)) partners.push(s.partnerName);
+      if (s.partnerName && !rosterKeys.has(partnerKey(s.partnerName)) && !partnerRemoved(s.partnerName, deletedMarks)) {
+        rosterKeys.add(partnerKey(s.partnerName));
+        partners.push(s.partnerName);
+      }
     }
     const profileRaw = data.profile;
     const profile: Profile | null =
@@ -274,16 +291,14 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
     const known = new Set(encounters.map((e) => e.id));
     for (const session of sessions) {
       if (session.encounterId && !known.has(session.encounterId)) session.encounterId = "";
-      const spotted = namedPlace([session.place, session.notes, session.ownWords].filter(Boolean).join(". "));
-      if (spotted) session.place = spotted;
     }
-    for (const encounter of encounters) {
-      const spotted = namedPlace(encounter.comment);
-      if (!spotted) continue;
-      for (const session of sessions) {
-        if (session.encounterId === encounter.id && !namedPlace(session.place)) session.place = spotted;
-      }
-    }
+    // The gate loads; it does not rewrite. It used to re-derive every
+    // session's place from its notes (and from its encounter's comment)
+    // on EVERY unlock: "Cabin" with a note mentioning the trailer came
+    // back as "Trailer", the user set it back, the gate rewrote it
+    // again — a fact the user could never win (RT2-H6-6). Place
+    // spotting still happens where it belongs: at save time, on the
+    // words being saved (see the session-save path), never at load.
     const encounterCut = Math.max(
       typeof data.encountersClearedAt === "number" ? data.encountersClearedAt : 0,
       typeof data.clearedAt === "number" ? data.clearedAt : 0,
@@ -474,17 +489,26 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
   };
   const sessions = keep([...older.sessions, ...newer.sessions], sessionCut);
   const encounters = keep([...older.encounters, ...newer.encounters], encounterCut);
-  const livePartners = new Set<string>();
+  // One row per person across the merge too, keyed by partnerKey —
+  // two devices holding "Lucía" and "lucía" used to merge into two
+  // permanent rows (RT2-H4 B5). The older side's spelling wins; a
+  // session's own spelling is a fact and stays in the session.
+  const livePartnerMap = new Map<string, string>();
+  const offerPartner = (name: string) => {
+    const key = partnerKey(name);
+    if (key && !livePartnerMap.has(key)) livePartnerMap.set(key, name);
+  };
   for (const side of [older, newer]) {
     if (side.updatedAt <= partnerCut) continue;
-    for (const name of side.partners) livePartners.add(name);
+    for (const name of side.partners) offerPartner(name);
   }
   if (partnerCut === 0) {
     for (const session of sessions) {
-      if (session.partnerName) livePartners.add(session.partnerName);
+      if (session.partnerName) offerPartner(session.partnerName);
     }
   }
-  for (const name of [...livePartners]) if (partnerRemoved(name, deleted)) livePartners.delete(name);
+  for (const [key, name] of [...livePartnerMap]) if (partnerRemoved(name, deleted)) livePartnerMap.delete(key);
+  const livePartners = new Set(livePartnerMap.values());
   const cycles = mergeTrackerLists(newer.settings.cycles, older.settings.cycles, deleted);
   // Trackers the cap left behind are tombstoned, never silently vanished:
   // the other device resolves the same way next merge, and the call sites
@@ -1182,8 +1206,17 @@ export function csvText(journal: Journal): string {
         (s.problems ?? []).join("; "),
       ]);
     });
+  // A cell whose text opens with =, +, - or @ wakes as a FORMULA when
+  // the file is opened in a spreadsheet — a partner named "=2+5" or a
+  // note opening "@SUM(…)" would execute, not display (RT2-H4 B7).
+  // The leading apostrophe is the spreadsheet world's own "read this
+  // as text" mark; it changes nothing the user sees in the cell.
+  const safeCell = (cell: unknown) => {
+    const text = String(cell ?? "");
+    return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  };
   return rows
-    .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+    .map((row) => row.map((cell) => `"${safeCell(cell).replace(/"/g, '""')}"`).join(","))
     .join("\n");
 }
 
@@ -1660,7 +1693,7 @@ export const useJournal = create<Store>((set, get) => {
         ...data,
       };
       const partners = journal.partners.slice();
-      if (session.partnerName && !partners.includes(session.partnerName)) partners.push(session.partnerName);
+      if (session.partnerName && !partners.some((p) => samePartner(p, session.partnerName))) partners.push(session.partnerName);
       commit({
         ...journal,
         partners,
@@ -1690,7 +1723,7 @@ export const useJournal = create<Store>((set, get) => {
           { ...item, encounterId: linked.encounterId, encounterStart: span.encounterStart, encounterEnd: span.encounterEnd },
           lang,
         );
-        if (data.partnerName && !partners.includes(data.partnerName)) partners.push(data.partnerName);
+        if (data.partnerName && !partners.some((p) => samePartner(p, data.partnerName))) partners.push(data.partnerName);
         return {
           id: newId() + index.toString(36),
           createdAt: Date.now() + index,
@@ -1719,7 +1752,7 @@ export const useJournal = create<Store>((set, get) => {
       const stamp = Date.now();
       list.forEach((entry, index) => {
         const partner = entry.solo ? "" : entry.partnerName?.trim() || fallback;
-        if (partner && !partners.includes(partner)) partners.push(partner);
+        if (partner && !partners.some((p) => samePartner(p, partner))) partners.push(partner);
         const encounterId = `e${stamp.toString(36)}${index.toString(36)}${Math.random().toString(36).slice(2, 5)}`;
         const rangeEnd = entry.endDate && entry.endDate > entry.date ? entry.endDate : entry.date;
         const days = spanDays(entry.date, rangeEnd);
@@ -1804,7 +1837,7 @@ export const useJournal = create<Store>((set, get) => {
         session.id === id ? { ...session, ...data, encounterId: linked.encounterId, updatedAt: Date.now() } : session,
       );
       const partners = journal.partners.slice();
-      if (data.partnerName && !partners.includes(data.partnerName)) partners.push(data.partnerName);
+      if (data.partnerName && !partners.some((p) => samePartner(p, data.partnerName))) partners.push(data.partnerName);
       commit(
         pruneEmpty({ ...journal, partners, encounters: linked.encounters, sessions: renumber(sessions) }, [before?.encounterId ?? ""]),
       );
@@ -2041,7 +2074,14 @@ export const useJournal = create<Store>((set, get) => {
         if (p.state !== "pending" || p.kind !== input.kind) return false;
         if (input.kind === "delete-person" && input.targetLabel && p.targetLabel)
           return partnerKey(p.targetLabel) === partnerKey(input.targetLabel);
-        return p.targetId === input.targetId && p.targetLabel === input.targetLabel;
+        // Sameness is the target's ID, never its label: the label is
+        // composed in the proposer's language ("Oct 25 · Ana" on one
+        // phone, "25 de oct · Ana" on the other), so label equality
+        // filed the same session twice in the Decisions tray
+        // (RT2-H4 B6). Label comparison remains only for proposals
+        // that carry no ID at all.
+        if (input.targetId) return p.targetId === input.targetId;
+        return p.targetLabel === input.targetLabel;
       });
       if (existing) return existing.id;
       const now = Date.now();
@@ -2426,7 +2466,10 @@ export const useJournal = create<Store>((set, get) => {
     addPartner: (name) => {
       const trimmed = name.trim();
       const journal = get().journal;
-      if (!trimmed || journal.partners.includes(trimmed)) return;
+      // The roster's identity is partnerKey (the comparison
+      // removePartner already used): adding "lucía" beside "Lucía"
+      // used to twin the row (RT2-H4 B5).
+      if (!trimmed || journal.partners.some((p) => samePartner(p, trimmed))) return;
       commit({ ...journal, partners: [...journal.partners, trimmed] });
     },
     removePartner: (name) => {
@@ -2552,11 +2595,11 @@ export const useJournal = create<Store>((set, get) => {
         const partners = journal.partners.slice();
         if (Array.isArray(data.partners)) {
           for (const partner of data.partners) {
-            if (typeof partner === "string" && partner && !partners.includes(partner)) partners.push(partner);
+            if (typeof partner === "string" && partner && !partners.some((p) => samePartner(p, partner))) partners.push(partner);
           }
         }
         for (const session of added) {
-          if (session.partnerName && !partners.includes(session.partnerName)) partners.push(session.partnerName);
+          if (session.partnerName && !partners.some((p) => samePartner(p, session.partnerName))) partners.push(session.partnerName);
         }
         commit({
           ...journal,

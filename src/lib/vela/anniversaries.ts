@@ -5,7 +5,7 @@
    The Archive law lives here too: an archived person is honored and kept,
    and the user alone decides where their traces still appear. */
 import type { CycleTracker } from "./cycle-trackers";
-import { iso, parseDate, todayStr } from "./dates";
+import { isRealDate, iso, parseDate, todayStr } from "./dates";
 import type { Anniversary, AnniversaryKind, ArchivedPerson, ChildEntry, ChildRef, Encounter, Journal, Session, Settings } from "./types";
 
 const KINDS: AnniversaryKind[] = ["met", "married", "first", "custom"];
@@ -56,7 +56,10 @@ export function cleanChildren(raw: unknown): ChildEntry[] {
     if (!item || typeof item !== "object") continue;
     const c = item as Partial<ChildEntry>;
     if (typeof c.id !== "string" || !c.id || typeof c.name !== "string" || !c.name.trim()) continue;
-    if (typeof c.birthdate !== "string" || !DS.test(c.birthdate)) continue;
+    // Shape is not enough: "2021-13-40" matches the pattern and was
+    // stored, then served back as an upcoming birthday (RT2-H6-5).
+    // A child's birthdate must be a date that exists.
+    if (typeof c.birthdate !== "string" || !DS.test(c.birthdate) || !isRealDate(c.birthdate)) continue;
     out.push({
       id: c.id,
       name: c.name.trim(),

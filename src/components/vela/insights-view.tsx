@@ -18,7 +18,7 @@ import {
   yearCount,
 } from "@/lib/vela/stats";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
-import { countedTrackers, visibleSessions } from "@/lib/vela/anniversaries";
+import { countedTrackers, visibleEncounters, visibleSessions } from "@/lib/vela/anniversaries";
 import { ownerPerson, partnerPerson } from "@/lib/vela/people";
 import type { Session } from "@/lib/vela/types";
 import { voiceReading } from "@/lib/vela/voices";
@@ -261,7 +261,10 @@ export function InsightsView() {
   // The Archive law: a resting person counts in the statistics only where the
   // user decided so. The record itself is never touched.
   const sessions = visibleSessions(journal, "stats");
-  const encounters = useJournal((s) => s.journal.encounters);
+  // Encounters obey the same Archive law as sessions: this view used
+  // to read the raw list, so a resting person's spans still counted
+  // in the bars, the years and the now-cards (RT2-H4 B1).
+  const encounters = visibleEncounters(journal, "stats");
   const weekStart = useJournal((s) => s.journal.settings.weekStart);
   const ratingStyle = useJournal((s) => s.journal.settings.ratingStyle);
   const compare = useJournal((s) => s.compare);

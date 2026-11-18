@@ -25,6 +25,7 @@ import { followsPartner, sessionsByPhaseFor, trackerForPartner, visibleTrackers 
 import { addDays, fmtShort, parseDate, todayStr } from "@/lib/vela/dates";
 import { useLang, useT } from "@/lib/vela/i18n";
 import { selectActiveCycle, useJournal } from "@/lib/vela/store";
+import { countedTrackers, visibleSessions } from "@/lib/vela/anniversaries";
 import { cn } from "@/lib/cn";
 import { Button, Card, ConfirmDialog, Switch, fieldClass } from "./ui";
 import { CycleReasonAsk } from "./cycle-reason";
@@ -1558,8 +1559,14 @@ export function CycleStats() {
   const switching = useJournal((s) => visibleTrackers(s.journal.settings.cycles).length >= 2);
   const lang = useLang();
   const cycle = useJournal(selectActiveCycle);
-  const sessions = useJournal((s) => s.journal.sessions);
-  const cycles = useJournal((s) => s.journal.settings.cycles);
+  // The phase counts obey the Archive law like every other statistic:
+  // the raw sessions and the raw tracker list used to flow straight
+  // into sessionsByPhaseFor, so a resting person's moments and cycle
+  // still counted here (RT2-H4 B1). Derived from the journal in the
+  // body — never inside the selector, which must return stored values.
+  const journal = useJournal((s) => s.journal);
+  const sessions = visibleSessions(journal, "stats");
+  const cycles = countedTrackers(journal);
   const openPhase = useJournal((s) => s.openHistPhase);
   const [regInfo, setRegInfo] = useState(false);
   useBackLayer(regInfo, () => setRegInfo(false), { name: "cycle-regularity" });

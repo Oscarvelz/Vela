@@ -82,12 +82,18 @@ export function cleanPeople(raw: unknown): Person[] {
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const p = item as Partial<Person>;
-    if (typeof p.id !== "string" || !p.id || seen.has(p.id)) continue;
+    if (typeof p.id !== "string" || !p.id) continue;
     if (typeof p.name !== "string" || !p.name.trim()) continue;
     if (p.role !== "owner" && p.role !== "partner") continue;
-    seen.add(p.id);
+    // Dedupe on the STORED id, not the raw one: two raw ids sharing a
+    // 40-char prefix used to pass the check separately and then
+    // truncate into the same person, and the merge kept only one of
+    // them (RT2-H6-4). First record wins, as at every other gate.
+    const id = p.id.slice(0, 40);
+    if (seen.has(id)) continue;
+    seen.add(id);
     out.push({
-      id: p.id.slice(0, 40),
+      id,
       name: p.name.trim().slice(0, 60),
       role: p.role,
       ...(p.speakAs && SPEAK_AS.includes(p.speakAs) ? { speakAs: p.speakAs } : {}),

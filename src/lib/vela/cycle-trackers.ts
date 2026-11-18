@@ -103,10 +103,19 @@ export function cleanTrackers(rawCycles: unknown, rawLegacy: unknown): CycleTrac
   const seen = new Set<string>();
   const out: CycleTracker[] = [];
   list.forEach((item, index) => {
-    let tracker = cleanTracker(item, index === 0 ? FIRST_TRACKER_ID : `c${index + 1}`);
-    while (seen.has(tracker.id)) tracker = { ...tracker, id: `${tracker.id}x` };
-    seen.add(tracker.id);
-    out.push(tracker);
+    const tracker = cleanTracker(item, index === 0 ? FIRST_TRACKER_ID : `c${index + 1}`);
+    // Duplicates are renamed INSIDE the validity band: the old "x"
+    // suffix pushed a 40-char id to 41, the next gate pass rejected
+    // it and renamed by index — ids and order shifted between passes
+    // and the cleaner was not idempotent (RT2-H6-8). Truncating the
+    // base to fit the suffix keeps every pass stable.
+    let id = tracker.id;
+    for (let n = 1; seen.has(id); n += 1) {
+      const suffix = n === 1 ? "x" : `x${n}`;
+      id = tracker.id.slice(0, 40 - suffix.length) + suffix;
+    }
+    seen.add(id);
+    out.push(id === tracker.id ? tracker : { ...tracker, id });
   });
   // No slice here: the gate carries what it is given. The cap is a product
   // rule enforced where data is written (the store refuses a 9th tracker)
