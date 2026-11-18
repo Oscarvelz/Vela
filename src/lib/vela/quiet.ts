@@ -59,7 +59,76 @@ export function cleanQuietMarks(raw: unknown): QuietMark[] {
     const s = (m.updatedAt ?? m.createdAt) - (prev.updatedAt ?? prev.createdAt);
     if (s > 0 || (s === 0 && JSON.stringify(m) > JSON.stringify(prev))) byId.set(m.id, m);
   }
-  return [...byId.values()].sort((a, b) => a.from.localeCompare(b.from));
+  return resolveQuietOverlaps([...byId.values()]);
+}
+
+/* One day, one name — at EVERY door (Round 5, RT5-H3 B4).
+ * saveQuietMark has always enforced it at the writing door: a
+ * new mark trims or splits whatever it overlaps, whatever the
+ * overlapped mark's reason — a day carries one name, never two
+ * arguing ones. But the gate and the merge unioned by id and
+ * never re-applied the law, so two devices' overlapping marks
+ * (even of different reasons) survived side by side and every
+ * counting surface summed per mark: 21 "quiet days" over a
+ * 15-day union, and three overlapping marks of one cause read
+ * as three episodes — enough to fire the Advisor's "≥3 episodes
+ * of one cause" line from a single stretch. The resolution is
+ * the write door's own algorithm with "new" read as "later
+ * written": marks fold in edit-stamp order (content breaks a
+ * tie), and each mark trims or splits the earlier ones it
+ * overlaps. A split piece keeps its source's stamps and takes
+ * a derived id (`<id>~<from>`), so every device derives the
+ * same resolution from the same pair. */
+export function resolveQuietOverlaps(marks: QuietMark[]): QuietMark[] {
+  /* First, marks of the SAME name that overlap are one stretch:
+   * they union into a single mark (the later writing's identity
+   * and words, the earlier birth, the union span) — three
+   * overlapping "travel" marks are one trip, not three episodes. */
+  const nameKey = (m: QuietMark) => (m.reason === "custom" ? `custom:${m.custom ?? ""}` : m.reason);
+  const byName = new Map<string, QuietMark[]>();
+  for (const m of marks) byName.set(nameKey(m), [...(byName.get(nameKey(m)) ?? []), m]);
+  const unioned: QuietMark[] = [];
+  for (const group of byName.values()) {
+    const sorted = [...group].sort((a, b) => a.from.localeCompare(b.from) || a.id.localeCompare(b.id));
+    for (const m of sorted) {
+      const prev = unioned[unioned.length - 1];
+      if (prev && nameKey(prev) === nameKey(m) && m.from <= prev.to) {
+        const ps = prev.updatedAt ?? prev.createdAt;
+        const ms = m.updatedAt ?? m.createdAt;
+        const winner = ms !== ps ? (ms > ps ? m : prev) : JSON.stringify(m) > JSON.stringify(prev) ? m : prev;
+        unioned[unioned.length - 1] = {
+          ...winner,
+          from: prev.from,
+          to: prev.to >= m.to ? prev.to : m.to,
+          createdAt: Math.min(prev.createdAt, m.createdAt),
+          updatedAt: Math.max(ps, ms),
+        };
+      } else {
+        unioned.push(m);
+      }
+    }
+  }
+  /* Then, across names, the later writing owns the overlap —
+   * the write door's trim/split, in edit-stamp order. */
+  const ordered = [...unioned].sort((a, b) => {
+    const s = (a.updatedAt ?? a.createdAt) - (b.updatedAt ?? b.createdAt);
+    return s !== 0 ? s : JSON.stringify(a).localeCompare(JSON.stringify(b));
+  });
+  let out: QuietMark[] = [];
+  for (const mark of ordered) {
+    const kept: QuietMark[] = [];
+    for (const old of out) {
+      if (old.to < mark.from || old.from > mark.to) {
+        kept.push(old);
+        continue;
+      }
+      if (old.from < mark.from) kept.push({ ...old, to: addDays(mark.from, -1) });
+      if (old.to > mark.to) kept.push({ ...old, id: `${old.id}~${addDays(mark.to, 1)}`, from: addDays(mark.to, 1) });
+    }
+    kept.push(mark);
+    out = kept;
+  }
+  return out.sort((a, b) => a.from.localeCompare(b.from) || a.id.localeCompare(b.id));
 }
 
 function dayDiff(from: string, to: string) {
@@ -97,7 +166,11 @@ export type QuietEpisode = { mark: QuietMark; days: number; firstDay: string };
 export function episodes(marks: QuietMark[], sessions: Session[], today = todayStr()): QuietEpisode[] {
   const sessionDays = new Set(sessions.map((s) => s.date));
   const out: QuietEpisode[] = [];
-  for (const mark of marks) {
+  /* The reader resolves overlaps itself (Round 5, RT5-H3 B4):
+   * the doors keep stored lists resolved, and resolving here too
+   * means no consumer can ever sum an overlap twice, whatever
+   * list it was handed. Resolving a resolved list is a no-op. */
+  for (const mark of resolveQuietOverlaps(marks)) {
     if (mark.from > today) continue;
     // Interval arithmetic, not enumeration: the count is the span's length
     // minus the session days inside it, however long the span runs.

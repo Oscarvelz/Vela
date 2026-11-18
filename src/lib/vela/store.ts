@@ -10,7 +10,7 @@ import { renumber, sessionsSorted, type CompareMode } from "./stats";
 import { cleanMuted } from "./stories";
 import { cleanAnniversaries, cleanArchived, cleanChildren, dedupeById } from "./anniversaries";
 import { cleanPeople, cleanProposals, mergePeople, newPersonId, newProposalId, reseatPersonId, reseatRecordId, PROPOSAL_TTL_MS, WIPE_COOLING_MS } from "./people";
-import { cleanQuietMarks, newQuietId } from "./quiet";
+import { cleanQuietMarks, newQuietId, resolveQuietOverlaps } from "./quiet";
 import { cleanPregnancyTests, newTestId } from "./pregnancy";
 import { runMigrations } from "./migrations";
 import type { Anniversary, ChildEntry, Draft, Encounter, Journal, JournalWipe, Person, PregnancyTestEvent, Profile, Proposal, QuietMark, Session, Settings, SpeakAs, TabId } from "./types";
@@ -832,8 +832,29 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       }
     }
   }
-  const older = local.updatedAt >= remote.updatedAt ? remote : local;
-  const newer = older === local ? remote : local;
+  /* The newer side is a property of the PAIR. On an exact
+   * updatedAt tie the old line silently crowned whichever journal
+   * was passed first (Round 5, RT5-H6 B1) — and sync merges
+   * local-first on each device, so both devices crowned their own
+   * journal and the pair never converged. A tie now falls to a
+   * canonical content key of the whole journal: same pair, same
+   * winner, on every device. */
+  const canonical = (value: unknown): string => {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+    if (value && typeof value === "object") {
+      return `{${Object.keys(value as Record<string, unknown>).sort().map((k) => `${JSON.stringify(k)}:${canonical((value as Record<string, unknown>)[k])}`).join(",")}}`;
+    }
+    return JSON.stringify(value) ?? "null";
+  };
+  const newer =
+    local.updatedAt !== remote.updatedAt
+      ? local.updatedAt > remote.updatedAt
+        ? local
+        : remote
+      : canonical(local) >= canonical(remote)
+        ? local
+        : remote;
+  const older = newer === local ? remote : local;
   /* The wipe's high-water mark (Round 2, RT2-H1 B1): a side journaled
    * at or before it predates a deliberate erasure, so what it alone
    * carries — a profile, people, a couple mode switched on before the
@@ -990,7 +1011,14 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
        * a stamp of its own, not an absence the stale side can fill. */
       const modeFloor = Math.max(wipeStamp, deleted[COUPLE_OFF] ?? 0);
       const modes = [local.settings.coupleMode, remote.settings.coupleMode].filter((m) => m && m.enabledAt > modeFloor);
-      return modes.length ? { coupleMode: modes.reduce((a, b) => (b!.enabledAt >= a!.enabledAt ? b : a)) } : { coupleMode: undefined };
+      /* An enabledAt tie resolves by content (Round 5, RT5-H6 B2):
+       * the reduce used to keep the later array element — the
+       * remote side — so the pair's sharedFrom depended on which
+       * device merged. The greater sharedFrom wins a tie,
+       * identically everywhere. */
+      return modes.length
+        ? { coupleMode: modes.reduce((a, b) => (b!.enabledAt !== a!.enabledAt ? (b!.enabledAt > a!.enabledAt ? b : a) : b!.sharedFrom >= a!.sharedFrom ? b : a)) }
+        : { coupleMode: undefined };
     })(),
   };
   // People resolve through mergePeople; whoever the resolution displaces is
@@ -1090,7 +1118,9 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
         if (s > 0 || (s === 0 && JSON.stringify(m) > JSON.stringify(prev))) byId.set(m.id, m);
       }
       const merged = [...byId.values()].filter((m) => !(deleted[m.id] >= (m.updatedAt ?? m.createdAt)) && !(wipeStamp > 0 && m.createdAt <= wipeStamp));
-      return { quietDays: merged };
+      /* The union re-applies the one-day-one-name law the
+       * writing door and the gate both keep (Round 5, RT5-H3 B4). */
+      return { quietDays: resolveQuietOverlaps(merged) };
     })(),
     // Pregnancy tests union by id (2.2.7): stated events never edit each
     // other, so the union is the whole merge; a tombstone still wins.

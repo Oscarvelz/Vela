@@ -99,6 +99,18 @@ export function cleanPeople(raw: unknown): Person[] {
       const at = out.findIndex((q) => q.id === id);
       if (at >= 0 && out[at].role !== "owner" && p.role === "owner") {
         out.splice(at, 1);
+      } else if (at >= 0 && out[at].role === "owner" && p.role === "owner") {
+        /* Owner against owner inside the band (Round 5, RT5-H6
+         * B8): the survivor used to be whichever record the array
+         * carried first. resolvePeople's own law — the earliest
+         * ceremony founds the seat — decides here too: the record
+         * born earlier (then edited earlier, then lesser by
+         * content) keeps the seat, in any array order. */
+        const seated = out[at];
+        const challengerKey = JSON.stringify([finiteStamp(p.createdAt) ?? 0, finiteStamp(p.updatedAt) ?? 0, p.name.trim().slice(0, 60)]);
+        const seatedKey = JSON.stringify([seated.createdAt ?? 0, seated.updatedAt ?? 0, seated.name]);
+        if (challengerKey < seatedKey) out.splice(at, 1);
+        else continue;
       } else {
         continue;
       }

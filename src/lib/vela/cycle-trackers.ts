@@ -334,8 +334,18 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
     } else if (key.startsWith("q:")) {
       /* A stamped mute tie resolves by the newer side (Round 3's
        * law): a content rule here would reinstate the one-way door,
-       * since "1" outranks "0" in every comparison. */
-      value = (newerSide === a ? ea.get(key) : eb.get(key)) ?? ea.get(key) ?? eb.get(key);
+       * since "1" outranks "0" in every comparison. But newerSide
+       * itself is `b.updatedAt > a.updatedAt ? b : a` — on a FULL
+       * tie it silently names the first argument (Round 5,
+       * RT5-H3 B1). The last resort is the trackers' whole content
+       * key, which contains this very value: decisive, symmetric,
+       * and blind to which value it favors. */
+      if (a.updatedAt !== b.updatedAt) {
+        value = (newerSide === a ? ea.get(key) : eb.get(key)) ?? ea.get(key) ?? eb.get(key);
+      } else {
+        const sideKey = (t: CycleTracker) => JSON.stringify([...entries(t).entries()].sort());
+        value = (sideKey(b) > sideKey(a) ? eb.get(key) : ea.get(key)) ?? ea.get(key) ?? eb.get(key);
+      }
     } else {
       /* Equal stamps, non-reason entry: the newer side, then
        * content on a full tie — identically on both devices. */
@@ -365,7 +375,10 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
   /* A meta tie resolves by a content key too (Round 4): whose
    * settings ride the merged tracker must not depend on argument
    * order. */
-  const metaKey = (t: CycleTracker) => JSON.stringify([t.enabled, t.perspective, t.ownerId ?? "", t.partnerLink ?? "", t.partnerName ?? ""]);
+  /* The content key names EVERY meta field (Round 5, RT5-H3 B2):
+   * the four lengths are META_KEYS too, and omitting them left a
+   * meta full tie differing only in lengths to argument order. */
+  const metaKey = (t: CycleTracker) => JSON.stringify([t.enabled, t.perspective, t.ownerId ?? "", t.partnerLink ?? "", t.partnerName ?? "", t.periodDays, t.cycleDays, t.lutealDays, t.fertileDays]);
   const meta = b.metaAt > a.metaAt ? b : b.metaAt < a.metaAt ? a : metaKey(b) > metaKey(a) ? b : a;
   const merged = cleanTracker({ ...meta, id: a.id, starts, ends, days, reasons, stamps, muteReasonAsks: muteAsks });
   return { ...merged, updatedAt: Math.max(a.updatedAt, b.updatedAt), metaAt: Math.max(a.metaAt, b.metaAt) };
@@ -481,7 +494,12 @@ export function shareReasonsAcrossTwins(trackers: CycleTracker[]): CycleTracker[
       });
       const stamp = Math.max(...group.map((tracker) => tracker.stamps[`r:${start}`] ?? 0));
       for (const tracker of group) {
-        if (tracker.reasons?.[start]?.id === winner.id && tracker.reasons?.[start]?.at === winner.at) continue;
+        /* The skip compares the WHOLE testimony (Round 5, RT5-H3
+         * B3): it used to compare only id + at, so a twin whose
+         * testimony differed from the winner only in its NOTE was
+         * skipped as "already shared" and the twins never
+         * converged — each kept its own words forever. */
+        if (tracker.reasons?.[start]?.id === winner.id && tracker.reasons?.[start]?.at === winner.at && tracker.reasons?.[start]?.note === winner.note) continue;
         const current = changed.get(tracker.id) ?? tracker;
         changed.set(tracker.id, {
           ...current,
