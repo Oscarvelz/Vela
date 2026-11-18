@@ -455,7 +455,10 @@ export function stampNow(journal: Journal): number {
     if (s.createdAt > max) max = s.createdAt;
     if ((s.updatedAt ?? 0) > max) max = s.updatedAt ?? 0;
   }
-  for (const e of journal.encounters) if (e.createdAt > max) max = e.createdAt;
+  for (const e of journal.encounters) {
+    if (e.createdAt > max) max = e.createdAt;
+    if ((e.updatedAt ?? 0) > max) max = e.updatedAt ?? 0;
+  }
   for (const p of journal.people ?? []) if (p.updatedAt > max) max = p.updatedAt;
   for (const m of journal.quietDays ?? []) {
     if (m.createdAt > max) max = m.createdAt;
@@ -588,7 +591,17 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     if (key && !livePartnerMap.has(key)) livePartnerMap.set(key, name);
   };
   for (const side of [older, newer]) {
-    if (side.updatedAt <= partnerCut) continue;
+    if (side.updatedAt <= partnerCut) {
+      /* A side journaled before the cut is screened by the partners'
+       * OWN stamps, not its birthday (RT4-H1 B1): a name it carries
+       * speaks only if she was born after the cut — her on-stamp
+       * outranks it — while pre-cut names stay the cut's, however
+       * recent the side's last unrelated save is. */
+      for (const name of side.partners) {
+        if ((deleted[PARTNER_ON + partnerKey(name)] ?? 0) > partnerCut) offerPartner(name);
+      }
+      continue;
+    }
     for (const name of side.partners) offerPartner(name);
   }
   if (partnerCut === 0) {
@@ -1941,6 +1954,7 @@ export const useJournal = create<Store>((set, get) => {
     },
     saveEdit: (id, draft) => {
       const journal = get().journal;
+      const editStamp = stampNow(journal);
       const data = payloadFromDraft(draft, journal.settings.language);
       const before = journal.sessions.find((session) => session.id === id);
       const others = journal.sessions.filter((session) => session.id !== id);
@@ -1964,7 +1978,7 @@ export const useJournal = create<Store>((set, get) => {
       }
       const linked = linkedOrCover({ ...journal, sessions: others }, target, data.partnerName, data.date);
       const sessions = journal.sessions.map((session) =>
-        session.id === id ? { ...session, ...data, encounterId: linked.encounterId, updatedAt: Date.now() } : session,
+        session.id === id ? { ...session, ...data, encounterId: linked.encounterId, updatedAt: editStamp } : session,
       );
       const partners = journal.partners.slice();
       if (data.partnerName && !partners.some((p) => samePartner(p, data.partnerName))) partners.push(data.partnerName);
@@ -2180,6 +2194,10 @@ export const useJournal = create<Store>((set, get) => {
     savePartnerVoice: (sessionId, voice) => {
       const journal = get().journal;
       const lang = journal.settings.language;
+      /* Voice edits mint through stampNow like every other edit
+       * (RT4-H1 B3): a raw-clock stamp lost to any higher-stamped
+       * copy, and the edit — or the deletion — silently reverted. */
+      const now = stampNow(journal);
       const sessions = journal.sessions.map((s) =>
         s.id === sessionId
           ? {
@@ -2188,9 +2206,9 @@ export const useJournal = create<Store>((set, get) => {
                 ...voice,
                 ownWords: voice.ownWords.slice(0, 4000),
                 notes: composedNote(voice, lang),
-                updatedAt: Date.now(),
+                updatedAt: now,
               },
-              updatedAt: Date.now(),
+              updatedAt: now,
             }
           : s,
       );
@@ -2198,9 +2216,10 @@ export const useJournal = create<Store>((set, get) => {
     },
     deletePartnerVoice: (sessionId) => {
       const journal = get().journal;
+      const now = stampNow(journal);
       const sessions = journal.sessions.map((s) => {
         if (s.id !== sessionId || !s.partnerVoice) return s;
-        const next = { ...s, updatedAt: Date.now() };
+        const next = { ...s, updatedAt: now };
         delete next.partnerVoice;
         return next;
       });
@@ -2324,15 +2343,22 @@ export const useJournal = create<Store>((set, get) => {
     addPregnancyTests: (events) => {
       if (!events.length) return;
       const journal = get().journal;
-      const now = Date.now();
+      /* A test's birth stamp goes through stampNow (RT4-H3 B2): on a
+       * set-back clock a raw stamp was born below a wipe that predated
+       * the entry, and the wipe's screen cut an honestly logged test. */
+      const now = stampNow(journal);
       const fresh = events.map((e, i) => ({ ...e, id: newTestId(), createdAt: now + i }));
       commit({ ...journal, pregnancyTests: cleanPregnancyTests([...(journal.pregnancyTests ?? []), ...fresh]) });
     },
     saveQuietMark: (input) => {
       const journal = get().journal;
-      const now = Date.now();
+      /* Quiet marks mint through stampNow (RT4-H3 B2), and an edit
+       * keeps the mark's birth stamp (RT4-H3 L1): createdAt is a fact
+       * about when the mark was born, not when it was last touched. */
+      const now = stampNow(journal);
       const from = input.from <= input.to ? input.from : input.to;
       const to = input.from <= input.to ? input.to : input.from;
+      const existing = input.id ? (journal.quietDays ?? []).find((m) => m.id === input.id) : undefined;
       const mark: QuietMark = {
         id: input.id ?? newQuietId(),
         from,
@@ -2342,7 +2368,7 @@ export const useJournal = create<Store>((set, get) => {
         ...(input.note?.trim() ? { note: input.note.trim().slice(0, 160) } : {}),
         source: input.source,
         ...(input.themeText?.trim() ? { themeText: input.themeText.trim().slice(0, 160) } : {}),
-        createdAt: now,
+        createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
       // One day, one name: the new mark replaces whatever it overlaps —
@@ -2449,6 +2475,19 @@ export const useJournal = create<Store>((set, get) => {
       const allArchived = cleanArchived(settings.archivedPeople);
       const goneArchived = allArchived.filter((p) => match(p.name));
       const keptArchived = allArchived.filter((p) => !goneArchived.includes(p));
+      /* The batch draft is a trace that names her too (RT4-H4 B2):
+       * left alone, the batch log restores it with her pre-picked,
+       * and one ordinary Save re-seats her on the roster and files
+       * her sessions — a whole resurrection under the erasure's own
+       * law, "every trace that names them, without return". The draft
+       * dies when she is its typed or picked name, or when her name
+       * stands in its text as a word of its own; a draft naming
+       * someone else is untouched. */
+      const draft = settings.batchDraft;
+      const wordRe = new RegExp(`(?<![\\p{L}])${key.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}(?![\\p{L}])`, "u");
+      const draftNamesHer =
+        draft !== undefined &&
+        (match(draft.typed ?? "") || match(draft.picked ?? "") || wordRe.test((draft.text ?? "").toLowerCase()));
       commit({
         ...journal,
         sessions: renumber(keptSessions),
@@ -2465,6 +2504,7 @@ export const useJournal = create<Store>((set, get) => {
           anniversaries: keptAnniversaries,
           archivedPeople: keptArchived,
           storiesMuted: { ...muted, people: muted.people.filter((p) => !match(p)) },
+          ...(draftNamesHer ? { batchDraft: undefined } : {}),
         },
         deleted: tombstone(journal, [
           ...removedSessionIds,
@@ -2473,6 +2513,7 @@ export const useJournal = create<Store>((set, get) => {
           ...herProposals.map((p) => p.id),
           ...goneAnniversaries.map((a) => a.id),
           ...goneArchived.map((p) => `archived:${partnerKey(p.name)}`),
+          ...(draftNamesHer ? ["batchDraft"] : []),
           // The partner-off tombstone: without it, the next merge with a
           // device that still lists her brings her straight back (V4 B4).
           // Her person id is tombstoned too, so her record (and PIN) can
@@ -2707,6 +2748,11 @@ export const useJournal = create<Store>((set, get) => {
       if (choice.places) for (const v of journal.settings.customPlaces) erasedStamps[CUSTOM_OFF + customKey("places", v)] = stampNow(journal);
       if (choice.positions) for (const v of journal.settings.customPositions) erasedStamps[CUSTOM_OFF + customKey("positions", v)] = stampNow(journal);
       if (choice.problems) for (const v of journal.settings.customProblems) erasedStamps[CUSTOM_OFF + customKey("problems", v)] = stampNow(journal);
+      /* Partners erased here get the off stamps removePartner mints
+       * (RT4-H1 B1): without them the merge's roster screen read this
+       * side's silence as no news, and the first unrelated save on a
+       * stale device lifted its whole pre-erase roster back in. */
+      if (choice.partners) for (const name of journal.partners) erasedStamps[PARTNER_OFF + partnerKey(name)] = now;
       commit({
         ...journal,
         settings,
