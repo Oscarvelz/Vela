@@ -59,7 +59,15 @@ const J = () => S().journal;
   else brk("R1 the merge resurrected forever-deleted settings data", `anniversary=${annivBack} archived=${archBack}`);
 }
 
-/* ── R2. The gate honors a person tombstone before resolving the couple ── */
+/* ── R2. The gate honors a person tombstone before resolving the couple ──
+ * Fixture amended in Round 4 (2.2.41), correction stated: the
+ * tombstone now carries the partner-off witness. A bare person
+ * tombstone can no longer prove it meant her (RT4-H1 B2: a
+ * session's tombstone whose session already died arrives in the
+ * same bare shape), so since 2.2.41 only a witnessed tombstone
+ * executes a person at the gate; the ordering law this specimen
+ * guards — the filter runs BEFORE the couple resolves — is
+ * unchanged. */
 {
   const j = journalFromUnknown(rawJournal({
     people: [
@@ -67,7 +75,7 @@ const J = () => S().journal;
       { id: "p-sofia", name: "Sofía", role: "partner", createdAt: 150, updatedAt: 150 },
       { id: "p-lucia", name: "Lucía", role: "partner", createdAt: 200, updatedAt: 200 },
     ],
-    deleted: { "p-sofia": T },
+    deleted: { "p-sofia": T, "partner-:sofía": T },
   }), "en");
   const ids = (j.people ?? []).map((p) => p.id).join();
   if (ids === "p-owner,p-lucia") hold("R2 a tombstoned person loses her seat at the gate; the next in ceremony order takes it");

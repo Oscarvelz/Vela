@@ -169,6 +169,24 @@ export function newPersonId(): string {
   return `p${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
 }
 
+/* Deterministic re-seat ids for the collision repair (Round 4,
+ * RT4-H6 L5): a repair computed independently on two devices — at
+ * the gate on one, at the merge on the other — must land on the
+ * SAME fresh id, or the repaired person forks into two records.
+ * The fresh id is a pure function of the record being re-seated,
+ * so every door derives it identically. */
+function hash36(text: string): string {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+export function reseatPersonId(person: { id: string; name: string; createdAt: number }): string {
+  return `p${hash36(`${person.id}:${person.createdAt}:${person.name}`)}`;
+}
+export function reseatRecordId(prefix: string, rec: { id: string; createdAt?: number }): string {
+  return `${prefix}${hash36(`${rec.id}:${rec.createdAt ?? 0}`)}`;
+}
+
 /* ── Proposals (2.2.3) ────────────────────────────────────────────────────── */
 
 export const PROPOSAL_TTL_MS = 7 * 86400000;

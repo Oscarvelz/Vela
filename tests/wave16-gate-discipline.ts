@@ -131,9 +131,23 @@ function side(roster: string[], def: string, updatedAt: number): Journal {
   check("B4 action: the person survives her session's deletion", after.people.some((p) => p.name === "Lucía"), JSON.stringify(after.people.map((p) => p.name)));
   const regated = journalFromUnknown(JSON.parse(JSON.stringify(after)), "en");
   check("B4 action: she survives the re-gate too", regated.people.some((p) => p.name === "Lucía"));
-  // Control: an unshared person tombstone still executes.
+  // Control — AMENDED in Round 4 (2.2.41), correction stated: this
+  // specimen originally asserted a person-only tombstone executes.
+  // RT4-H1 B2 proved the same bare shape is also a session's
+  // tombstone whose session already died on its own device, and a
+  // flat stamp cannot tell the two apart. What CAN is the
+  // partner-off witness: the app's person-deletion door has minted
+  // it beside her id tombstone since 2.2.26, so a tombstone with
+  // the witness is provably hers and executes; one without it
+  // cannot prove its class, and the tombstone keeps only the
+  // meaning it can prove — she is re-seated. A legacy (pre-witness)
+  // person deletion is the accepted cost: she returns re-seated
+  // and can be deleted again, now with the witness; an execution
+  // by a session's tombstone would be silent and final.
   const ctrl = journalFromUnknown({ ...raw, sessions: [], deleted: { "shared-1": now } }, "en");
-  check("B4 control: a person-only tombstone still removes her", !ctrl.people.some((p) => p.name === "Lucía"));
+  check("B4 control (amended): a witness-less person-only tombstone cannot prove its class — she is re-seated", ctrl.people.some((p) => p.name === "Lucía" && p.id !== "shared-1"));
+  const ctrlW = journalFromUnknown({ ...raw, sessions: [], deleted: { "shared-1": now, "partner-:lucía": now } }, "en");
+  check("B4 control (amended): with the partner-off witness, a person-only tombstone still removes her", !ctrlW.people.some((p) => p.name === "Lucía"));
 }
 
 /* ——— L4: the wiped journal's active tracker is a stored shape ——— */
