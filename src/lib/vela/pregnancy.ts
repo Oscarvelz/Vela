@@ -39,14 +39,23 @@ export function newTestId(): string {
   return `pt-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
 }
 
-const TEST_NOUN_SRC = "pregnancy tests?|pruebas? de embarazo|tests? de embarazo|pruebas? caseras? de embarazo|tests? caseros? de embarazo";
+const TEST_NOUN_SRC = "pregnancy tests?|tests? for pregnancy|pruebas? de embarazo|tests? de embarazo|pruebas? caseras? de embarazo|tests? caseros? de embarazo";
 const TEST_NOUN = new RegExp(`\\b(${TEST_NOUN_SRC})\\b`);
 /* Negation before the fact kills it ("I'm not pregnant", "no estoy…").
  * Straight apostrophe only: fold() straightens the text's apostrophes,
  * so a curly one here would be dead code (RT-V2M M1). Round 2 added
  * tampoco (the "not either" the list was missing — "tampoco salio
  * positiva" filed a clean positive) and the nobody/nadie subjects. */
-const NEGATED = /\b(no|not|never|none|nobody|nunca|jamas|sin|ninguna?|ninguno|nadie|tampoco|n't)\b/;
+/* Denial rides with negation (Round 3, P3-6): "she denies she is
+ * pregnant" states the opposite of the fact, more strongly than a
+ * doubt — a veto list without a denial verb filed it CLEAN. */
+/* The contraction family rides as whole words, the way the batch
+ * lexicon lists them: the bare "n't" this list used to carry can
+ * never match — no word boundary stands before the n of "didn't" —
+ * so every contracted negation ("she didn't take a test", "she isn't
+ * pregnant") passed the veto unseen until Round 3's fence pressed it
+ * (P3-7's root). */
+const NEGATED = /\b(no|not|never|none|nobody|nunca|jamas|sin|ninguna?|ninguno|nadie|tampoco|didnt|didn't|dont|don't|doesnt|doesn't|wasnt|wasn't|werent|weren't|isnt|isn't|arent|aren't|hadnt|hadn't|havent|haven't|couldnt|couldn't|wouldnt|wouldn't|cant|can't|wont|won't|denies|denied|denying|niega|niegan|nego|desmiente|desmintio)\b/;
 /* Wishes, fears, tries, suspicions and beliefs state no fact. Judged
  * only in the match's own segment (see scopeBefore), never clause-wide.
  * Round 2: the veto knew the first person ("espero", "temo") and the
@@ -54,25 +63,55 @@ const NEGATED = /\b(no|not|never|none|nobody|nunca|jamas|sin|ninguna?|ninguno|na
  * actually write about her — hopes, fears, guess, espera, teme — nor
  * "me pregunto si", whose si sits mid-segment where the if-veto
  * cannot see it. */
-const UNCERTAIN = /\b(trying|try|hope|hopes|hoping|wish|wishes|afraid|scared|fear|fears|guess|guesses|maybe|might|perhaps|suspect|suspects|suspected|thinks|believes|tratando|intentando|buscando|espero|espera|esperan|esperanza|ojala|miedo|temo|teme|temen|pregunto|preguntaba|quizas|tal vez|puede que|sospech\w*|piensa|cree)\b/;
+/* Round 3 (P3-5): the ring beyond the pinned verbs — doubt, assumption,
+ * seeming and wondering, in both languages, file CLEAN without these.
+ * "feels" belongs here only as the belief shape ("she feels she is
+ * pregnant"); the veto reaches a declaration in its own segment, which
+ * is where that shape lives. */
+const UNCERTAIN = /\b(trying|try|hope|hopes|hoping|wish|wishes|afraid|scared|fear|fears|guess|guesses|maybe|might|perhaps|suspect|suspects|suspected|thinks|believes|doubts?|assumes?|assumed|wonders?|wondered|reckons?|feels?|supposedly|tratando|intentando|buscando|espero|espera|esperan|esperanza|ojala|miedo|temo|teme|temen|pregunto|preguntaba|se pregunta|quizas|tal vez|puede que|sospech\w*|piensa|cree|dudas?|dudan|asume|asumen|supuestamente|al parecer|parece|parecen)\b/;
 /* A test about somebody else is not the journal owner's test (P4).
- * Round 2 extended the family: aunts, daughters, neighbors. */
-const OTHER_SUBJECT = /\b(her sister|his sister|my sister|her brother|his brother|my brother|her friend|his friend|my friend|her cousin|his cousin|my cousin|her mother|his mother|her aunt|his aunt|my aunt|her daughter|his daughter|my daughter|la hermana|el hermano|la prima|el primo|una amiga|un amigo|su hermana|su hermano|su prima|su amiga|la tia|su tia|la vecina|el vecino|su vecina|la hija|su hija)\b/;
+ * Round 3 rebuilt the list as determiner × relation (P3-1/P3-2): the
+ * enumerative phrases were the disease — "mi hermana", "my mother",
+ * the niece, the roommate and the neighbor were never written, phrase
+ * by phrase, while their listed twins were refused. One relation
+ * vocabulary now feeds every subject door in this reader. "Wife" and
+ * "husband" are deliberately absent: in the owner's own journal the
+ * wife is the subject herself, and her declarations must not die as
+ * somebody else's news. */
+const RELATIONS = [
+  "sister", "brother", "mother", "father", "aunt", "uncle", "cousin", "daughter", "son", "niece", "nephew",
+  "grandmother", "grandfather", "grandma", "grandpa", "friend", "roommate", "coworker", "colleague", "neighbor", "neighbour", "boss",
+  "hermana", "hermano", "madre", "padre", "tia", "tio", "prima", "primo", "hija", "hijo", "sobrina", "sobrino",
+  "cunada", "cunado", "suegra", "suegro", "nuera", "yerno", "nieta", "nieto", "abuela", "abuelo",
+  "amiga", "amigo", "vecina", "vecino", "companera", "companero",
+];
+const OTHER_SUBJECT = new RegExp(`\\b(?:her|his|my|their|mi|mis|su|sus|la|el|una|un|the)\\s+(?:${RELATIONS.join("|")})\\b`);
+/* Animals, for the subject doors that read a bare word: a cow is not a
+ * named person (P3-4) and "la perra" is not the partner (P3-11). */
+const ANIMALS = ["dog", "cat", "cow", "horse", "goat", "pig", "sheep", "perro", "perra", "gato", "gata", "vaca", "caballo", "yegua", "cabra", "oveja", "cerdo", "cerda", "burro", "burra"];
 
 const DECLARATIONS: RegExp[] = [
   /\bi(?:'m| am) pregnant\b/,
-  /\bshe(?:'s| is| got| became) pregnant\b/,
+  /\bshe(?:'s| is| got| became| fell) pregnant\b/,
+  /\bi fell pregnant\b/,
   /\bmy (?:wife|partner|girlfriend) (?:is|got|became) pregnant\b/,
+  /\bmy (?:wife|partner|girlfriend) (?:is|'s) expecting\b/,
   /\bwe(?:'re| are) pregnant\b/,
   /\bwe(?:'re| are) expecting\b/,
   /\bi(?:'m| am) expecting\b/,
   /\bshe(?:'s| is) expecting\b/,
   /\bestoy embarazada\b/,
-  /\besta embarazada\b/,
   /\bquedo embarazada\b/,
   /\bquede embarazada\b/,
   /\bse embarazo\b/,
+  /\bsalio embarazada\b/,
+  /\bsali embarazada\b/,
+  /\bestamos embarazadas?\b/,
 ];
+/* The bare Spanish declaration ("esta embarazada") carries no subject
+ * of its own, so it is judged separately, against the subject the
+ * segment actually names (P3-11). */
+const BARE_ESTA = /\besta embarazada\b/;
 /* A named third person ("Ana is pregnant", "Lucía got pregnant"): any
  * subject word that is not a thing or a pronoun already covered above. */
 const NAMED_DECLARATION = /\b(?!it\b|this\b|that\b|test\b|result\b|she\b|he\b|what\b)([a-z]+) (?:is|got|became) pregnant\b/;
@@ -89,7 +128,9 @@ const TEST_SHAPED = /^\s*(it|that|this|the tests?|the results?|result|la prueba|
  * verb just before it, a count or totality word just before it, a label
  * colon, or the adjective place right before the test noun ("a positive
  * pregnancy test"). "She stayed positive" has none of these (M6). */
-const RESULT_FRAME = /(?:was|were|is|are|came|turned|result|fue|fueron|era|eran|salio|salieron|resulto|resultaron|dio|dieron|quedo|quedaron)\s+(?:back\s+)?$|(?:one|two|three|four|five|both|all|una?|dos|tres|cuatro|cinco|ambas|ambos|todas|todos|las|los)\s+$|[:—-]\s*$/;
+/* Round 3 (P3-9): the display verbs joined the frame — "it showed
+ * positive", "it read positive", "marcó positivo" were silence. */
+const RESULT_FRAME = /(?:was|were|is|are|came|turned|result|showed|read|fue|fueron|era|eran|salio|salieron|resulto|resultaron|dio|dieron|quedo|quedaron|marco)\s+(?:back\s+)?$|(?:one|two|three|four|five|both|all|una?|dos|tres|cuatro|cinco|ambas|ambos|todas|todos|las|los)\s+$|[:—-]\s*$/;
 const TOTALITY_FOR_RESULT = /\b(both|all|todas|todos|ambas|ambos|las dos|los dos)\s+(?:were\s+|fueron\s+|salieron\s+|eran\s+|fue\s+|was\s+)?(positiv|negativ)|\b(positiv|negativ)[a-z]*\s+(?:both|all|todas|todos|ambas|ambos)\b/;
 
 /** The match's own segment: the text since the last comma or
@@ -107,6 +148,7 @@ function vetoed(folded: string, index: number) {
   const scope = scopeBefore(folded, index);
   if (NEGATED.test(scope) || UNCERTAIN.test(scope)) return true;
   if (/\bif\b/.test(scope)) return true; // a conditional governs its segment
+  if (/\bwhether\b/.test(scope)) return true; // "wonders whether she is…" — a question, not a statement (P3-5)
   if (/^\s*si\b/.test(scope)) return true; // "si esta embarazada, …" — si as the segment's first word is "if"
   return false;
 }
@@ -118,7 +160,7 @@ const SEGMENT_BREAK = /\b(but|pero|and|y|e|though|although|aunque|while|mientras
  * declaration is judged against its segment: "her sister is pregnant"
  * is a statement about the sister, and the reader used to file it as
  * hers because declarations never consulted OTHER_SUBJECT (Round 2). */
-function segmentAround(folded: string, index: number, length: number) {
+function segmentBounds(folded: string, index: number, length: number): [number, number] {
   const before = folded.slice(0, index);
   let start = Math.max(before.lastIndexOf(","), before.lastIndexOf(";"), before.lastIndexOf("(")) + 1;
   for (const m of before.matchAll(SEGMENT_BREAK)) start = Math.max(start, (m.index ?? 0) + m[0].length);
@@ -127,22 +169,44 @@ function segmentAround(folded: string, index: number, length: number) {
   const comma = rest.search(/[,;(]/);
   if (comma >= 0) end = Math.min(end, index + length + comma);
   for (const m of rest.matchAll(SEGMENT_BREAK)) { end = Math.min(end, index + length + (m.index ?? 0)); break; }
+  return [start, end];
+}
+
+function segmentAround(folded: string, index: number, length: number) {
+  const [start, end] = segmentBounds(folded, index, length);
   return folded.slice(start, end);
 }
 
-/* Subjects that can never carry a named declaration: quantifiers and
- * animals are not the partner, however the sentence is capitalized. */
-const NON_PERSON_SUBJECT = new Set(["nobody", "nadie", "dog", "cat", "perro", "perra", "gato", "gata", "horse", "caballo"]);
+/* Subjects that can never carry a named declaration: the relation
+ * vocabulary and the animals are common nouns, not names — and at the
+ * START of a sentence the capital witness cannot tell them apart
+ * (Round 3, P3-4: "Sister is pregnant", "Cow is pregnant" filed as
+ * named people). One shared table judges every subject door. */
+const COMMON_SUBJECT = new Set([...RELATIONS, ...ANIMALS, "nobody", "nadie"]);
 
 /** A named declaration ("Ana is pregnant") names a person: the subject
  * must stand capitalized in the words as written — fold() erases case,
  * so the raw clause is the witness. A lowercase common noun in subject
  * place ("my dog is pregnant", "sister is pregnant") is not a name. */
 function nameShaped(rawClause: string, foldedSubject: string) {
-  if (NON_PERSON_SUBJECT.has(foldedSubject)) return false;
+  if (COMMON_SUBJECT.has(foldedSubject)) return false;
   const m = rawClause.match(/\b([A-Za-zÀ-ÿ]+)\s+(?:is|got|became)\s+pregnant\b/i);
   if (!m) return false;
   return m[1].toLocaleLowerCase() === foldedSubject && /^[A-ZÀ-Þ]/.test(m[1]);
+}
+
+/** The subject a bare "esta embarazada" actually names: the last
+ * content word before it in its segment, articles and possessives
+ * skipped. An animal there is not the partner (P3-11) — the bare form
+ * used to fire with no subject check of any kind. */
+function animalSubject(folded: string, index: number) {
+  const words = scopeBefore(folded, index).split(/\s+/).filter(Boolean);
+  const skip = new Set(["la", "el", "una", "un", "su", "mi", "tu", "esa", "ese", "the", "a", "an", "her", "his", "my", "their", "las", "los", "sus"]);
+  for (let i = words.length - 1; i >= 0; i -= 1) {
+    if (skip.has(words[i])) continue;
+    return ANIMALS.includes(words[i]);
+  }
+  return false;
 }
 
 function countValue(token: string): number {
@@ -211,15 +275,19 @@ function dayCount(token: string): number {
 function statedDate(text: string, entryDate: string): string {
   if (/\blast week\b|\bla semana pasada\b/.test(text)) return shiftDate(entryDate, -7);
   if (/\byesterday\b|\bayer\b/.test(text)) return shiftDate(entryDate, -1);
+  /* Week-spans are dates too (Round 3, P3-12): "two weeks ago" fell
+   * back to the entry date while "last week" was heard. */
+  const weeks = text.match(/\b(\d+|one|two|three|four|five|six|seven|una?|dos|tres|cuatro|cinco|seis|siete)\s+weeks?\s+ago\b|\bhace\s+(\d+|one|two|three|four|five|six|seven|una?|dos|tres|cuatro|cinco|seis|siete)\s+semanas?\b/);
+  if (weeks) return shiftDate(entryDate, -7 * dayCount(weeks[1] || weeks[2]));
   const days = text.match(/\b(\d+|one|two|three|four|five|six|seven|una?|dos|tres|cuatro|cinco|seis|siete)\s+days?\s+ago\b|\bhace\s+(\d+|one|two|three|four|five|six|seven|una?|dos|tres|cuatro|cinco|seis|siete)\s+dias?\b/);
   if (days) return shiftDate(entryDate, -dayCount(days[1] || days[2]));
   const entryYear = Number(entryDate.slice(0, 4));
-  const named = text.match(new RegExp(`\\b(${Object.keys(MONTHS).join("|")})\\s+(\\d{1,2})\\b|\\b(\\d{1,2})\\s+(?:de\\s+)?(${Object.keys(MONTHS).join("|")})\\b`));
+  const named = text.match(new RegExp(`\\b(${Object.keys(MONTHS).join("|")})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b|\\b(\\d{1,2})\\s+(?:de\\s+)?(${Object.keys(MONTHS).join("|")})\\b`));
   if (named) {
     const month = MONTHS[named[1] ?? named[4]];
     const day = Number(named[2] ?? named[3]);
     const yearTail = text.slice((named.index ?? 0) + named[0].length, (named.index ?? 0) + named[0].length + 12);
-    const statedYear = yearTail.match(/^\s*,?\s*(?:de\s+)?((?:19|20)\d{2})\b/);
+    const statedYear = yearTail.match(/^\s*,?\s*(?:de\s+|del\s+)?((?:19|20)\d{2})\b/);
     if (statedYear) {
       const iso = `${statedYear[1]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       if (isRealDate(iso) && iso <= entryDate) return iso;
@@ -244,21 +312,29 @@ type ClauseResult = { result: "positive" | "negative"; count: number };
 
 /* A correction inside the clause ("it was positive, no wait, it was
  * negative", "salio positiva, mejor dicho, salio negativa"): the last
- * word is the testimony. The reader used to save both (Round 2). */
-const CORRECTION = /\b(no wait|actually|mejor dicho|digo|correction|perdon)\b/g;
+ * word is the testimony. The reader used to save both (Round 2).
+ * Round 3 (P3-8): the marker list reached parity with the batch
+ * reader — "i mean" and the bare "wait" correct here too. */
+const CORRECTION = /\b(no wait|i mean|wait|actually|mejor dicho|digo|correction|perdon)\b/g;
+/* A result word directly before one of these nouns is that noun's
+ * adjective, not a test's verdict: "it was positive news all week"
+ * waited in the orphan slot and the next test noun adopted it
+ * (Round 3, P3-14). */
+const ATTRIBUTIVE_AFTER = new Set(["news", "attitude", "energy", "vibes", "outlook", "thoughts", "thinking", "feeling", "feelings", "day", "week", "month", "year", "time", "morning", "night"]);
 
 /** The valid results one clause states, each with its count. */
 function clauseResults(folded: string): ClauseResult[] {
-  const found: (ClauseResult & { index: number })[] = [];
+  const found: (ClauseResult & { index: number; framed: boolean })[] = [];
   for (const r of folded.matchAll(/(positiv|negativ)([a-z]*)/g)) {
     const index = r.index ?? 0;
     if (vetoed(folded, index)) continue;
+    const afterWord = folded.slice(index + r[0].length).match(/^\s+([a-z]+)/)?.[1];
+    if (afterWord && ATTRIBUTIVE_AFTER.has(afterWord)) continue;
     const segment = scopeBefore(folded, index);
     const afterNoun = new RegExp(`^\\s*(?:${TEST_NOUN_SRC})\\b`).test(folded.slice(index + r[0].length, index + r[0].length + 24));
-    if (!RESULT_FRAME.test(segment) && !afterNoun) continue;
     const result = RESULT_OF(r[1]);
     const count = countAfter(folded, index, r[0].length) ?? countBefore(folded, index);
-    found.push({ result, count, index });
+    found.push({ result, count, index, framed: RESULT_FRAME.test(segment) || afterNoun });
   }
   // Last word wins: a result stated before a correction marker is the
   // sentence she took back — it survives only if nothing follows it.
@@ -267,7 +343,26 @@ function clauseResults(folded: string): ClauseResult[] {
   const kept = lastCorrection >= 0 && found.some((r) => r.index > lastCorrection)
     ? found.filter((r) => r.index > lastCorrection)
     : found;
-  return kept.map(({ result, count }) => ({ result, count }));
+  /* A corrected result inherits the frame of the result it corrects
+   * (Round 3, P3-8's seam): "it was positive, i mean negative" — the
+   * marker ate the copula, so the corrected word stands frameless in
+   * its own segment while the frame sits behind the marker. When only
+   * a correction marker (and at most a fresh copula) lies between the
+   * two results, the second speaks in the first's frame. */
+  const out: ClauseResult[] = [];
+  for (const r of kept) {
+    if (r.framed) { out.push({ result: r.result, count: r.count }); continue; }
+    const prev = found.filter((p) => p.index < r.index && p.framed).pop();
+    if (prev) {
+      const between = folded.slice(prev.index, r.index).replace(/(positiv|negativ)[a-z]*/g, " ");
+      if (/^[\s,]*(no wait|i mean|wait|actually|mejor dicho|digo|correction|perdon)?[\s,]*$/.test(between)) {
+        out.push({ result: r.result, count: r.count });
+        continue;
+      }
+    }
+    // Unframed and uncorrected: not a verdict (the M6 law stands).
+  }
+  return out;
 }
 
 /** Reads the parsed entries' original text, entry by entry, so every
@@ -295,28 +390,47 @@ export function readPregnancy(entries: { date: string; source: string; notes: st
      * pregnancy test. it was positive. she took a pregnancy test."
      * filed the sister's positive as the owner's). */
     let dead = false;
+    /* Events close into a per-entry buffer and flush at the entry's
+     * end (Round 3, P3-8): a correction stated in its own clause —
+     * "no wait, it was negative" — reaches back and replaces the
+     * results of the event it corrects, which may already be closed.
+     * Distribution and dating judge the final results, at the flush. */
+    const entryEvents: Event[] = [];
     const closeEvent = () => {
       if (!open) return;
       const ev = open;
       open = null;
-      if (!ev.results.length) return;
-      const date = statedDate(fold(ev.text), entry.date);
-      // A count the words give the whole event distributes over a
-      // single stated result ("test twice, both negative") (M7). The
-      // totality word must belong to the result: "both times in the
-      // morning" is a totality of times, not of outcomes, and the
-      // reader used to distribute over it (Round 2).
-      const total = eventCount(fold(ev.text));
-      const kinds = new Set(ev.results.map((r) => r.result));
-      const distribute = total > 1 && kinds.size === 1 && TOTALITY_FOR_RESULT.test(fold(ev.text));
-      for (const r of ev.results) {
-        // A totality-backed distribution ("twice, both negative") is
-        // fully stated by the words, so the finding stays clean; only
-        // cross-clause assembly makes a finding less direct.
-        const count = distribute ? Math.max(r.count, total) : r.count;
-        tests.push({ date, result: r.result, count, evidence: ev.evidence, clean: r.clean });
-        if (r.result === "positive") noteReason(date, ev.evidence, r.clean);
+      if (ev.results.length) entryEvents.push(ev);
+    };
+    const flushEntry = () => {
+      for (const ev of entryEvents) {
+        const date = statedDate(fold(ev.text), entry.date);
+        // A count the words give the whole event distributes over a
+        // single stated result ("test twice, both negative") (M7). The
+        // totality word must belong to the result: "both times in the
+        // morning" is a totality of times, not of outcomes, and the
+        // reader used to distribute over it (Round 2).
+        const text = fold(ev.text);
+        const totalityMatch = text.match(TOTALITY_FOR_RESULT);
+        const totalityCount = totalityMatch && /\b(both|ambas|ambos|las dos|los dos)\b/.test(totalityMatch[0]) ? 2 : 1;
+        const total = Math.max(eventCount(text), totalityCount);
+        const kinds = new Set(ev.results.map((r) => r.result));
+        /* Round 3 (P3-10): a plural RESULT frame distributes too —
+         * "two tests, they were positive", "salieron positivas" state
+         * the pair's verdict without a totality word, and the Round 2
+         * narrowing filed them as one test. */
+        const pluralFrame = /\b(they were|fueron|salieron|resultaron|eran)\s+(positiv|negativ)/.test(text);
+        const distribute = total > 1 && kinds.size === 1 && (totalityMatch !== null || pluralFrame || totalityCount > 1);
+        for (const r of ev.results) {
+          // A totality-backed distribution ("twice, both negative") is
+          // fully stated by the words, so the finding stays clean; only
+          // cross-clause assembly makes a finding less direct.
+          const count = distribute ? Math.max(r.count, total) : r.count;
+          tests.push({ date, result: r.result, count, evidence: ev.evidence, clean: r.clean });
+          if (r.result === "positive") noteReason(date, ev.evidence, r.clean);
+        }
       }
+      entryEvents.length = 0;
     };
     for (const clause of clauses) {
       const folded = fold(clause);
@@ -337,16 +451,51 @@ export function readPregnancy(entries: { date: string; source: string; notes: st
         if (m && declaredAt(m)) { declared = true; break; }
       }
       if (!declared) {
+        const m = folded.match(BARE_ESTA);
+        if (m && declaredAt(m) && !animalSubject(folded, m.index ?? 0)) declared = true;
+      }
+      if (!declared) {
         const m = folded.match(NAMED_DECLARATION);
         if (m && declaredAt(m) && nameShaped(clause, m[1])) declared = true;
       }
       if (declared) noteReason(entry.date, evidence, true);
       // Tests.
-      const hasNoun = TEST_NOUN.test(folded);
+      const nounMatch = folded.match(TEST_NOUN);
+      const hasNoun = nounMatch !== null;
       const results = clauseResults(folded);
-      if (hasNoun) {
+      /* A correction in its own clause (Round 3, P3-8): the marker —
+       * or a clause-initial "no," — before the clause's first result
+       * makes these results a REPLACEMENT for the event they follow,
+       * not a new finding. The retracted result used to be the one
+       * filed, because the correction clause is not test-shaped and
+       * the assembly never heard it. */
+      const firstResultAt = folded.search(/(positiv|negativ)/);
+      const corrects = !hasNoun && results.length > 0 && firstResultAt >= 0 &&
+        (/^\s*no\s*,/.test(folded) || /\b(no wait|i mean|wait|actually|mejor dicho|digo|correction|perdon)\b/.test(folded.slice(0, firstResultAt)));
+      if (corrects) {
+        const replacement = results.map((r) => ({ ...r, clean: false }));
+        if (open) { open.results = replacement; open.text = `${open.text}. ${clause}`; }
+        else if (orphans.length) { orphans = replacement; orphanText = clause; }
+        else if (entryEvents.length) {
+          const last = entryEvents[entryEvents.length - 1];
+          last.results = replacement;
+          last.text = `${last.text}. ${clause}`;
+        }
+      } else if (hasNoun) {
         closeEvent();
-        if (OTHER_SUBJECT.test(folded)) { orphans = []; orphanText = ""; dead = true; continue; }
+        /* The other-subject judgment lives in the segment BEFORE the
+         * noun (Round 3, P3-3): the declaration path's discipline,
+         * which the test path never got. A sister who merely attends
+         * ("with her sister there", "at her sister's house") or who
+         * telephoned in an earlier segment does not own the test; a
+         * sister who governs it ("her sister took a pregnancy test",
+         * "her sister's pregnancy test") does. And a negated noun
+         * opens no event at all (P3-7): "she didn't take a pregnancy
+         * test" leaves nothing for the next result to adopt. */
+        const nounIndex = nounMatch.index ?? 0;
+        const [segStart] = segmentBounds(folded, nounIndex, nounMatch[0].length);
+        const beforeNoun = folded.slice(segStart, nounIndex);
+        if (OTHER_SUBJECT.test(beforeNoun) || vetoed(folded, nounIndex)) { orphans = []; orphanText = ""; dead = true; continue; }
         dead = false;
         open = { text: clause, results: results.map((r) => ({ ...r, clean: true })), evidence };
         if (!open.results.length && orphans.length) {
@@ -366,6 +515,7 @@ export function readPregnancy(entries: { date: string; source: string; notes: st
       }
     }
     closeEvent();
+    flushEntry();
   }
   return { reason, tests };
 }
