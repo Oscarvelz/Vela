@@ -80,13 +80,25 @@ export function cleanArchived(raw: unknown): ArchivedPerson[] {
     if (!item || typeof item !== "object") continue;
     const p = item as Partial<ArchivedPerson>;
     if (typeof p.name !== "string" || !p.name.trim()) continue;
-    out.push({
+    const record: ArchivedPerson = {
       name: p.name.trim(),
       archivedAt: finiteStamp(p.archivedAt) ?? 0,
       showInHistory: p.showInHistory === true,
       countInStats: p.countInStats === true,
       resurface: p.resurface === true,
-    });
+    };
+    /* One row per person, by the archive's own identity (RT3-H4 B2):
+     * the merge has keyed this list since Round 2, but the gate let
+     * foreign twins ("Lucía" all-off, "lucía" all-on) seat two rows,
+     * and the surfaces took whichever the blob's order put first.
+     * The later archive stamp wins the row, as at the merge. */
+    const key = record.name.toLowerCase();
+    const at = out.findIndex((q) => q.name.toLowerCase() === key);
+    if (at >= 0) {
+      if (record.archivedAt >= out[at].archivedAt) out[at] = record;
+      continue;
+    }
+    out.push(record);
   }
   return out;
 }

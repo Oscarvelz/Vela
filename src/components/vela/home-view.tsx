@@ -60,7 +60,7 @@ export function HomeView() {
   const today = new Intl.DateTimeFormat(lang === "es" ? "es" : "en", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
 
   return (
-    <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-5">
+    <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-5" data-spot="home-top">
       <div className="space-y-4">
         <Card className={cn("ag-hero ag-glass relative isolate overflow-hidden px-5 pb-5 pt-6", "is-empty")}>
           <div className="ag-hero-sky" aria-hidden>

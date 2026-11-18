@@ -143,9 +143,16 @@ export function selectedId(trackers: CycleTracker[], wanted: unknown): string {
 }
 
 /** The tracker the card, header pill and calendar show. Paused trackers are skipped while others are on. */
+/* The empty journal's active tracker is ONE stored shape (RT3-H5
+ * L4): minting a fresh default per read made selectActiveCycle a new
+ * object on every call, which zustand's identity check reads as a
+ * change — the wiped journal (cycles: []) was the one state that hit
+ * it on every render, rescued only by the wipe's synchronous lock. */
+const EMPTY_ACTIVE = defaultTracker();
+
 export function activeTracker(trackers: CycleTracker[], wanted: unknown): CycleTracker {
   const id = selectedId(trackers, wanted);
-  return trackers.find((tracker) => tracker.id === id) ?? trackers[0] ?? defaultTracker();
+  return trackers.find((tracker) => tracker.id === id) ?? trackers[0] ?? EMPTY_ACTIVE;
 }
 
 /** Trackers that are switched on (paused ones keep their history but are hidden everywhere but settings). */

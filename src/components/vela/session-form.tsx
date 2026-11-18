@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { Check, ChevronDown, ChevronLeft, ChevronRight, CloudDrizzle, DoorOpen, Feather, Flame, HeartPulse, Plus, Sparkles, UserRound, X } from "lucide-react";
 import { NAMED_PLACES, PLACES, POSITIONS, PROBLEMS, knownProblem, placeLabel, positionLabel } from "@/lib/vela/catalog";
 import { addDays, fmtDate, fmtDuration, fmtShort, fmtTime, monthTitle, pad, todayStr } from "@/lib/vela/dates";
-import { coveringEncounter, weekendOf } from "@/lib/vela/encounters";
+import { coveringEncounter, samePartner, weekendOf } from "@/lib/vela/encounters";
 import type { Lang } from "@/lib/vela/copy";
 import type { CopyKey } from "@/lib/vela/copy";
 import { useLang, useT } from "@/lib/vela/i18n";
@@ -76,8 +76,13 @@ export function SessionForm({
   const [active, setActive] = useState(0);
   const [slots, setSlots] = useState<Draft[]>(() => {
     const base = initial ?? blankDraft();
-    if (!initial && defaultPartner && partners.includes(defaultPartner)) {
-      return [{ ...base, partnerName: defaultPartner, newPartner: "" }];
+    // The default is judged by the roster's identity and preselected
+    // in the roster's own spelling (RT3-H4 B1): a raw includes() here
+    // refused the preselect for every case-variant default the gate
+    // or an older version had stored.
+    const rosterDefault = defaultPartner ? partners.find((p) => samePartner(p, defaultPartner)) : undefined;
+    if (!initial && rosterDefault) {
+      return [{ ...base, partnerName: rosterDefault, newPartner: "" }];
     }
     return [base];
   });
@@ -136,10 +141,11 @@ export function SessionForm({
 
   useEffect(() => {
     if (editing || !defaultPartner) return;
-    if (!useJournal.getState().journal.partners.includes(defaultPartner)) return;
+    const rosterDefault = useJournal.getState().journal.partners.find((p) => samePartner(p, defaultPartner));
+    if (!rosterDefault) return;
     setSlots((current) =>
       current.map((slot) =>
-        !slot.partnerName && !slot.newPartner ? { ...slot, partnerName: defaultPartner } : slot,
+        !slot.partnerName && !slot.newPartner ? { ...slot, partnerName: rosterDefault } : slot,
       ),
     );
   }, [defaultPartner, editing]);

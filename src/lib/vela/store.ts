@@ -179,7 +179,7 @@ function asSession(raw: unknown, index: number): Session | null {
   const overall = s.overall === undefined || s.overall === null || !Number.isFinite(Number(s.overall)) ? 5 : dial(s.overall);
   const duration = s.durationMins === undefined || s.durationMins === null || !Number.isFinite(Number(s.durationMins)) ? 30 : Math.max(0, Number(s.durationMins));
   return {
-    id: typeof s.id === "string" ? s.id : `s${Date.now().toString(36)}${index}`,
+    id: typeof s.id === "string" && s.id ? s.id : `s${Date.now().toString(36)}${index}`,
     createdAt: finiteStamp(s.createdAt) ?? Date.now() + index,
     partnerName: typeof s.partnerName === "string" ? s.partnerName : "",
     date: s.date,
@@ -214,7 +214,7 @@ function asEncounter(raw: unknown, index: number): Encounter | null {
   const start = e.startDate <= e.endDate ? e.startDate : e.endDate;
   const end = e.startDate <= e.endDate ? e.endDate : e.startDate;
   return {
-    id: typeof e.id === "string" ? e.id : `e${Date.now().toString(36)}${index}`,
+    id: typeof e.id === "string" && e.id ? e.id : `e${Date.now().toString(36)}${index}`,
     createdAt: finiteStamp(e.createdAt) ?? Date.now() + index,
     title: typeof e.title === "string" ? e.title : "",
     startDate: start,
@@ -272,6 +272,14 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
         partners.push(s.partnerName);
       }
     }
+    // The default partner is a claim about the roster (RT3-H4 B1):
+    // canonicalize a case-variant spelling to the roster's own, so
+    // the session form's preselect and the settings chip — which read
+    // the stored string — see the person the roster holds.
+    if (settings.defaultPartner) {
+      const match = partners.find((p) => partnerKey(p) === partnerKey(settings.defaultPartner));
+      if (match) settings.defaultPartner = match;
+    }
     const profileRaw = data.profile;
     const profile: Profile | null =
       profileRaw && typeof profileRaw === "object"
@@ -306,11 +314,51 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
     );
     const housed = attachOrphans(sessions, encounters, encounterCut);
     const deletedMap = cleanDeleted(data.deleted);
+    /* One flat tombstone namespace serves every class (RT3-H6 B4):
+     * app ids are prefix-disjoint, but a foreign journal can carry a
+     * person whose id equals a session's — and the session's
+     * tombstone would execute her at this gate. When a tombstone is
+     * about to execute a person whose id a session or encounter in
+     * the same journal also carries, the collision is repaired, not
+     * obeyed: she is re-seated under a fresh person id and every
+     * reference (proposal signatures, voice attributions, tracker
+     * ownership) is re-pointed, so the tombstone keeps only the
+     * meaning it can prove — the record of its own class. */
+    let peopleSource = data.people;
+    let proposalsSource = data.proposals;
+    if (Array.isArray(data.people)) {
+      const sessionIds = new Set([...sessions.map((s) => s.id), ...encounters.map((e) => e.id)]);
+      for (const item of data.people) {
+        if (!item || typeof item !== "object") continue;
+        const p = item as { id?: unknown; updatedAt?: unknown };
+        if (typeof p.id !== "string" || !sessionIds.has(p.id)) continue;
+        const at = deletedMap[p.id] ?? 0;
+        if (!(at > 0 && at >= (finiteStamp(p.updatedAt) ?? 0))) continue;
+        const oldId = p.id;
+        const fresh = newPersonId();
+        peopleSource = (peopleSource as unknown[]).map((q) =>
+          q && typeof q === "object" && (q as { id?: unknown }).id === oldId ? { ...(q as object), id: fresh } : q,
+        ) as Journal["people"];
+        proposalsSource = (Array.isArray(proposalsSource) ? proposalsSource : []).map((q) => {
+          if (!q || typeof q !== "object") return q;
+          const pr = q as { proposedBy?: unknown; decidedBy?: unknown };
+          return {
+            ...(q as object),
+            ...(pr.proposedBy === oldId ? { proposedBy: fresh } : {}),
+            ...(pr.decidedBy === oldId ? { decidedBy: fresh } : {}),
+          };
+        }) as Journal["proposals"];
+        for (const s of sessions) {
+          if (s.partnerVoice && s.partnerVoice.by === oldId) s.partnerVoice = { ...s.partnerVoice, by: fresh };
+        }
+        settings.cycles = (settings.cycles ?? []).map((t) => (t.ownerId === oldId ? { ...t, ownerId: fresh } : t));
+      }
+    }
     // A tombstoned person never takes a seat at the gate: the filter runs
     // BEFORE cleanPeople resolves the couple, so the next person in
     // ceremony order takes the seat instead (wave 1 re-hunt R2).
-    const peopleRaw = Array.isArray(data.people)
-      ? data.people.filter((item) => {
+    const peopleRaw = Array.isArray(peopleSource)
+      ? peopleSource.filter((item) => {
           if (!item || typeof item !== "object") return true;
           const p = item as { id?: unknown; updatedAt?: unknown };
           if (typeof p.id !== "string") return true;
@@ -318,7 +366,7 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
           const upd = finiteStamp(p.updatedAt) ?? 0;
           return !(at > 0 && at >= upd);
         })
-      : data.people;
+      : peopleSource;
     return {
       profile,
       settings,
@@ -333,7 +381,7 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       deleted: deletedMap,
       migrations: Array.isArray(data.migrations) ? data.migrations.filter((m): m is string => typeof m === "string") : [],
       ...(cleanPeople(peopleRaw).length ? { people: cleanPeople(peopleRaw) } : {}),
-      ...(cleanProposals(data.proposals, cleanPeople(peopleRaw)).length ? { proposals: cleanProposals(data.proposals, cleanPeople(peopleRaw)) } : {}),
+      ...(cleanProposals(proposalsSource, cleanPeople(peopleRaw)).length ? { proposals: cleanProposals(proposalsSource, cleanPeople(peopleRaw)) } : {}),
       ...(cleanQuietMarks(data.quietDays).length ? { quietDays: cleanQuietMarks(data.quietDays) } : {}),
       ...(cleanPregnancyTests(data.pregnancyTests).length ? { pregnancyTests: cleanPregnancyTests(data.pregnancyTests) } : {}),
     };
@@ -353,6 +401,35 @@ function cleanDeleted(raw: unknown): Record<string, number> {
 
 function stamp(item: { createdAt: number; updatedAt?: number }) {
   return item.updatedAt ?? item.createdAt;
+}
+
+/**
+ * Re-seat a person whose id a session or encounter also carries
+ * (RT3-H6 B4): the tombstone namespace is flat, so a deletion aimed
+ * at the session would execute her at the next gate. She keeps
+ * everything — her seat, her PIN, her voice attributions, her
+ * proposal signatures, her trackers — under a fresh person id, and
+ * the tombstone keeps only its own class. Foreign ids are the only
+ * way in: app ids are prefix-disjoint by construction.
+ */
+export function repairPersonIdCollision(journal: Journal, oldId: string): Journal {
+  const fresh = newPersonId();
+  return {
+    ...journal,
+    people: journal.people?.map((p) => (p.id === oldId ? { ...p, id: fresh } : p)),
+    proposals: journal.proposals?.map((p) => ({
+      ...p,
+      ...(p.proposedBy === oldId ? { proposedBy: fresh } : {}),
+      ...(p.decidedBy === oldId ? { decidedBy: fresh } : {}),
+    })),
+    sessions: journal.sessions.map((s) =>
+      s.partnerVoice && s.partnerVoice.by === oldId ? { ...s, partnerVoice: { ...s.partnerVoice, by: fresh } } : s,
+    ),
+    settings: {
+      ...journal.settings,
+      cycles: (journal.settings.cycles ?? []).map((t) => (t.ownerId === oldId ? { ...t, ownerId: fresh } : t)),
+    },
+  };
 }
 
 /**
@@ -595,12 +672,15 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     },
     /* The default partner is a claim about the roster: it survives
      * only if the merged roster still holds her (RT2-H1 B4 — a removed
-     * partner rode the newer settings back in as the default). */
-    defaultPartner: livePartners.has(newer.settings.defaultPartner)
-      ? newer.settings.defaultPartner
-      : livePartners.has(older.settings.defaultPartner)
-        ? older.settings.defaultPartner
-        : "",
+     * partner rode the newer settings back in as the default). The
+     * claim is judged by partnerKey and paid in the roster's winning
+     * spelling (RT3-H4 B1): the newer phone's "lucía" IS the merged
+     * roster's "Lucía", and an exact-string check silently cleared
+     * her default at every sync. */
+    defaultPartner: (() => {
+      const byKey = new Map([...livePartners].map((p) => [partnerKey(p), p]));
+      return byKey.get(partnerKey(newer.settings.defaultPartner)) ?? byKey.get(partnerKey(older.settings.defaultPartner)) ?? "";
+    })(),
     ...(() => {
       const draftCut = deleted["batchDraft"] ?? 0;
       const live = [draftOlder, draftNewer].filter((d) => d && d.at > draftCut);
@@ -1949,7 +2029,10 @@ export const useJournal = create<Store>((set, get) => {
       return "added";
     },
     deleteSession: (id) => {
-      const journal = get().journal;
+      let journal = get().journal;
+      // A person carrying this session's (foreign) id is re-seated
+      // first, so the tombstone below cannot execute her (RT3-H6 B4).
+      if (journal.people?.some((p) => p.id === id)) journal = repairPersonIdCollision(journal, id);
       const gone = journal.sessions.find((s) => s.id === id);
       commit(
         pruneEmpty(
@@ -1960,7 +2043,8 @@ export const useJournal = create<Store>((set, get) => {
       );
     },
     removeEncounter: (id) => {
-      const journal = get().journal;
+      let journal = get().journal;
+      if (journal.people?.some((p) => p.id === id)) journal = repairPersonIdCollision(journal, id);
       commit({
         ...journal,
         encounters: journal.encounters.filter((encounter) => encounter.id !== id),

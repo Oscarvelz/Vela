@@ -66,7 +66,11 @@ export function goToGo(go: Go, topicId: string) {
         ? "cycle-card"
         : go.settings === "couple"
           ? "couple-section"
-          : undefined;
+          : go.tab === "home"
+            ? "home-top"
+            : go.tab === "history"
+              ? "hist-search"
+              : undefined;
   requestSpotFocus(go.spot, topicId, fallbackSpot);
 }
 

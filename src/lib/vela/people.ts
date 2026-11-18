@@ -89,9 +89,20 @@ export function cleanPeople(raw: unknown): Person[] {
     // Dedupe on the STORED id, not the raw one: two raw ids sharing a
     // 40-char prefix used to pass the check separately and then
     // truncate into the same person, and the merge kept only one of
-    // them (RT2-H6-4). First record wins, as at every other gate.
+    // them (RT2-H6-4). First record wins, as at every other gate —
+    // with one exception (RT3-H6 B5): when the collision costs the
+    // OWNER her seat, the owner wins it, whichever order the records
+    // arrived in. Losing a partner record to the band is the stated
+    // truncation; losing the owner leaves ownerPerson() nobody.
     const id = p.id.slice(0, 40);
-    if (seen.has(id)) continue;
+    if (seen.has(id)) {
+      const at = out.findIndex((q) => q.id === id);
+      if (at >= 0 && out[at].role !== "owner" && p.role === "owner") {
+        out.splice(at, 1);
+      } else {
+        continue;
+      }
+    }
     seen.add(id);
     out.push({
       id,

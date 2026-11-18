@@ -26,7 +26,7 @@ import { fmtDate, fmtShort } from "@/lib/vela/dates";
 import { cleanMuted } from "@/lib/vela/stories";
 import { cleanArchived } from "@/lib/vela/anniversaries";
 import { ownerPerson, partnerPerson } from "@/lib/vela/people";
-import { partnerKey } from "@/lib/vela/encounters";
+import { partnerKey, samePartner } from "@/lib/vela/encounters";
 import type { ArchivedPerson } from "@/lib/vela/types";
 import { AppLockSettings, PassphraseNote, useLockBadge } from "./bio";
 import { LockDiagnostics } from "./lock-diag";
@@ -625,10 +625,10 @@ function PartnersSection() {
           <button
             key={partner}
             type="button"
-            aria-pressed={defaultPartner === partner}
+            aria-pressed={samePartner(defaultPartner, partner)}
             className={cn(
               "min-h-[37px] rounded-full border px-[0.85rem] text-[0.8rem] font-semibold",
-              defaultPartner === partner ? "ag-chip-on" : "ag-pill border-border text-fg",
+              samePartner(defaultPartner, partner) ? "ag-chip-on" : "ag-pill border-border text-fg",
             )}
             onClick={() => setDefaultPartner(partner)}
           >

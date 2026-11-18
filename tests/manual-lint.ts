@@ -155,5 +155,37 @@ console.log(`(g) copy keys EN=${enKeys.length} ES=${esKeys.length}, mn keys=${en
   ok("(h) hint-only placement checked");
 }
 
+// (i) every name a where-line speaks EXISTS (RT3-H5 B1″): the wave-10
+// fence grepped the convicted strings, so the class walked free —
+// "Registrar un lote" and "Memories" named controls that do not
+// exist while their corrected twins sat one file away. The check is
+// the mechanism, not the strings: each where-line segment's head
+// (before any comma qualifier) must be a string the app itself
+// speaks, in that language — a copy value. Frame words with no copy
+// key of their own are whitelisted only with their source named.
+{
+  const inventory: [Set<string>, Set<string>] = [
+    new Set(Object.values(STR.en) as string[]),
+    new Set(Object.values(STR.es) as string[]),
+  ];
+  const whitelist: [Set<string>, Set<string>] = [new Set(["Settings"]), new Set(["Ajustes"])];
+  let segments = 0;
+  for (const topic of MANUAL_TOPICS) {
+    if (!topic.go?.where) continue;
+    for (const lang of LANGS) {
+      const line = topic.go.where[lang];
+      for (const rawSegment of line.split("→")) {
+        const head = rawSegment.split(",")[0].trim();
+        if (!head) continue;
+        segments += 1;
+        if (!inventory[lang].has(head) && !whitelist[lang].has(head)) {
+          fail(`topic ${topic.id} where[${lang}] names "${head}", which no copy string speaks`);
+        }
+      }
+    }
+  }
+  ok(`(i) ${segments} where-line names checked against the copy inventory`);
+}
+
 console.log(failures === 0 ? "MANUAL LINT: ALL PASS" : `MANUAL LINT: ${failures} FAILURES`);
 process.exit(failures === 0 ? 0 : 1);

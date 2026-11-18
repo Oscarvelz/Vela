@@ -265,7 +265,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
         ],
         how: [
           "Write one encounter per line or paragraph, with its date; the year carries on from line to line.\n‘Once’, ‘twice’, ‘the next day’ — the reader understands the plain words for rounds and moving days.\nCheck the cards it made, fix any field, then save them all at once from [[Log a batch]].",
-          "Escribe un encuentro por línea o párrafo, con su fecha; el año continúa de línea en línea.\n«Una vez», «dos veces», «al día siguiente»: el lector entiende las palabras sencillas para las rondas y los días que se mueven.\nRevisa las tarjetas que hizo, corrige cualquier campo y guarda todo de una vez desde [[Registrar un lote]].",
+          "Escribe un encuentro por línea o párrafo, con su fecha; el año continúa de línea en línea.\n«Una vez», «dos veces», «al día siguiente»: el lector entiende las palabras sencillas para las rondas y los días que se mueven.\nRevisa las tarjetas que hizo, corrige cualquier campo y guarda todo de una vez desde [[Registrar en lote]].",
         ],
         example: [
           "‘Oct 12. With Ana at home, twice, Lotus.’ becomes one entry — Ana, October 12, two rounds, that position — before you ever tap Save.",
@@ -276,7 +276,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Una línea sin fecha: se une a la última fecha que el lector vio.\nUn nombre que no conoce: la tarjeta pregunta con quién fue antes de poder guardar.\nUna línea que no puede leer en absoluto: queda fuera de las tarjetas, y el lector lo dice — tu texto nunca se descarta en silencio.",
         ],
         related: ["propuestas-lector", "registrar"],
-        go: { tab: "home", spot: "batch-card", where: ["Home → Log a batch", "Inicio → Registrar un lote"] },
+        go: { tab: "home", spot: "batch-card", where: ["Home → Log a batch", "Inicio → Registrar en lote"] },
         terms: [["paste", "pegar"], ["import text", "importar texto"]],
       },
       {
@@ -303,7 +303,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Esperar que el lector escuche deseos. «Estamos tratando» o «espero estar embarazada» no proponen nada: el lector registra solo lo que tus palabras afirman.",
         ],
         related: ["lector-lotes", "proyeccion", "pruebas", "dias-quietos"],
-        go: { tab: "home", spot: "batch-save", where: ["Home → Log a batch, above Save", "Inicio → Registrar un lote, sobre Guardar"] },
+        go: { tab: "home", spot: "batch-save", where: ["Home → Log a batch, above Save", "Inicio → Registrar en lote, sobre Guardar"] },
         terms: [["evidence", "evidencia"], ["suggestion", "sugerencia"]],
       },
     ],
@@ -359,8 +359,8 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Las Historias son puertas, no citas: una tarjeta muestra cuándo fue y cómo brilló, y tocarla abre ese día en el Historial. Un recuerdo puede ocultarse para siempre.",
         ],
         how: [
-          "The rail appears only when a past day matches today — it is never padded with anything else.\nOn a card you can mute that single memory, or stop a person from resurfacing in Stories.\n[[Settings]] → Memories brings muted memories and people back.",
-          "El carril aparece solo cuando un día pasado coincide con hoy: nunca se rellena con otra cosa.\nEn una tarjeta puedes silenciar ese recuerdo solo, o impedir que una persona resurja en Historias.\n[[Ajustes]] → Recuerdos trae de vuelta los recuerdos y las personas silenciadas.",
+          "The rail appears only when a past day matches today — it is never padded with anything else.\nOn a card you can mute that single memory, or stop a person from resurfacing in Stories.\n[[Settings]] → Hidden memories brings muted memories and people back.",
+          "El carril aparece solo cuando un día pasado coincide con hoy: nunca se rellena con otra cosa.\nEn una tarjeta puedes silenciar ese recuerdo solo, o impedir que una persona resurja en Historias.\n[[Ajustes]] → Recuerdos ocultos trae de vuelta los recuerdos y las personas silenciadas.",
         ],
         example: [
           "On March 14, a card reads ‘A year ago — Ana’, because something was logged on March 14 last year, and it shone.",
@@ -627,7 +627,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Una persona archivada con su interruptor de Estadísticas apagado: sus momentos salen de todas las tarjetas aquí de una vez — el registro no se toca, solo cambia la lectura.\nUna tarjeta que viste el mes pasado ya no está hoy: su evidencia cayó por debajo de lo que la frase necesita, o la persona detrás fue archivada — las tarjetas siguen al registro, no a un diseño fijo.",
         ],
         related: ["el-asesor", "fuera-del-patron"],
-        go: { tab: "insights", spot: "insights-top", where: ["Insights, at the top", "Estadísticas, arriba"] },
+        go: { tab: "insights", spot: "insights-top", where: ["Insights, at the top", "Análisis, arriba"] },
         terms: [["averages", "promedios"], ["charts", "gráficas"]],
       },
       {
@@ -654,7 +654,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Un ciclo cambiado respondido «Ahora no»: no lleva nota, así que no se cuenta en ninguna parte aquí — el descarte se guarda como dato, nunca como razón.\nLa misma palabra en ciclos de dos personas distintas: dos tarjetas aparte, dos conteos aparte — su patrón nunca se lee a través del de otra.",
         ],
         related: ["el-ciclo-pregunta", "el-asesor"],
-        go: { tab: "insights", spot: "cycle-reasons-card", where: ["Insights, in the cycle family", "Estadísticas, en la familia de ciclos"] },
+        go: { tab: "insights", spot: "cycle-reasons-card", where: ["Insights, in the cycle family", "Análisis, en la familia de ciclos"] },
         terms: [["reasons", "razones"], ["pattern", "patrón"]],
       },
       {
@@ -685,7 +685,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Leer los totales como un veredicto. La tarjeta cuenta lo que fue dicho, en tus palabras: nunca sopesa un resultado contra otro.",
         ],
         related: ["propuestas-lector", "proyeccion"],
-        go: { tab: "insights", spot: "cycle-tests-card", where: ["Insights, in the cycle family", "Estadísticas, en la familia de ciclos"] },
+        go: { tab: "insights", spot: "cycle-tests-card", where: ["Insights, in the cycle family", "Análisis, en la familia de ciclos"] },
         terms: [["positive", "positiva"], ["negative", "negativa"]],
       },
       {
@@ -716,7 +716,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Un aniversario y un tramo quieto largo el mismo día: la fecha encabeza, y el tramo se lee por su nombre si lo tiene — primero la celebración, luego la explicación.",
         ],
         related: ["como-lee", "fechas", "dias-quietos"],
-        go: { tab: "insights", spot: "advisor-card", where: ["Insights, the Advisor card", "Estadísticas, la tarjeta del Asesor"] },
+        go: { tab: "insights", spot: "advisor-card", where: ["Insights, the Advisor card", "Análisis, la tarjeta del Asesor"] },
         terms: [["advice", "consejo"], ["coach", "asesor"]],
       },
       {
@@ -747,7 +747,7 @@ export const MANUAL_CHAPTERS: Chapter[] = [
           "Leer una brecha ancha en un medidor como un problema a arreglar. La tarjeta reporta dos lecturas honestas; lo que significan es una conversación, y el diario no toma partido en ella.",
         ],
         related: ["su-voz", "el-asesor"],
-        go: { tab: "insights", spot: "two-voices", where: ["Insights, the Both voices card", "Estadísticas, la tarjeta de Las dos voces"] },
+        go: { tab: "insights", spot: "two-voices", where: ["Insights, the Both voices card", "Análisis, la tarjeta de Las dos voces"] },
         terms: [["agreement", "acuerdo"], ["compatibility", "compatibilidad"]],
       },
     ],
@@ -1047,7 +1047,7 @@ export const LINKS: Record<string, { topic: string; go?: Go }> = {
   Statistics: { topic: "como-lee", go: { tab: "insights", where: ["Statistics", "Estadísticas"] } },
   Estadísticas: { topic: "como-lee", go: { tab: "insights", where: ["Statistics", "Estadísticas"] } },
   "Log a batch": { topic: "lector-lotes" },
-  "Registrar un lote": { topic: "lector-lotes" },
+  "Registrar en lote": { topic: "lector-lotes" },
   "batch door": { topic: "lector-lotes" },
   "puerta del lote": { topic: "lector-lotes" },
   PINs: { topic: "pines" },
