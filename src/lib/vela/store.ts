@@ -179,8 +179,15 @@ function asSession(raw: unknown, index: number): Session | null {
   const overall = s.overall === undefined || s.overall === null || !Number.isFinite(Number(s.overall)) ? 5 : dial(s.overall);
   const duration = s.durationMins === undefined || s.durationMins === null || !Number.isFinite(Number(s.durationMins)) ? 30 : Math.max(0, Number(s.durationMins));
   return {
-    id: typeof s.id === "string" && s.id ? s.id : `s${Date.now().toString(36)}${index}`,
-    createdAt: finiteStamp(s.createdAt) ?? Date.now() + index,
+    /* An id-less record gets a CONTENT id (Round 5, RT5-H6 B7):
+     * the old fallback minted from the device clock, so two
+     * devices gating the same id-less blob seated the same session
+     * under two ids and the merge unioned both — one stated
+     * session became two permanent copies. The content hash is
+     * the same on every device. And a missing birth stamp reads
+     * as 0, never as the load moment (RT5-H6 B6). */
+    id: typeof s.id === "string" && s.id ? s.id : reseatRecordId("s", { id: "", createdAt: finiteStamp(s.createdAt) ?? 0, date: s.date, partnerName: typeof s.partnerName === "string" ? s.partnerName : "" }),
+    createdAt: finiteStamp(s.createdAt) ?? 0,
     partnerName: typeof s.partnerName === "string" ? s.partnerName : "",
     date: s.date,
     time: typeof s.time === "string" ? s.time : "21:00",
@@ -214,8 +221,8 @@ function asEncounter(raw: unknown, index: number): Encounter | null {
   const start = e.startDate <= e.endDate ? e.startDate : e.endDate;
   const end = e.startDate <= e.endDate ? e.endDate : e.startDate;
   return {
-    id: typeof e.id === "string" && e.id ? e.id : `e${Date.now().toString(36)}${index}`,
-    createdAt: finiteStamp(e.createdAt) ?? Date.now() + index,
+    id: typeof e.id === "string" && e.id ? e.id : reseatRecordId("e", { id: "", createdAt: finiteStamp(e.createdAt) ?? 0, startDate: start, endDate: end, partnerName: typeof e.partnerName === "string" ? e.partnerName : "" }),
+    createdAt: finiteStamp(e.createdAt) ?? 0,
     title: typeof e.title === "string" ? e.title : "",
     startDate: start,
     endDate: end,
@@ -285,7 +292,7 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       profileRaw && typeof profileRaw === "object"
         ? {
             displayName: typeof profileRaw.displayName === "string" ? profileRaw.displayName : "",
-            createdAt: finiteStamp(profileRaw.createdAt) ?? Date.now(),
+            createdAt: finiteStamp(profileRaw.createdAt) ?? 0,
             // speakAs (2.1.24) survives the gate like every other field.
             ...((profileRaw as Partial<Profile>).speakAs === "man" ||
             (profileRaw as Partial<Profile>).speakAs === "woman" ||
@@ -411,9 +418,15 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
           continue;
         }
         /* Direction A: she is re-seated; the tombstone keeps its class. */
+        /* The seat hashes the record AS THE CLEANER KEEPS IT
+         * (Round 5, RT5-H4 B4): the raw name untrimmed and an
+         * invented createdAt made the gate's seat differ from the
+         * merge repair's — same woman, two seats, a forked owner.
+         * cleanPeople trims the name and (since this wave) reads a
+         * missing birth stamp as 0; the gate hashes exactly that. */
         const fresh = reseatPersonId({
           id: oldId,
-          name: typeof p.name === "string" ? p.name : "",
+          name: typeof p.name === "string" ? p.name.trim().slice(0, 60) : "",
           createdAt: finiteStamp(p.createdAt) ?? 0,
         });
         peopleSource = (peopleSource as unknown[]).map((q) =>
@@ -1268,12 +1281,25 @@ function attachOrphans(sessions: Session[], encounters: Encounter[], cut = 0) {
       session.encounterId = cover.id;
       continue;
     }
-    const id = `eo-${session.id}`;
+    /* The shell's id is the session's own name — but a FOREIGN
+     * encounter can already carry it (Round 5, RT5-H6 B9): filing
+     * the session into a stranger's real encounter because its id
+     * happens to read eo-<sessionId> is not housing, it is
+     * trespass. A colliding shell takes a suffixed id, derived
+     * deterministically so every device computes the same one. */
+    let id = `eo-${session.id}`;
+    if (known.has(id) && !next.some((e) => e.id === id && e.title === "" && e.comment === "" && e.startDate === session.date && e.endDate === session.date)) {
+      id = `eo-${session.id}--x`;
+    }
     if (!known.has(id)) {
+      const born = Math.max(session.createdAt || 0, cut + 1);
       next.push({
         id,
-        createdAt: Math.max(session.createdAt || 0, cut + 1),
-        updatedAt: Date.now(),
+        createdAt: born,
+        /* A shell is born with its session (Round 5, RT5-H1 lead):
+         * the raw clock wrote updatedAt BEFORE createdAt for any
+         * future-dated session. */
+        updatedAt: born,
         title: "",
         startDate: session.date,
         endDate: session.date,
@@ -1295,7 +1321,7 @@ function ensureCovering(journal: Journal, date: string, partner: string) {
   return {
     encounters: [
       ...journal.encounters,
-      { id, createdAt: Date.now(), title: "", startDate: date, endDate: date, partnerName: partner, comment: "", problems: [] },
+      { id, createdAt: stampNow(journal), title: "", startDate: date, endDate: date, partnerName: partner, comment: "", problems: [] },
     ],
     encounterId: id,
   };
@@ -1312,7 +1338,7 @@ function bindEncounter(journal: Journal, draft: Draft, partner: string) {
     const id = `e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     encounters.push({
       id,
-      createdAt: Date.now(),
+      createdAt: stampNow(journal),
       title: draft.encounterTitle.trim(),
       startDate: span.startDate,
       endDate: span.endDate,
@@ -1337,7 +1363,12 @@ function bindEncounter(journal: Journal, draft: Draft, partner: string) {
     startDate: span.startDate,
     endDate: span.endDate,
     problems: draft.encounterProblems.slice(),
-    updatedAt: Date.now(),
+    /* The encounter half of an edit rides the journal's stamp
+     * economy (Round 5, RT5-H1 B4): this raw-clock write regressed
+     * a future-stamped encounter's stamp, and the merge then
+     * reverted the edit silently — while the session half of the
+     * same edit, stamped by stampNow, survived. */
+    updatedAt: stampNow(journal),
   };
   return { encounters, encounterId: current.id };
 }
@@ -2331,7 +2362,7 @@ export const useJournal = create<Store>((set, get) => {
         positions: src.positions.slice(),
         problems: (src.problems ?? []).slice(),
         id: newId(),
-        createdAt: Date.now(),
+        createdAt: stampNow(journal),
       };
       // A new round is a new moment: the partner's voice belongs to the moment
       // she spoke about and is never copied into another one (2.2).
@@ -2342,7 +2373,7 @@ export const useJournal = create<Store>((set, get) => {
           encounter.id === copy.encounterId
             ? { ...encounter, ...(() => {
                 const span = coverDates([encounter.startDate, encounter.endDate, copy.date]);
-                return { startDate: span.startDate, endDate: span.endDate, updatedAt: Date.now() };
+                return { startDate: span.startDate, endDate: span.endDate, updatedAt: stampNow(journal) };
               })() }
             : encounter,
         );
@@ -2566,7 +2597,11 @@ export const useJournal = create<Store>((set, get) => {
         return p.targetLabel === input.targetLabel;
       });
       if (existing) return existing.id;
-      const now = Date.now();
+      /* proposedAt is the proposals' merge and tombstone basis
+       * (Round 5, RT5-H4 lead): a raw-clock mint could be born
+       * BELOW stamps the journal already carries, and a tombstone
+       * or a merge screen would judge it by a birth it never had. */
+      const now = stampNow(journal);
       const proposal: Proposal = {
         id: newProposalId(),
         kind: input.kind,

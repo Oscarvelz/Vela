@@ -116,7 +116,14 @@ export function cleanPeople(raw: unknown): Person[] {
       pinIterationsInBand(p.pin.iterations)
         ? { pin: { salt: p.pin.salt, hash: p.pin.hash, iterations: p.pin.iterations } }
         : {}),
-      createdAt: finiteStamp(p.createdAt) ?? Date.now(),
+      /* A missing birth stamp reads as 0, never as now (Round 5,
+       * RT5-H6 B6 / RT5-H4 B3): this was the one cleaner that
+       * invented a stamp, so a stamp-less legacy record was born at
+       * load time — after its own updatedAt — and crossed every
+       * temporal cut (the wipe's people screen above all) that its
+       * stated-stamp twins could not. Zero is the honest reading of
+       * "born before stamps were kept". */
+      createdAt: finiteStamp(p.createdAt) ?? 0,
       updatedAt: finiteStamp(p.updatedAt) ?? 0,
     });
   }
@@ -202,7 +209,7 @@ export function reseatRecordId(prefix: string, rec: { id: string; createdAt?: nu
    * merge (cleaned record), and nested key order is not stable
    * across those doors. Twins identical in every scalar here are
    * substance duplicates; their collapse is dedupe's own law. */
-  const FIELDS = ["createdAt", "updatedAt", "proposedAt", "date", "from", "to", "partnerName", "name", "monthDay", "birthdate"] as const;
+  const FIELDS = ["createdAt", "updatedAt", "proposedAt", "date", "from", "to", "startDate", "endDate", "partnerName", "name", "monthDay", "birthdate"] as const;
   const parts: string[] = [];
   for (const f of FIELDS) {
     const v = rec[f];
