@@ -319,13 +319,26 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
  * Merges two devices' tracker lists by id. A tracker removed on either device (deletion marker newer than
  * its last change) stays removed. Order follows `newer`, then trackers only `older` has.
  */
-export function mergeTrackerLists(newer: CycleTracker[], older: CycleTracker[], deleted: Record<string, number> = {}): CycleTracker[] {
+export function mergeTrackerLists(newer: CycleTracker[], older: CycleTracker[], deleted: Record<string, number> = {}, wipeStamp = 0): CycleTracker[] {
+  /* Under a wipe, a tracker the wiping device never saw has no tombstone
+   * (Round 3, RT3-H1 B1): its birth witness — the EARLIEST stamp it
+   * carries — decides. A tracker born before the wipe keeps at least
+   * one pre-wipe stamp however often it was edited afterwards; a
+   * tracker born after the wipe carries nothing but post-wipe stamps.
+   * A tracker carrying no stamps at all predates the stamp economy and
+   * is the wipe's. The emptied result still materializes the default
+   * tracker below, as always. */
+  const bornAfterWipe = (tracker: CycleTracker) => {
+    const stamps = [tracker.updatedAt, tracker.metaAt, ...Object.values(tracker.stamps)];
+    return stamps.length > 0 && Math.min(...stamps) > wipeStamp;
+  };
+  const pool = wipeStamp > 0 ? [...newer, ...older].filter(bornAfterWipe) : [...newer, ...older];
   const byId = new Map<string, CycleTracker>();
-  for (const tracker of [...newer, ...older]) {
+  for (const tracker of pool) {
     const prev = byId.get(tracker.id);
     byId.set(tracker.id, prev ? mergeTracker(prev, tracker) : tracker);
   }
-  const order = [...new Set([...newer, ...older].map((tracker) => tracker.id))];
+  const order = [...new Set(pool.map((tracker) => tracker.id))];
   const out = order
     .map((id) => byId.get(id)!)
     .filter((tracker) => !(deleted[`cycle:${tracker.id}`] && deleted[`cycle:${tracker.id}`] >= tracker.updatedAt));

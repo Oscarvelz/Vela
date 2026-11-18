@@ -33,6 +33,17 @@ export function isRealDate(ds: unknown): ds is string {
   return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
 }
 
+/** A stamp the gate may admit: a real, finite number. JSON's 1e999 parses
+ * to Infinity and a typeof check alone waves it through — and one
+ * non-finite stamp in a journal poisons every stamp minted after it
+ * (stampNow takes the maximum) and serializes to null on the next save,
+ * disarming the tombstone it rode on (Round 3, RT3-H6 B1). Every cleaner
+ * that admits a timestamp shares this one check, the way every date
+ * cleaner shares isRealDate. */
+export function finiteStamp(v: unknown): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
 export function addDays(ds: string, n: number) {
   const d = parseDate(ds);
   d.setDate(d.getDate() + n);

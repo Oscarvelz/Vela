@@ -3,7 +3,7 @@ import { PLACES, POSITIONS, PROBLEMS, namedPlace, type Mode, type RatingStyle, t
 import { coverDates, coveringEncounter, partnerKey, samePartner, spanDays } from "./encounters";
 import { MIN_PASSPHRASE, asEnvelope, newVaultKey, open, openWithCandidates, randomBytes, seal, toB64, type Envelope, type VaultKey } from "./vault-crypto";
 import { deleteSync, deleteVault, readUi, readVault, writeUi, writeVault } from "./vault-db";
-import { addDays, isRealDate, nowTime, pad, todayStr } from "./dates";
+import { addDays, finiteStamp, isRealDate, nowTime, pad, todayStr } from "./dates";
 import type { BatchEntry } from "./batch";
 import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
@@ -111,7 +111,7 @@ function asSettings(raw: unknown, language: Lang): Settings {
     ...(Array.isArray(s.children) && s.children.length ? { children: cleanChildren(s.children) } : {}),
     ...(Array.isArray(s.archivedPeople) && s.archivedPeople.length ? { archivedPeople: cleanArchived(s.archivedPeople) } : {}),
     ...(s.coupleMode && typeof s.coupleMode === "object" && typeof s.coupleMode.sharedFrom === "string"
-      ? { coupleMode: { sharedFrom: s.coupleMode.sharedFrom, enabledAt: typeof s.coupleMode.enabledAt === "number" ? s.coupleMode.enabledAt : 0 } }
+      ? { coupleMode: { sharedFrom: s.coupleMode.sharedFrom, enabledAt: finiteStamp(s.coupleMode.enabledAt) ?? 0 } }
       : {}),
   };
 }
@@ -127,7 +127,7 @@ function asBatchDraft(raw: unknown): Settings["batchDraft"] {
     typed: typeof d.typed === "string" ? d.typed : "",
     edits: d.edits && typeof d.edits === "object" && !Array.isArray(d.edits) ? d.edits : {},
     open: typeof d.open === "string" ? d.open : null,
-    at: typeof d.at === "number" ? d.at : 0,
+    at: finiteStamp(d.at) ?? 0,
   };
 }
 
@@ -159,7 +159,7 @@ function asVoice(raw: unknown): Session["partnerVoice"] {
     ownWords: typeof v.ownWords === "string" ? v.ownWords.slice(0, 4000) : "",
     notes: typeof v.notes === "string" ? v.notes.slice(0, 4000) : "",
     by: v.by,
-    updatedAt: typeof v.updatedAt === "number" ? v.updatedAt : 0,
+    updatedAt: finiteStamp(v.updatedAt) ?? 0,
   };
 }
 
@@ -179,7 +179,7 @@ function asSession(raw: unknown, index: number): Session | null {
   const duration = s.durationMins === undefined || s.durationMins === null || !Number.isFinite(Number(s.durationMins)) ? 30 : Math.max(0, Number(s.durationMins));
   return {
     id: typeof s.id === "string" ? s.id : `s${Date.now().toString(36)}${index}`,
-    createdAt: typeof s.createdAt === "number" ? s.createdAt : Date.now() + index,
+    createdAt: finiteStamp(s.createdAt) ?? Date.now() + index,
     partnerName: typeof s.partnerName === "string" ? s.partnerName : "",
     date: s.date,
     time: typeof s.time === "string" ? s.time : "21:00",
@@ -199,7 +199,7 @@ function asSession(raw: unknown, index: number): Session | null {
     problems: Array.isArray(s.problems) ? s.problems.filter((item) => typeof item === "string") : [],
     sessionNumber: Number(s.sessionNumber) || 0,
     encounterId: typeof s.encounterId === "string" ? s.encounterId : "",
-    updatedAt: typeof s.updatedAt === "number" ? s.updatedAt : undefined,
+    updatedAt: finiteStamp(s.updatedAt),
     // Without this line, every reload would strip the partner's voice from
     // every session — the 2.1.27 trap at session level.
     ...(asVoice(s.partnerVoice) ? { partnerVoice: asVoice(s.partnerVoice) } : {}),
@@ -214,14 +214,14 @@ function asEncounter(raw: unknown, index: number): Encounter | null {
   const end = e.startDate <= e.endDate ? e.endDate : e.startDate;
   return {
     id: typeof e.id === "string" ? e.id : `e${Date.now().toString(36)}${index}`,
-    createdAt: typeof e.createdAt === "number" ? e.createdAt : Date.now() + index,
+    createdAt: finiteStamp(e.createdAt) ?? Date.now() + index,
     title: typeof e.title === "string" ? e.title : "",
     startDate: start,
     endDate: end,
     partnerName: typeof e.partnerName === "string" ? e.partnerName : "",
     comment: typeof e.comment === "string" ? e.comment : "",
     problems: Array.isArray(e.problems) ? e.problems.filter((item) => typeof item === "string") : [],
-    updatedAt: typeof e.updatedAt === "number" ? e.updatedAt : undefined,
+    updatedAt: finiteStamp(e.updatedAt),
   };
 }
 
@@ -261,8 +261,8 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       }
     }
     const partnersClearedAt = Math.max(
-      typeof data.partnersClearedAt === "number" ? data.partnersClearedAt : 0,
-      typeof data.clearedAt === "number" ? data.clearedAt : 0,
+      finiteStamp(data.partnersClearedAt) ?? 0,
+      finiteStamp(data.clearedAt) ?? 0,
     );
     for (const s of sessions) {
       if (s.createdAt <= partnersClearedAt) continue;
@@ -276,7 +276,7 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       profileRaw && typeof profileRaw === "object"
         ? {
             displayName: typeof profileRaw.displayName === "string" ? profileRaw.displayName : "",
-            createdAt: typeof profileRaw.createdAt === "number" ? profileRaw.createdAt : Date.now(),
+            createdAt: finiteStamp(profileRaw.createdAt) ?? Date.now(),
             // speakAs (2.1.24) survives the gate like every other field.
             ...((profileRaw as Partial<Profile>).speakAs === "man" ||
             (profileRaw as Partial<Profile>).speakAs === "woman" ||
@@ -300,8 +300,8 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
     // spotting still happens where it belongs: at save time, on the
     // words being saved (see the session-save path), never at load.
     const encounterCut = Math.max(
-      typeof data.encountersClearedAt === "number" ? data.encountersClearedAt : 0,
-      typeof data.clearedAt === "number" ? data.clearedAt : 0,
+      finiteStamp(data.encountersClearedAt) ?? 0,
+      finiteStamp(data.clearedAt) ?? 0,
     );
     const housed = attachOrphans(sessions, encounters, encounterCut);
     const deletedMap = cleanDeleted(data.deleted);
@@ -314,7 +314,7 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
           const p = item as { id?: unknown; updatedAt?: unknown };
           if (typeof p.id !== "string") return true;
           const at = deletedMap[p.id] ?? 0;
-          const upd = typeof p.updatedAt === "number" ? p.updatedAt : 0;
+          const upd = finiteStamp(p.updatedAt) ?? 0;
           return !(at > 0 && at >= upd);
         })
       : data.people;
@@ -324,11 +324,11 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
       partners,
       sessions,
       encounters: housed,
-      updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : 0,
-      clearedAt: typeof data.clearedAt === "number" ? data.clearedAt : 0,
-      sessionsClearedAt: typeof data.sessionsClearedAt === "number" ? data.sessionsClearedAt : 0,
-      encountersClearedAt: typeof data.encountersClearedAt === "number" ? data.encountersClearedAt : 0,
-      partnersClearedAt: typeof data.partnersClearedAt === "number" ? data.partnersClearedAt : 0,
+      updatedAt: finiteStamp(data.updatedAt) ?? 0,
+      clearedAt: finiteStamp(data.clearedAt) ?? 0,
+      sessionsClearedAt: finiteStamp(data.sessionsClearedAt) ?? 0,
+      encountersClearedAt: finiteStamp(data.encountersClearedAt) ?? 0,
+      partnersClearedAt: finiteStamp(data.partnersClearedAt) ?? 0,
       deleted: deletedMap,
       migrations: Array.isArray(data.migrations) ? data.migrations.filter((m): m is string => typeof m === "string") : [],
       ...(cleanPeople(peopleRaw).length ? { people: cleanPeople(peopleRaw) } : {}),
@@ -509,7 +509,7 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
   }
   for (const [key, name] of [...livePartnerMap]) if (partnerRemoved(name, deleted)) livePartnerMap.delete(key);
   const livePartners = new Set(livePartnerMap.values());
-  const cycles = mergeTrackerLists(newer.settings.cycles, older.settings.cycles, deleted);
+  const cycles = mergeTrackerLists(newer.settings.cycles, older.settings.cycles, deleted, wipeStamp);
   // Trackers the cap left behind are tombstoned, never silently vanished:
   // the other device resolves the same way next merge, and the call sites
   // surface the count (mergeDroppedCycles → the cyMergeFull notice).
@@ -532,6 +532,13 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       // A tombstoned item never resurfaces through the union (re-hunt R1).
       const goneAt = deleted[item.id] ?? 0;
       if (goneAt > 0 && goneAt >= (item.createdAt ?? 0)) continue;
+      /* The wipe cuts TIME for the union classes too (Round 3, RT3-H1
+       * B1): the tombstones above name only the ids the wiping device
+       * held, so a divergent stale device's pre-wipe anniversary or
+       * child — never seen by the wiper, carrying no tombstone — walked
+       * straight back in. What was born at or before the wipe is the
+       * wipe's, whoever holds it; life born after it is untouched. */
+      if (wipeStamp > 0 && (item.createdAt ?? 0) <= wipeStamp) continue;
       map.set(item.id, item);
     }
     return [...map.values()];
@@ -555,13 +562,17 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     cycleSelected: selectedId(cycles, newer.settings.cycleSelected),
     anniversaries: byId(older.settings.anniversaries, newer.settings.anniversaries),
     children: byId(older.settings.children, newer.settings.children),
-    customPlaces: unionList(older.settings.customPlaces, newer.settings.customPlaces).filter((v) => !customRemoved("places", v, deleted)),
-    customPositions: unionList(older.settings.customPositions, newer.settings.customPositions).filter((v) => !customRemoved("positions", v, deleted)),
-    customProblems: unionList(older.settings.customProblems, newer.settings.customProblems).filter((v) => !customRemoved("problems", v, deleted)),
+    /* The value classes ride the same temporal law (RT3-H1 B1): under a
+     * wipe, a custom or a mute survives only if its ON stamp postdates
+     * the wipe — an unstamped or pre-wipe value is the wipe's, whoever
+     * holds it. Outside a wipe the union is untouched. */
+    customPlaces: unionList(older.settings.customPlaces, newer.settings.customPlaces).filter((v) => !customRemoved("places", v, deleted) && (wipeStamp === 0 || (deleted[CUSTOM_ON + customKey("places", v)] ?? 0) > wipeStamp)),
+    customPositions: unionList(older.settings.customPositions, newer.settings.customPositions).filter((v) => !customRemoved("positions", v, deleted) && (wipeStamp === 0 || (deleted[CUSTOM_ON + customKey("positions", v)] ?? 0) > wipeStamp)),
+    customProblems: unionList(older.settings.customProblems, newer.settings.customProblems).filter((v) => !customRemoved("problems", v, deleted) && (wipeStamp === 0 || (deleted[CUSTOM_ON + customKey("problems", v)] ?? 0) > wipeStamp)),
     archivedPeople: [...archivedByKey.values()],
     storiesMuted: {
-      people: unionList(mutedOlder.people, mutedNewer.people).filter((v) => !muteRemoved("person", v, deleted)),
-      days: unionList(mutedOlder.days, mutedNewer.days).filter((v) => !muteRemoved("day", v, deleted)),
+      people: unionList(mutedOlder.people, mutedNewer.people).filter((v) => !muteRemoved("person", v, deleted) && (wipeStamp === 0 || (deleted[MUTE_ON + muteKey("person", v)] ?? 0) > wipeStamp)),
+      days: unionList(mutedOlder.days, mutedNewer.days).filter((v) => !muteRemoved("day", v, deleted) && (wipeStamp === 0 || (deleted[MUTE_ON + muteKey("day", v)] ?? 0) > wipeStamp)),
     },
     /* The default partner is a claim about the roster: it survives
      * only if the merged roster still holds her (RT2-H1 B4 — a removed
@@ -586,7 +597,12 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
   // whose record predates a wipe is filtered before the resolution —
   // mergePeople's own tombstone filter covers the wiped side's ids, and
   // this covers the stale side's (RT2-H1 B1).
-  const peopleSide = (list: Journal["people"]) => (wipeStamp > 0 ? (list ?? []).filter((p) => p.updatedAt > wipeStamp) : list);
+  /* The screen reads the person's BIRTH stamp, not their last edit
+   * (Round 3, RT3-H1 B3): a PIN change on the stale device after the
+   * wipe is an edit to her record, not a re-joining ceremony — sessions
+   * are cut by createdAt and people now are too. A person born after
+   * the wipe is new life and crosses freely. */
+  const peopleSide = (list: Journal["people"]) => (wipeStamp > 0 ? (list ?? []).filter((p) => p.createdAt > wipeStamp) : list);
   const people = mergePeople(peopleSide(local.people), peopleSide(remote.people), deleted);
   if (people) {
     const keptIds = new Set(people.map((person) => person.id));
@@ -598,8 +614,12 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
   return {
     ...newer,
     /* A profile journaled after the wipe is a new life; one that only
-     * predates it was erased on purpose (RT2-H1 B1). */
-    profile: [newer, older].find((side) => side.profile && side.updatedAt > wipeStamp)?.profile ?? null,
+     * predates it was erased on purpose (RT2-H1 B1). The screen reads
+     * the PROFILE's own birth stamp, not the journal's (Round 3,
+     * RT3-H1 B2): commit bumps the journal's updatedAt on every edit,
+     * so a stale diary merely touched after the wipe read as "newer
+     * than the wipe" and its erased profile walked back in. */
+    profile: [newer, older].find((side) => side.profile && (wipeStamp === 0 || side.profile.createdAt > wipeStamp))?.profile ?? null,
     settings,
     partners: [...livePartners],
     sessions: renumber(sessions),
@@ -641,7 +661,7 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
         const prev = byId.get(m.id);
         if (!prev || (m.updatedAt ?? m.createdAt) >= (prev.updatedAt ?? prev.createdAt)) byId.set(m.id, m);
       }
-      const merged = [...byId.values()].filter((m) => !(deleted[m.id] >= (m.updatedAt ?? m.createdAt)));
+      const merged = [...byId.values()].filter((m) => !(deleted[m.id] >= (m.updatedAt ?? m.createdAt)) && !(wipeStamp > 0 && m.createdAt <= wipeStamp));
       return { quietDays: merged };
     })(),
     // Pregnancy tests union by id (2.2.7): stated events never edit each
@@ -649,7 +669,7 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     ...(() => {
       const byId = new Map<string, PregnancyTestEvent>();
       for (const t of [...(local.pregnancyTests ?? []), ...(remote.pregnancyTests ?? [])]) byId.set(t.id, t);
-      const merged = [...byId.values()].filter((t) => !(deleted[t.id] >= t.createdAt));
+      const merged = [...byId.values()].filter((t) => !(deleted[t.id] >= t.createdAt) && !(wipeStamp > 0 && t.createdAt <= wipeStamp));
       return { pregnancyTests: cleanPregnancyTests(merged) };
     })(),
     updatedAt: Math.max(local.updatedAt, remote.updatedAt),
@@ -1261,7 +1281,12 @@ export const useJournal = create<Store>((set, get) => {
     const back = next.partners.filter((name) => !prev.partners.includes(name) && partnerRemoved(name, next.deleted));
     if (back.length) {
       const deleted = { ...(next.deleted ?? {}) };
-      for (const name of back) deleted[PARTNER_ON + partnerKey(name)] = next.updatedAt;
+      /* The re-add stamp goes through stampNow, not the raw clock
+       * (Round 3, RT3-H1 B7): removePartner mints the OFF stamp through
+       * stampNow, so a re-add under a set-back clock minted an ON stamp
+       * older than the removal — and the merge un-added her again. */
+      const onAt = stampNow(prev);
+      for (const name of back) deleted[PARTNER_ON + partnerKey(name)] = onAt;
       next = { ...next, deleted };
     }
     void persist(next);
@@ -2111,7 +2136,7 @@ export const useJournal = create<Store>((set, get) => {
         commit({
           ...journal,
           proposals: (journal.proposals ?? []).filter((p) => p.id !== id),
-          deleted: { ...journal.deleted, [id]: now },
+          deleted: tombstone(journal, [id]),
         });
         return;
       }
@@ -2129,7 +2154,7 @@ export const useJournal = create<Store>((set, get) => {
         commit({
           ...journal,
           proposals: (journal.proposals ?? []).map((p) =>
-            p.id === id ? { ...p, state: "approved" as const, decidedBy: by, decidedAt: now } : p,
+            p.id === id ? { ...p, state: "approved" as const, decidedBy: by, decidedAt: stampNow(journal) } : p,
           ),
         });
         return;
@@ -2142,7 +2167,7 @@ export const useJournal = create<Store>((set, get) => {
       commit({
         ...journal,
         proposals: (journal.proposals ?? []).filter((p) => p.id !== id),
-        deleted: { ...journal.deleted, [id]: now },
+        deleted: tombstone(journal, [id]),
       });
       if (!approve) return;
       if (proposal.kind === "delete-session" && proposal.targetId) get().deleteSession(proposal.targetId);
@@ -2155,7 +2180,7 @@ export const useJournal = create<Store>((set, get) => {
       commit({
         ...journal,
         proposals: (journal.proposals ?? []).filter((p) => p.id !== id),
-        deleted: { ...journal.deleted, [id]: Date.now() },
+        deleted: tombstone(journal, [id]),
       });
     },
     executeWipe: (id) => {
@@ -2177,7 +2202,7 @@ export const useJournal = create<Store>((set, get) => {
       // wipe.ts, not the category eraser's six flags. The commit seals the
       // emptied journal; the lock then flushes that seal before the key
       // drops, and the diary wakes to its door, empty.
-      commit(wipedJournal(journal, Date.now()));
+      commit(wipedJournal(journal, stampNow(journal)));
       get().lock();
     },
     addPregnancyTests: (events) => {
@@ -2512,7 +2537,10 @@ export const useJournal = create<Store>((set, get) => {
     },
     eraseAll: (choice) => {
       const journal = get().journal;
-      const now = Date.now();
+      /* The cuts are stamps like any other (Round 3, RT3-H1 B4): minted
+       * from the raw clock, a session recorded on a set-forward clock
+       * sat above the cut and the first merge restored it. */
+      const now = stampNow(journal);
       const settings = { ...journal.settings };
       if (choice.places) settings.customPlaces = [];
       if (choice.positions) settings.customPositions = [];

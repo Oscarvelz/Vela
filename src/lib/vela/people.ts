@@ -1,3 +1,4 @@
+import { finiteStamp } from "./dates";
 import type { Person, Proposal, SpeakAs } from "./types";
 
 /**
@@ -104,8 +105,8 @@ export function cleanPeople(raw: unknown): Person[] {
       pinIterationsInBand(p.pin.iterations)
         ? { pin: { salt: p.pin.salt, hash: p.pin.hash, iterations: p.pin.iterations } }
         : {}),
-      createdAt: typeof p.createdAt === "number" ? p.createdAt : Date.now(),
-      updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : 0,
+      createdAt: finiteStamp(p.createdAt) ?? Date.now(),
+      updatedAt: finiteStamp(p.updatedAt) ?? 0,
     });
   }
   return resolvePeople(out);
@@ -179,7 +180,9 @@ export function cleanProposals(raw: unknown, people?: readonly { id: string }[])
     const p = item as Partial<Proposal>;
     if (typeof p.id !== "string" || !p.id) continue;
     if (!PROPOSAL_KINDS.includes(p.kind as (typeof PROPOSAL_KINDS)[number])) continue;
-    if (typeof p.proposedBy !== "string" || typeof p.proposedAt !== "number" || typeof p.expiresAt !== "number") continue;
+    const proposedAt = finiteStamp(p.proposedAt);
+    const expiresAt = finiteStamp(p.expiresAt);
+    if (typeof p.proposedBy !== "string" || proposedAt === undefined || expiresAt === undefined) continue;
     // Membership is not arithmetic (Round 2, RT2-H1 B3): when the diary's
     // people are known to the gate, an approval signed by an id that is
     // none of them is a ghost signature — the proposal is void here, the
@@ -187,24 +190,24 @@ export function cleanProposals(raw: unknown, people?: readonly { id: string }[])
     if (people && p.state === "approved" && typeof p.decidedBy === "string" && !people.some((person) => person.id === p.decidedBy)) continue;
     // A pending proposal whose week has lapsed caduces silently (the law):
     // it is dropped here, at the gate, and never resurfaces.
-    if (p.state !== "approved" && p.expiresAt < now) continue;
+    if (p.state !== "approved" && expiresAt < now) continue;
     // An approval is only as real as its second signature: an "approved"
     // proposal whose decider is missing, or is the proposer himself, is
     // void — the gate drops it like a lapsed one, so no ingress (sync,
     // backup restore, a tampered client) can smuggle a one-person
     // consent past the government of two.
-    if (p.state === "approved" && (typeof p.decidedBy !== "string" || !p.decidedBy || p.decidedBy === p.proposedBy || typeof p.decidedAt !== "number")) continue;
+    if (p.state === "approved" && (typeof p.decidedBy !== "string" || !p.decidedBy || p.decidedBy === p.proposedBy || finiteStamp(p.decidedAt) === undefined)) continue;
     out.push({
       id: p.id,
       kind: p.kind as Proposal["kind"],
       ...(typeof p.targetId === "string" && p.targetId ? { targetId: p.targetId } : {}),
       ...(typeof p.targetLabel === "string" && p.targetLabel ? { targetLabel: p.targetLabel.slice(0, 120) } : {}),
       proposedBy: p.proposedBy,
-      proposedAt: p.proposedAt,
+      proposedAt,
       state: p.state === "approved" ? "approved" : "pending",
       ...(typeof p.decidedBy === "string" && p.decidedBy ? { decidedBy: p.decidedBy } : {}),
-      ...(typeof p.decidedAt === "number" ? { decidedAt: p.decidedAt } : {}),
-      expiresAt: p.expiresAt,
+      ...(finiteStamp(p.decidedAt) !== undefined ? { decidedAt: p.decidedAt } : {}),
+      expiresAt,
     });
   }
   return out;

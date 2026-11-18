@@ -32,7 +32,7 @@
  *   import; the rest are shown, never saved (Decision 1). */
 import { fold } from "./batch";
 import { MONTHS, NUMBER_WORDS } from "./batch-lexicon";
-import { isRealDate } from "./dates";
+import { finiteStamp, isRealDate } from "./dates";
 import type { PregnancyTestEvent } from "./types";
 
 export function newTestId(): string {
@@ -387,7 +387,7 @@ export function cleanPregnancyTests(raw: unknown): PregnancyTestEvent[] {
       result: t.result,
       count: typeof t.count === "number" && Number.isFinite(t.count) ? Math.max(1, Math.min(9, Math.round(t.count))) : 1,
       evidence: typeof t.evidence === "string" ? t.evidence.slice(0, 160) : "",
-      createdAt: typeof t.createdAt === "number" ? t.createdAt : 0,
+      createdAt: finiteStamp(t.createdAt) ?? 0,
     });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt);

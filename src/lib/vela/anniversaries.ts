@@ -5,7 +5,7 @@
    The Archive law lives here too: an archived person is honored and kept,
    and the user alone decides where their traces still appear. */
 import type { CycleTracker } from "./cycle-trackers";
-import { isRealDate, iso, parseDate, todayStr } from "./dates";
+import { finiteStamp, isRealDate, iso, parseDate, todayStr } from "./dates";
 import type { Anniversary, AnniversaryKind, ArchivedPerson, ChildEntry, ChildRef, Encounter, Journal, Session, Settings } from "./types";
 
 const KINDS: AnniversaryKind[] = ["met", "married", "first", "custom"];
@@ -43,7 +43,7 @@ export function cleanAnniversaries(raw: unknown): Anniversary[] {
       kind: KINDS.includes(a.kind as AnniversaryKind) ? (a.kind as AnniversaryKind) : "custom",
       milestone: a.milestone === true,
       note: typeof a.note === "string" && a.note.trim() ? a.note.trim() : undefined,
-      createdAt: typeof a.createdAt === "number" ? a.createdAt : 0,
+      createdAt: finiteStamp(a.createdAt) ?? 0,
     });
   }
   return out;
@@ -65,7 +65,7 @@ export function cleanChildren(raw: unknown): ChildEntry[] {
       name: c.name.trim(),
       birthdate: c.birthdate,
       refAs: REFS.includes(c.refAs as ChildRef) ? (c.refAs as ChildRef) : "child",
-      createdAt: typeof c.createdAt === "number" ? c.createdAt : 0,
+      createdAt: finiteStamp(c.createdAt) ?? 0,
     });
   }
   return out;
@@ -80,7 +80,7 @@ export function cleanArchived(raw: unknown): ArchivedPerson[] {
     if (typeof p.name !== "string" || !p.name.trim()) continue;
     out.push({
       name: p.name.trim(),
-      archivedAt: typeof p.archivedAt === "number" ? p.archivedAt : 0,
+      archivedAt: finiteStamp(p.archivedAt) ?? 0,
       showInHistory: p.showInHistory === true,
       countInStats: p.countInStats === true,
       resurface: p.resurface === true,

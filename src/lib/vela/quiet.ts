@@ -1,6 +1,6 @@
 import { fold } from "./batch";
 import { NUMBER_WORDS } from "./batch-lexicon";
-import { addDays, isRealDate, parseDate, todayStr } from "./dates";
+import { addDays, finiteStamp, isRealDate, parseDate, todayStr } from "./dates";
 import type { QuietMark, QuietReasonId, QuietThemeId, Session } from "./types";
 
 /**
@@ -46,8 +46,8 @@ export function cleanQuietMarks(raw: unknown): QuietMark[] {
       ...(typeof m.note === "string" && m.note.trim() ? { note: m.note.trim().slice(0, 160) } : {}),
       source: m.source === "read" ? "read" : "manual",
       ...(typeof m.themeText === "string" && m.themeText.trim() ? { themeText: m.themeText.trim().slice(0, 160) } : {}),
-      createdAt: typeof m.createdAt === "number" ? m.createdAt : 0,
-      ...(typeof m.updatedAt === "number" ? { updatedAt: m.updatedAt } : {}),
+      createdAt: finiteStamp(m.createdAt) ?? 0,
+      ...(finiteStamp(m.updatedAt) !== undefined ? { updatedAt: m.updatedAt } : {}),
     });
   }
   return out.sort((a, b) => a.from.localeCompare(b.from));
