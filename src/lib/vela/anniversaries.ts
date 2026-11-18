@@ -47,7 +47,22 @@ export function cleanAnniversaries(raw: unknown): Anniversary[] {
       ...(finiteStamp(a.updatedAt) !== undefined ? { updatedAt: a.updatedAt } : {}),
     });
   }
-  return out;
+  return dedupeById(out);
+}
+
+/* One id seats one record (Round 4, RT4-H6 B5): duplicate ids passed
+ * every id-keyed gate and seated twice — one deletion then removed
+ * both twins. The later edit stamp wins; a tie resolves by content,
+ * as the merge unions resolve them. */
+export function dedupeById<T extends { id: string; createdAt: number; updatedAt?: number }>(items: T[]): T[] {
+  const byId = new Map<string, T>();
+  for (const item of items) {
+    const prev = byId.get(item.id);
+    if (!prev) { byId.set(item.id, item); continue; }
+    const s = (item.updatedAt ?? item.createdAt) - (prev.updatedAt ?? prev.createdAt);
+    if (s > 0 || (s === 0 && JSON.stringify(item) > JSON.stringify(prev))) byId.set(item.id, item);
+  }
+  return [...byId.values()];
 }
 
 export function cleanChildren(raw: unknown): ChildEntry[] {
@@ -70,7 +85,7 @@ export function cleanChildren(raw: unknown): ChildEntry[] {
       ...(finiteStamp(c.updatedAt) !== undefined ? { updatedAt: c.updatedAt } : {}),
     });
   }
-  return out;
+  return dedupeById(out);
 }
 
 export function cleanArchived(raw: unknown): ArchivedPerson[] {
@@ -95,7 +110,10 @@ export function cleanArchived(raw: unknown): ArchivedPerson[] {
     const key = record.name.toLowerCase();
     const at = out.findIndex((q) => q.name.toLowerCase() === key);
     if (at >= 0) {
-      if (record.archivedAt >= out[at].archivedAt) out[at] = record;
+      /* A tie on the archive stamp resolves by content (Round 4,
+       * RT4-H4 L-B): array order is the blob's accident, and the
+       * surfaces obey whichever row it put first. */
+      if (record.archivedAt > out[at].archivedAt || (record.archivedAt === out[at].archivedAt && JSON.stringify(record) > JSON.stringify(out[at]))) out[at] = record;
       continue;
     }
     out.push(record);

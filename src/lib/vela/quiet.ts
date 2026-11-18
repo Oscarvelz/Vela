@@ -50,7 +50,16 @@ export function cleanQuietMarks(raw: unknown): QuietMark[] {
       ...(finiteStamp(m.updatedAt) !== undefined ? { updatedAt: m.updatedAt } : {}),
     });
   }
-  return out.sort((a, b) => a.from.localeCompare(b.from));
+  /* One id seats one mark (Round 4, RT4-H6 B5): the later edit stamp
+   * wins a duplicate; a tie resolves by content. */
+  const byId = new Map<string, QuietMark>();
+  for (const m of out) {
+    const prev = byId.get(m.id);
+    if (!prev) { byId.set(m.id, m); continue; }
+    const s = (m.updatedAt ?? m.createdAt) - (prev.updatedAt ?? prev.createdAt);
+    if (s > 0 || (s === 0 && JSON.stringify(m) > JSON.stringify(prev))) byId.set(m.id, m);
+  }
+  return [...byId.values()].sort((a, b) => a.from.localeCompare(b.from));
 }
 
 function dayDiff(from: string, to: string) {

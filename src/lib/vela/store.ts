@@ -8,7 +8,7 @@ import type { BatchEntry } from "./batch";
 import { composedNote } from "./notes";
 import { renumber, sessionsSorted, type CompareMode } from "./stats";
 import { cleanMuted } from "./stories";
-import { cleanAnniversaries, cleanArchived, cleanChildren } from "./anniversaries";
+import { cleanAnniversaries, cleanArchived, cleanChildren, dedupeById } from "./anniversaries";
 import { cleanPeople, cleanProposals, mergePeople, newPersonId, newProposalId, reseatPersonId, reseatRecordId, PROPOSAL_TTL_MS, WIPE_COOLING_MS } from "./people";
 import { cleanQuietMarks, newQuietId } from "./quiet";
 import { cleanPregnancyTests, newTestId } from "./pregnancy";
@@ -90,7 +90,7 @@ function asSettings(raw: unknown, language: Lang): Settings {
     mode: s.mode === "day" ? "day" : "night",
     weekStart: s.weekStart === "sunday" ? "sunday" : "monday",
     discreet: Boolean(s.discreet),
-    autoLockMins: typeof s.autoLockMins === "number" && s.autoLockMins >= 0 ? s.autoLockMins : 5,
+    autoLockMins: typeof s.autoLockMins === "number" && Number.isFinite(s.autoLockMins) && s.autoLockMins >= 0 ? s.autoLockMins : 5,
     ratingStyle: s.ratingStyle === "star" || s.ratingStyle === "heart" ? s.ratingStyle : "flame",
     language: s.language === "es" ? "es" : s.language === "en" ? "en" : language,
     customPlaces: Array.isArray(s.customPlaces) ? s.customPlaces.filter((x) => typeof x === "string") : [],
@@ -440,15 +440,19 @@ export function journalFromUnknown(raw: unknown, language: Lang = readLang()): J
      * next merge — and a decided proposal could be executed a
      * second time from the loaded state. Each class is judged by
      * the same stamp basis its merge union uses. */
-    const liveSessions = sessions.filter((s) => !(deletedMap[s.id] >= stamp(s)));
-    const liveEncounters = encounters.filter((e) => !(deletedMap[e.id] >= stamp(e)));
+    /* One id seats one record at the gate too (Round 4, RT4-H6
+     * B5): duplicate session ids seated twice, and one deletion
+     * then removed both twins — and attachOrphans minted duplicate
+     * encounter ids from them. */
+    const liveSessions = dedupeById(sessions).filter((s) => !(deletedMap[s.id] >= stamp(s)));
+    const liveEncounters = dedupeById(encounters).filter((e) => !(deletedMap[e.id] >= stamp(e)));
     const housed = attachOrphans(liveSessions, liveEncounters, encounterCut);
     const cleanedPeople = cleanPeople(peopleRaw);
     const liveProposals = cleanProposals(proposalsSource, cleanedPeople).filter((p) => !(deletedMap[p.id] >= p.proposedAt));
     const liveQuiet = cleanQuietMarks(quietSource).filter((m) => !(deletedMap[m.id] >= (m.updatedAt ?? m.createdAt)));
     const liveTests = cleanPregnancyTests(testsSource).filter((t) => !(deletedMap[t.id] >= t.createdAt));
-    if (settings.anniversaries) settings.anniversaries = settings.anniversaries.filter((a) => !(deletedMap[a.id] >= a.createdAt));
-    if (settings.children) settings.children = settings.children.filter((c) => !(deletedMap[c.id] >= c.createdAt));
+    if (settings.anniversaries) settings.anniversaries = settings.anniversaries.filter((a) => !(deletedMap[a.id] >= (a.updatedAt ?? a.createdAt)));
+    if (settings.children) settings.children = settings.children.filter((c) => !(deletedMap[c.id] >= (c.updatedAt ?? c.createdAt)));
     /* A default naming nobody the roster holds is a ghost (Round 4,
      * RT4-H4 L-A): the merge cleared it while the gate kept it, so
      * the same journal read differently at the two doors. */
@@ -776,6 +780,11 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       if (gone && gone >= stamp(item)) continue;
       const prev = map.get(item.id);
       if (prev && stamp(prev) > stamp(item)) continue;
+      /* An exact stamp tie resolves by content, never by iteration
+       * order (Round 4, RT4-H6 B4): older/newer flip with the
+       * journals' own stamps, so an order-based winner made the
+       * merge non-commutative. */
+      if (prev && stamp(prev) === stamp(item) && JSON.stringify(item) <= JSON.stringify(prev)) continue;
       map.set(item.id, item);
     }
     return [...map.values()];
@@ -834,8 +843,12 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     const stampOf = (x: T) => x.updatedAt ?? x.createdAt ?? 0;
     for (const item of [...(a ?? []), ...(b ?? [])]) {
       // A tombstoned item never resurfaces through the union (re-hunt R1).
+      // The tombstone judges the item's EDIT stamp, as its own merge
+      // basis already did one line below (Round 4, RT4-H6 B6): judging
+      // by birth discarded a post-deletion edit for exactly the two
+      // classes whose edits are most deliberate.
       const goneAt = deleted[item.id] ?? 0;
-      if (goneAt > 0 && goneAt >= (item.createdAt ?? 0)) continue;
+      if (goneAt > 0 && goneAt >= stampOf(item)) continue;
       /* The wipe cuts TIME for the union classes too (Round 3, RT3-H1
        * B1): the tombstones above name only the ids the wiping device
        * held, so a divergent stale device's pre-wipe anniversary or
@@ -847,9 +860,10 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
        * by which journal was saved last (Round 3, RT3-H6 B2): an
        * unrelated later save on the other device used to revert the
        * edit wholesale. Unstamped copies fall back to their birth
-       * stamp; a tie keeps the newer side's copy, as before. */
+       * stamp; an exact tie resolves by content (Round 4), not by
+       * which side iterated last. */
       const prev = map.get(item.id);
-      if (!prev || stampOf(item) >= stampOf(prev)) map.set(item.id, item);
+      if (!prev || stampOf(item) > stampOf(prev) || (stampOf(item) === stampOf(prev) && JSON.stringify(item) > JSON.stringify(prev))) map.set(item.id, item);
     }
     return [...map.values()];
   };
@@ -958,7 +972,17 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       const byId = new Map<string, Proposal>();
       for (const p of [...(local.proposals ?? []), ...(remote.proposals ?? [])]) {
         const prev = byId.get(p.id);
-        if (!prev || (p.decidedAt ?? p.proposedAt) >= (prev.decidedAt ?? prev.proposedAt)) byId.set(p.id, p);
+        if (!prev) { byId.set(p.id, p); continue; }
+        const s = (p.decidedAt ?? p.proposedAt) - (prev.decidedAt ?? prev.proposedAt);
+        /* A stamp tie resolves by content (Round 4): a decided copy
+         * beats a pending one, then the greater serialization wins —
+         * identically in both argument orders, so a consent state
+         * can no longer diverge between devices. */
+        if (s > 0) byId.set(p.id, p);
+        else if (s === 0) {
+          const rank = (x: Proposal) => (x.state === "approved" ? 1 : 0);
+          if (rank(p) > rank(prev) || (rank(p) === rank(prev) && JSON.stringify(p) > JSON.stringify(prev))) byId.set(p.id, p);
+        }
       }
       /* The merge applies the gate's consent law too (RT2-H1 B3): an
        * approved proposal whose decider is none of the merged people
@@ -981,7 +1005,9 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
       const byId = new Map<string, QuietMark>();
       for (const m of [...(local.quietDays ?? []), ...(remote.quietDays ?? [])]) {
         const prev = byId.get(m.id);
-        if (!prev || (m.updatedAt ?? m.createdAt) >= (prev.updatedAt ?? prev.createdAt)) byId.set(m.id, m);
+        if (!prev) { byId.set(m.id, m); continue; }
+        const s = (m.updatedAt ?? m.createdAt) - (prev.updatedAt ?? prev.createdAt);
+        if (s > 0 || (s === 0 && JSON.stringify(m) > JSON.stringify(prev))) byId.set(m.id, m);
       }
       const merged = [...byId.values()].filter((m) => !(deleted[m.id] >= (m.updatedAt ?? m.createdAt)) && !(wipeStamp > 0 && m.createdAt <= wipeStamp));
       return { quietDays: merged };
@@ -990,7 +1016,16 @@ export function mergeJournals(local: Journal, remote: Journal): Journal {
     // other, so the union is the whole merge; a tombstone still wins.
     ...(() => {
       const byId = new Map<string, PregnancyTestEvent>();
-      for (const t of [...(local.pregnancyTests ?? []), ...(remote.pregnancyTests ?? [])]) byId.set(t.id, t);
+      /* The union reads stamps like every other class (Round 4,
+       * RT4-H3 B5): the second argument's copy used to win wholesale,
+       * so two devices settled on opposite results for the same test,
+       * and the same tombstone deleted it in one order and spared it
+       * in the other. Later birth stamp wins; a tie resolves by
+       * content. */
+      for (const t of [...(local.pregnancyTests ?? []), ...(remote.pregnancyTests ?? [])]) {
+        const prev = byId.get(t.id);
+        if (!prev || t.createdAt > prev.createdAt || (t.createdAt === prev.createdAt && JSON.stringify(t) > JSON.stringify(prev))) byId.set(t.id, t);
+      }
       const merged = [...byId.values()].filter((t) => !(deleted[t.id] >= t.createdAt) && !(wipeStamp > 0 && t.createdAt <= wipeStamp));
       return { pregnancyTests: cleanPregnancyTests(merged) };
     })(),
@@ -1167,18 +1202,20 @@ function attachOrphans(sessions: Session[], encounters: Encounter[], cut = 0) {
       continue;
     }
     const id = `eo-${session.id}`;
-    next.push({
-      id,
-      createdAt: Math.max(session.createdAt || 0, cut + 1),
-      updatedAt: Date.now(),
-      title: "",
-      startDate: session.date,
-      endDate: session.date,
-      partnerName: session.partnerName,
-      comment: "",
-      problems: [],
-    });
-    known.add(id);
+    if (!known.has(id)) {
+      next.push({
+        id,
+        createdAt: Math.max(session.createdAt || 0, cut + 1),
+        updatedAt: Date.now(),
+        title: "",
+        startDate: session.date,
+        endDate: session.date,
+        partnerName: session.partnerName,
+        comment: "",
+        problems: [],
+      });
+      known.add(id);
+    }
     session.encounterId = id;
   }
   return next;
@@ -2349,23 +2386,37 @@ export const useJournal = create<Store>((set, get) => {
       const journal = get().journal;
       if (!journal.profile || journal.settings.coupleMode) return;
       const now = stampNow(journal);
-      const owner: Person = {
-        id: "p-owner",
-        name: journal.profile.displayName || "Me",
-        role: "owner",
-        ...(journal.profile.speakAs ? { speakAs: journal.profile.speakAs } : {}),
-        ...(ownerPinHash ? { pin: ownerPinHash } : {}),
-        createdAt: now,
-        updatedAt: now,
-      };
-      const partner: Person = {
-        id: newPersonId(),
-        name: partnerName.trim(),
-        role: "partner",
-        ...(partnerPinHash ? { pin: partnerPinHash } : {}),
-        createdAt: now,
-        updatedAt: now,
-      };
+      /* Re-enabling re-seats the people who are already there
+       * (Round 4, RT4-H1 B5): disabling keeps the people and their
+       * voices, so a fresh partner record — new id, new PIN —
+       * orphaned her voice attributions and tracker ownership, and
+       * at the first sync the old record retook the seat and the
+       * merge tombstoned the new one. An existing record keeps its
+       * id, its birth, and its PIN unless a new one is handed over. */
+      const existing = journal.people ?? [];
+      const ownerPrev = existing.find((p) => p.role === "owner");
+      const owner: Person = ownerPrev
+        ? { ...ownerPrev, name: journal.profile.displayName || ownerPrev.name, ...(ownerPinHash ? { pin: ownerPinHash } : {}), updatedAt: now }
+        : {
+            id: "p-owner",
+            name: journal.profile.displayName || "Me",
+            role: "owner",
+            ...(journal.profile.speakAs ? { speakAs: journal.profile.speakAs } : {}),
+            ...(ownerPinHash ? { pin: ownerPinHash } : {}),
+            createdAt: now,
+            updatedAt: now,
+          };
+      const partnerPrev = existing.find((p) => p.role === "partner" && partnerKey(p.name) === partnerKey(partnerName.trim()));
+      const partner: Person = partnerPrev
+        ? { ...partnerPrev, ...(partnerPinHash ? { pin: partnerPinHash } : {}), updatedAt: now }
+        : {
+            id: newPersonId(),
+            name: partnerName.trim(),
+            role: "partner",
+            ...(partnerPinHash ? { pin: partnerPinHash } : {}),
+            createdAt: now,
+            updatedAt: now,
+          };
       // Her cycle trackers become hers in fact: bind by the same name matching
       // the app already uses to assign phases (followsPartner), never by guess.
       const key = partnerKey(partner.name);

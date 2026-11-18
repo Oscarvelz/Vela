@@ -540,5 +540,12 @@ export function cleanPregnancyTests(raw: unknown): PregnancyTestEvent[] {
       createdAt: finiteStamp(t.createdAt) ?? 0,
     });
   }
-  return out.sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
+  /* One id seats one test (Round 4, RT4-H6 B5): the later birth
+   * stamp wins a duplicate; a tie resolves by content. */
+  const byId = new Map<string, PregnancyTestEvent>();
+  for (const t of out) {
+    const prev = byId.get(t.id);
+    if (!prev || t.createdAt > prev.createdAt || (t.createdAt === prev.createdAt && JSON.stringify(t) > JSON.stringify(prev))) byId.set(t.id, t);
+  }
+  return [...byId.values()].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
 }

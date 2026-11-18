@@ -160,7 +160,16 @@ export function mergePeople(
   for (const p of [...a, ...b]) {
     if (deleted && (deleted[p.id] ?? 0) > 0 && (deleted[p.id] ?? 0) >= p.updatedAt) continue;
     const prev = byId.get(p.id);
-    if (!prev || p.updatedAt >= prev.updatedAt) byId.set(p.id, p);
+    if (!prev || p.updatedAt > prev.updatedAt) { byId.set(p.id, p); continue; }
+    if (p.updatedAt === prev.updatedAt) {
+      /* An exact tie resolves by content, never by argument order
+       * (Round 4, RT4-H6 B4): the displaced field in the convicted
+       * specimen was a PIN, so a copy carrying one beats one
+       * without; beyond that, the greater serialization wins —
+       * identically on both devices. */
+      const pinRank = (x: Person) => (x.pin ? 1 : 0);
+      if (pinRank(p) > pinRank(prev) || (pinRank(p) === pinRank(prev) && JSON.stringify(p) > JSON.stringify(prev))) byId.set(p.id, p);
+    }
   }
   return resolvePeople([...byId.values()]);
 }
@@ -243,5 +252,20 @@ export function cleanProposals(raw: unknown, people?: readonly { id: string }[])
       expiresAt,
     });
   }
-  return out;
+  /* One id seats one proposal (Round 4, RT4-H6 B5): duplicate ids
+   * passed every id-keyed gate and seated twice. The copy that knows
+   * more wins — decided over proposed, then the greater stamp, then
+   * content — as the merge union resolves them. */
+  const byId = new Map<string, Proposal>();
+  for (const p of out) {
+    const prev = byId.get(p.id);
+    if (!prev) { byId.set(p.id, p); continue; }
+    const s = (p.decidedAt ?? p.proposedAt) - (prev.decidedAt ?? prev.proposedAt);
+    if (s > 0) byId.set(p.id, p);
+    else if (s === 0) {
+      const rank = (x: Proposal) => (x.state === "approved" ? 1 : 0);
+      if (rank(p) > rank(prev) || (rank(p) === rank(prev) && JSON.stringify(p) > JSON.stringify(prev))) byId.set(p.id, p);
+    }
+  }
+  return [...byId.values()];
 }

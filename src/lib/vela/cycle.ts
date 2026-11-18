@@ -1,4 +1,4 @@
-import { addDays, isRealDate, parseDate } from "./dates";
+import { addDays, finiteStamp, isRealDate, parseDate } from "./dates";
 
 /**
  * Cycle engine. Everything here is pure and works on dates as "YYYY-MM-DD" strings in local time.
@@ -107,10 +107,14 @@ export function cleanCycle(raw: unknown): CycleSettings {
   const base = defaultCycle();
   if (!raw || typeof raw !== "object") return base;
   const value = raw as Partial<CycleSettings>;
-  const periodDays = clamp(typeof value.periodDays === "number" ? value.periodDays : base.periodDays, 2, 10);
-  const cycleDays = clamp(typeof value.cycleDays === "number" ? value.cycleDays : base.cycleDays, 21, 45);
-  const lutealDays = clamp(typeof value.lutealDays === "number" ? value.lutealDays : base.lutealDays, 10, 18);
-  const fertileDays = clamp(typeof value.fertileDays === "number" ? value.fertileDays : base.fertileDays, 3, 7);
+  /* Lengths must be finite before they are clamped (Round 4,
+   * RT4-H3 B7): NaN is a number, clamp passed it through, and
+   * cycleStats reported period=NaN. A non-finite length is the
+   * default, like a missing one. */
+  const periodDays = clamp(finiteStamp(value.periodDays) ?? base.periodDays, 2, 10);
+  const cycleDays = clamp(finiteStamp(value.cycleDays) ?? base.cycleDays, 21, 45);
+  const lutealDays = clamp(finiteStamp(value.lutealDays) ?? base.lutealDays, 10, 18);
+  const fertileDays = clamp(finiteStamp(value.fertileDays) ?? base.fertileDays, 3, 7);
   const starts = sortedStarts(Array.isArray(value.starts) ? value.starts.filter((item) => typeof item === "string") : []);
   return {
     enabled: Boolean(value.enabled),
@@ -145,7 +149,11 @@ function cleanReasons(raw: unknown, starts: string[]): Record<string, CycleReaso
     out[start] = {
       id: r.id as CycleReason["id"],
       ...(typeof r.note === "string" && r.note.trim() ? { note: r.note.trim().slice(0, 80) } : {}),
-      at: typeof r.at === "number" ? r.at : 0,
+      /* The testimony stamp is finite or it is nothing (Round 4,
+       * RT4-H6 B2): an Infinity `at` beat every honest dismissal in
+       * twin sharing and in mergeTracker, and stampNow never
+       * scanned reason stamps to outrank it. */
+      at: finiteStamp(r.at) ?? 0,
     };
   }
   return out;

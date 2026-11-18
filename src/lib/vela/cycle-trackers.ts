@@ -272,6 +272,11 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
   const ea = entries(a);
   const eb = entries(b);
   const keys = [...new Set([...ea.keys(), ...eb.keys(), ...Object.keys(a.stamps), ...Object.keys(b.stamps)])].sort();
+  /* The newer side — the copy touched last — is a property of the
+   * PAIR, not of the argument order: both devices compute the same
+   * newer side from the same two trackers. It breaks stamped ties
+   * (Round 3's mute law); only a FULL tie (same stamps, same
+   * updatedAt) falls through to content (Round 4). */
   const newerSide = b.updatedAt > a.updatedAt ? b : a;
   const starts: string[] = [];
   const ends: Record<string, string> = {};
@@ -304,12 +309,27 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
         try {
           const ra = (JSON.parse(va) as CycleReason).at ?? 0;
           const rb = (JSON.parse(vb) as CycleReason).at ?? 0;
-          value = ra !== rb ? (ra > rb ? va : vb) : newerSide === a ? va : vb;
+          /* A testimony tie falls to the newer side, then to
+           * content on a full tie (Round 4, RT4-H3 B6): never to
+           * which copy was passed first, or two devices merging in
+           * opposite orders hold different truths forever. */
+          value = ra !== rb ? (ra > rb ? va : vb) : a.updatedAt !== b.updatedAt ? (newerSide === a ? va : vb) : va >= vb ? va : vb;
         } catch {
-          value = newerSide === a ? va : vb;
+          value = a.updatedAt !== b.updatedAt ? (newerSide === a ? va : vb) : va >= vb ? va : vb;
         }
       } else value = va ?? vb;
-    } else value = (newerSide === a ? ea.get(key) : eb.get(key)) ?? ea.get(key) ?? eb.get(key);
+    } else if (key.startsWith("q:")) {
+      /* A stamped mute tie resolves by the newer side (Round 3's
+       * law): a content rule here would reinstate the one-way door,
+       * since "1" outranks "0" in every comparison. */
+      value = (newerSide === a ? ea.get(key) : eb.get(key)) ?? ea.get(key) ?? eb.get(key);
+    } else {
+      /* Equal stamps, non-reason entry: the newer side, then
+       * content on a full tie — identically on both devices. */
+      const va = ea.get(key);
+      const vb = eb.get(key);
+      value = va && vb ? (a.updatedAt !== b.updatedAt ? (newerSide === a ? va : vb) : va >= vb ? va : vb) : va ?? vb;
+    }
     if (value === undefined) continue;
     const date = key.slice(2);
     if (key.startsWith("q:")) muteAsks = value === "1";
@@ -329,7 +349,11 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
       }
     }
   }
-  const meta = b.metaAt > a.metaAt ? b : b.metaAt < a.metaAt ? a : newerSide;
+  /* A meta tie resolves by a content key too (Round 4): whose
+   * settings ride the merged tracker must not depend on argument
+   * order. */
+  const metaKey = (t: CycleTracker) => JSON.stringify([t.enabled, t.perspective, t.ownerId ?? "", t.partnerLink ?? "", t.partnerName ?? ""]);
+  const meta = b.metaAt > a.metaAt ? b : b.metaAt < a.metaAt ? a : metaKey(b) > metaKey(a) ? b : a;
   const merged = cleanTracker({ ...meta, id: a.id, starts, ends, days, reasons, stamps, muteReasonAsks: muteAsks });
   return { ...merged, updatedAt: Math.max(a.updatedAt, b.updatedAt), metaAt: Math.max(a.metaAt, b.metaAt) };
 }
@@ -361,7 +385,21 @@ export function mergeTrackerLists(newer: CycleTracker[], older: CycleTracker[], 
   const out = order
     .map((id) => byId.get(id)!)
     .filter((tracker) => !(deleted[`cycle:${tracker.id}`] && deleted[`cycle:${tracker.id}`] >= tracker.updatedAt));
-  if (out.length) return shareReasonsAcrossTwins(out).slice(0, MAX_TRACKERS);
+  if (out.length) {
+    const shared = shareReasonsAcrossTwins(out);
+    if (shared.length <= MAX_TRACKERS) return shared;
+    /* The cap selects deterministically (Round 4, RT4-H3 B1): the
+     * most recently active trackers survive, ties by id — the same
+     * eight on every device, in either argument order. The old
+     * slice amputated by list order, so each device cut the OTHER
+     * device's last tracker and the journals never converged. The
+     * caller (mergeJournals) tombstones what the cap leaves behind. */
+    const activity = (t: CycleTracker) => Math.max(t.updatedAt, t.metaAt, ...Object.values(t.stamps));
+    const survivors = new Set(
+      [...shared].sort((x, y) => activity(y) - activity(x) || (x.id < y.id ? -1 : 1)).slice(0, MAX_TRACKERS).map((t) => t.id),
+    );
+    return shared.filter((t) => survivors.has(t.id));
+  }
   const id = deleted[`cycle:${FIRST_TRACKER_ID}`] ? newTrackerId() : FIRST_TRACKER_ID;
   return [defaultTracker(id)];
 }
@@ -420,7 +458,13 @@ export function shareReasonsAcrossTwins(trackers: CycleTracker[]): CycleTracker[
       if (!candidates.length) continue;
       const winner = candidates.reduce((best, reason) => {
         if (reason.at !== best.at) return reason.at > best.at ? reason : best;
-        return reason.id === "dismissed" ? reason : best;
+        if ((reason.id === "dismissed") !== (best.id === "dismissed")) return reason.id === "dismissed" ? reason : best;
+        /* A full tie — same stamp, same standing — resolves by
+         * content, never by which twin was listed first (Round 4,
+         * RT4-H3 B3): the group order is a device's local accident. */
+        const rk = `${reason.id}:${reason.note ?? ""}`;
+        const bk = `${best.id}:${best.note ?? ""}`;
+        return rk > bk ? reason : best;
       });
       const stamp = Math.max(...group.map((tracker) => tracker.stamps[`r:${start}`] ?? 0));
       for (const tracker of group) {
