@@ -570,7 +570,8 @@ function numberValue(word: string) {
 }
 
 const DUR_NUM = "\\d+(?:[.,]\\d+)?|one|two|three|four|five|ten|fifteen|twenty|thirty|forty[- ]five|forty|sixty|ninety|un|una|uno|dos|tres|cuatro|cinco|diez|quince|veinte|treinta|cuarenta y cinco|cuarenta|sesenta|noventa|a couple of|a couple|couple of|un par de|an|a";
-const NOT_DURATION_AFTER = /^\s*(?:later|after|afterwards|before|ago|earlier|despues|antes|mas tarde|from now|de distancia|away|a day|per day|each day|al dia|por dia|drive|flight|trip|meeting|commute|walk|hike|ride)\b/;
+const NOT_DURATION_AFTER = /^\s*(?:later|after|afterwards|before|ago|earlier|despues|antes|mas tarde|from now|de distancia|away|a day|per day|each day|al dia|por dia|drive|flight|trip|meeting|commute|walk|hike|ride|movie|film|pelicula|class|clase|lesson|lecture|concert|concierto|show|nap|siesta)\b/;
+const SLEPT_BEFORE = /\b(?:slept|sleeping|sleep|durmio|dormi|durmiendo)\s*$/;
 const NOT_DURATION_BEFORE = /\b(?:hace|after|following|within|every|cada|despues de|tras|during|durante)\s+(?:(?:a|an|the|un|una|el|la)\s+)?$/;
 const WORK_BEFORE = /\b(?:works?|worked|working|trabaj\w+|shift|turno)\s*$/;
 
@@ -584,6 +585,9 @@ function findDuration(folded: string, blocked: Span[]): (Span & { mins: number }
     if (NOT_DURATION_BEFORE.test(folded.slice(Math.max(0, start - 24), start))) return;
     // "She works 8 hours a day" is a shift, not a session (RT-V2M M25).
     if (WORK_BEFORE.test(folded.slice(Math.max(0, start - 14), start))) return;
+    // "She finally slept 8 hours straight" is a night's sleep, not a
+    // session's length (Round 3, B3-10).
+    if (SLEPT_BEFORE.test(folded.slice(Math.max(0, start - 20), start))) return;
     candidates.push({ start, end, mins });
   };
   for (const m of matches(/\b(?:an |one |1 |una |1 )?hour and a half\b|\b(?:una )?hora y media\b|\b1\.5 ?(?:hours?|hrs?|horas?)\b/g, folded)) add(m, 90);
@@ -606,7 +610,7 @@ function findDuration(folded: string, blocked: Span[]): (Span & { mins: number }
   return { ...first, mins: Math.min(240, Math.max(5, first.mins)) };
 }
 
-const VERDICT_OBJECT_AFTER = /^\s+(?:traffic|pizza|weather|dinner|food|movie|film|room|car|dress|condom|quality|service|hotel|flight|trip|game|show|book|song|view|views|conversation|scenery|sunset|back pain|headache|toothache)\b/;
+const VERDICT_OBJECT_AFTER = /^\s+(?:traffic|pizza|weather|dinner|food|movie|film|room|car|dress|condom|quality|service|hotel|flight|trip|game|show|book|song|view|views|conversation|scenery|sunset|back pain|headache|toothache|news|score|exam|concert|class|grade|grades)\b/;
 function verdictAboutOtherThing(folded: string, h: Hit) {
   const before = folded.slice(Math.max(0, h.start - 20), h.start);
   const after = folded.slice(h.end, h.end + 24);
@@ -649,8 +653,8 @@ function ordinalRounds(folded: string, blocked: Span[]) {
     if (/\b(?:for|por)\s*$/.test(before)) continue;
     // A round OF something else — the fight, the match, the menu —
     // belongs to that event, not to the encounter (Round 2).
-    if (/^\s*(?:of|de|del)\s+(?:the\s+|la\s+|el\s+)?(?:\w+\s+)?(?:fight|match|game|partido|pelea|combate|juego)\b/.test(after)) continue;
-    if (/^\s*(?:on|en)\s+(?:the\s+|la\s+|el\s+)?(?:menu|list|page|carta)\b/.test(after)) continue;
+    if (/^\s*(?:of|de|del)\s+(?:the\s+|la\s+|el\s+)?(?:\w+\s+)?(?:fight|match|game|partido|pelea|combate|juego|tournament|torneo|playoffs|championship|campeonato|league|liga|season|temporada)\b/.test(after)) continue;
+    if (/^\s*(?:on|en)\s+(?:the\s+|la\s+|el\s+)?(?:menu|list|page|carta|table|mesa)\b/.test(after)) continue;
     if (/^\s*(?:(?:that|que)\s+)?(?:we|i|she|he|they|ever|in|this|that|que|nos|lo|la|me|en|this year|este)\b/.test(after) && !/^\s*(?:was|fue|felt|se sintio|estuvo|lasted|duro)\b/.test(after)) continue;
     const key = (m[1] ?? m[0].split(/\s+/).pop() ?? "").trim();
     const value = ORDINAL_VALUE[key] ?? 0;
@@ -665,13 +669,19 @@ function ordinalRounds(folded: string, blocked: Span[]) {
  * third person, a meal — never lends its numbers to the encounter
  * (RT-V2 B1, RT-V2M M8). A meal sentence that also carries the
  * encounter (its place, its method, its verb) is the encounter's own. */
-const FOREIGN_SUBJECT = /\b(her sister|his sister|her brother|his brother|her friend|his friend|her cousin|his cousin|su hermana|su hermano|la hermana|el hermano|su prima|su amiga|her mother|his mother|the team|el equipo)\b/;
+/* Round 3 (B3-4): determiner × relation, the same construction the
+ * pregnancy reader adopted — the phrase list ended at the mother and
+ * the sister while the aunt, the daughter and the parents lent their
+ * counts, their rounds and their aftermath freely. One vocabulary,
+ * every foreign-subject door (counts, the multi rule's feelings,
+ * the phantom filter's aftermath). */
+const FOREIGN_SUBJECT = /\b(?:(?:her|his|my|their|su|sus|la|el|una|un|the)\s+(?:sister|brother|mother|father|aunt|uncle|cousin|daughter|son|niece|nephew|friend|roommate|coworker|neighbor|parents|grandmother|grandfather|hermana|hermano|madre|padre|tia|tio|prima|primo|hija|hijo|sobrina|sobrino|amiga|amigo|vecina|vecino|padres)|the team|el equipo)\b/;
 const FOREIGN_FOOD = /\b(eaten|ate|eating|dinner|lunch|breakfast|brunch|comimos|cenamos|almorzamos|comiendo|cenando|comer|comida|restaurant|restaurante)\b/;
 const ENCOUNTER_SIGNAL = /\b(condom|condon|pill|pastilla|hotel|motel|bed|cama|shower|ducha|car|carro|couch|sofa|sex|sexo|love|hicimos|fuimos|tuvimos|did it|made love|hooked up|solo|alone)\b/;
 const TEST_WORDS = /\b(pregnancy tests?|pruebas? de embarazo|tests? de embarazo)\b/;
 /* A count spread over a span of days ("worked 3 times that week") is
  * a week's tally, not this encounter's rounds (Round 2). */
-const WEEK_FRAME = /\b(that week|this week|esa semana|esta semana|per week|por semana)\b/;
+const WEEK_FRAME = /\b(that week|this week|esa semana|esta semana|per week|por semana|that month|this month|ese mes|este mes|per month|por mes|that year|this year|ese ano|este ano)\b/;
 
 function sentenceSpans(folded: string): Span[] {
   const out: Span[] = [];
@@ -688,7 +698,7 @@ function foreignSentence(sentence: string) {
 /* An again/second-round phrase raises the count only when its own
  * sentence says the round HAPPENED — not when it was denied, nearly
  * happened, wanted, planned, or slept through (RT-V2 B2, RT-V2M M15). */
-const UNHAPPENED = /\b(never|didn'?t|did not|couldn'?t|could not|was no|there was no|no hubo|almost|casi|nearly|wanted|queria|quiso|quisimos|were going to|was going to|going to|ibamos a|pensamos|planned|too tired|cansad\w+|agotad\w+|fell asleep|se durmio|nos dormimos|quedamos dormidos|no pudimos|no se pudo)\b/;
+const UNHAPPENED = /\b(never|didn'?t|did not|couldn'?t|could not|was no|there was no|no hubo|almost|casi|nearly|wanted|queria|quiso|quisimos|were going to|was going to|going to|ibamos a|pensamos|planned|too tired|cansad\w+|agotad\w+|fell asleep|se durmio|nos dormimos|quedamos dormidos|no pudimos|no se pudo|weren'?t able|were not able|wasn'?t able|was not able|not able to)\b/;
 function roundHappened(folded: string, start: number, end: number) {
   const from = Math.max(folded.lastIndexOf(".", start - 1), folded.lastIndexOf(";", start - 1), folded.lastIndexOf("\n", start - 1), folded.lastIndexOf("!", start - 1), folded.lastIndexOf("?", start - 1)) + 1;
   const rest = folded.slice(end);
@@ -719,7 +729,10 @@ function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[];
   let correctionAt = -1;
   for (const m of matches(/\b(?:no wait|mejor dicho|correction|en realidad)\b/g, folded)) correctionAt = m.index ?? 0;
   const COUNTISH = /\b\d+\s*(?:times|veces|rounds|rondas)\b|\b(?:once|twice|thrice|una vez|dos veces|tres veces|cuatro veces|cinco veces|two times|three times|four times|five times|two rounds|three rounds)\b/;
-  for (const m of matches(/\bi mean\b/g, folded)) {
+  /* "actually" and "perdón" correct under the same two-sided law as
+   * "i mean" (Round 3, B3-7): the two readers' correction inventories
+   * had diverged, and the discarded count won by max here. */
+  for (const m of matches(/\b(?:i mean|actually|perdon)\b/g, folded)) {
     const at = m.index ?? 0;
     if (COUNTISH.test(folded.slice(0, at)) && COUNTISH.test(folded.slice(at + m[0].length))) correctionAt = Math.max(correctionAt, at);
   }
@@ -727,7 +740,7 @@ function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[];
   // Rounds of drinks are a bar's rounds, not the encounter's: a
   // rounds/rondas count governed by a drink noun lends nothing
   // (Round 2).
-  const foreignRound = (span: Span) => /(?:rounds|rondas)$/.test(folded.slice(span.start, span.end)) &&
+  const foreignRound = (span: Span) => /(?:round|ronda|rounds|rondas)$/.test(folded.slice(span.start, span.end)) &&
     /^\s+(?:of|de)\s+(?:drinks?|tragos?|bebidas?|cervezas?|beers?|shots?|copas?|vino|wine|whiskey|tequila|ron)\b/.test(folded.slice(span.end, span.end + 20));
   for (const m of matches(/\b(\d{1,3})\s*(?:times|veces|x|rounds|rondas)\b|\bx\s?(\d)\b/g, folded)) {
     const span = { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
@@ -808,7 +821,7 @@ function findCount(folded: string, blocked: Span[]): { n: number; spans: Span[];
   // A round phrase governed by another event — "round two of the
   // boxing match", "la segunda ronda del partido", "otra ronda de
   // tragos" — is that event's round, not the encounter's (Round 2).
-  const EVENT_AFTER = /^\s*(?:of|de|del)\s+(?:the\s+|la\s+|el\s+)?(?:\w+\s+)?(?:fight|match|game|partido|pelea|combate|juego)\b/;
+  const EVENT_AFTER = /^\s*(?:of|de|del)\s+(?:the\s+|la\s+|el\s+)?(?:\w+\s+)?(?:fight|match|game|partido|pelea|combate|juego|tournament|torneo|playoffs|championship|campeonato|league|liga|season|temporada)\b/;
   const againForeign = (span: Span) => foreignRound(span) || EVENT_AFTER.test(folded.slice(span.end, span.end + 26));
   let again = false;
   for (const m of matches(AGAIN_AT, folded)) {
@@ -861,7 +874,11 @@ function findNumericRatings(folded: string): Numeric[] {
     if (value > scale) continue;
     // A fraction scoring a named thing — "the movie was 10/10" —
     // scores that thing, not the night (Round 2).
-    if (/\b(?:movie|film|pelicula|hotel|restaurant|restaurante|game|partido|book|libro|dinner|cena|food|comida|show|service|servicio)\s+(?:was|fue|es|estuvo|era)?\s*$/.test(folded.slice(Math.max(0, (m.index ?? 0) - 26), m.index ?? 0))) continue;
+    if (/\b(?:movie|film|pelicula|hotel|restaurant|restaurante|game|partido|book|libro|dinner|cena|food|comida|show|service|servicio|concert|concierto)\s+(?:was|fue|es|estuvo|era)?\s*$/.test(folded.slice(Math.max(0, (m.index ?? 0) - 26), m.index ?? 0))) continue;
+    // A fraction standing after "on" is a date the words state —
+    // "we first met back on 10/10" is October 10, not a perfect
+    // score (Round 3, B3-3).
+    if (/\b(?:on|del|el)\s*$/.test(folded.slice(Math.max(0, (m.index ?? 0) - 12), m.index ?? 0))) continue;
     add(m.index ?? 0, (m.index ?? 0) + m[0].length, value, scale);
   }
   for (const m of matches(/\b([1-5](?:[.,]5)?)\s*(?:stars?|estrellas?|flames?|llamas?|hearts?|corazones)\b/g, folded)) {
@@ -869,7 +886,7 @@ function findNumericRatings(folded: string): Numeric[] {
     if (/^\s+(?:hotel|motel|resort|restaurant|room|place|bar|hostel|airbnb)\b/.test(folded.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 16))) continue;
     // …and so is a hotel the text GAVE its stars to: "we gave the
     // hotel 5 stars online" rates the hotel (Round 2).
-    if (/\b(?:gave|gives|given|rated|le di|le doy)\s+(?:the\s+|a\s+|el\s+|la\s+)?(?:hotel|motel|resort|restaurant|room|place|bar|movie|film)\s*$/.test(folded.slice(Math.max(0, (m.index ?? 0) - 26), m.index ?? 0))) continue;
+    if (/\b(?:gave|gives|given|rated|le di|le doy)\s+(?:the\s+|a\s+|el\s+|la\s+)?(?:hotel|motel|resort|restaurant|room|place|bar|movie|film|concert|concierto)\s*$/.test(folded.slice(Math.max(0, (m.index ?? 0) - 26), m.index ?? 0))) continue;
     add(m.index ?? 0, (m.index ?? 0) + m[0].length, Number(m[1].replace(",", ".")), 5);
   }
   for (const m of matches(/\b(?:rated?(?: it)?|rating|score|le doy|le di|un)\s+(10|[1-9])\b(?!\s*(?:\/|de|out|times|veces|min|hours?|horas?|am|pm|:|dias?|days?))/g, folded)) {
@@ -984,7 +1001,7 @@ function fuzzyHits(folded: string, fuzzy: ReturnType<typeof buildRules>["fuzzy"]
  * brand survives company elsewhere in the entry is judged in
  * readEntry, inside the marker's own clause (RT-V2 B10, RT-V2M M27). */
 const SOLO_STRONG = /\b(?:masturbat\w*|masturb\w*|jerk(?:ed|ing)? off|jack(?:ed|ing)? off|by myself|on my own|just me|solo (?:session|moment|time)|me toque|me hice una paja|una paja|por mi cuenta|yo sol[oa]|a solas|solit[oa]|en solitario|momento en solitario)\b/;
-const SOLO_RE = /\b(?:masturbat\w*|masturb\w*|jerk(?:ed|ing)? off|jack(?:ed|ing)? off|by myself|on my own|just me|solo (?:session|moment|time)|me toque|me hice una paja|una paja|por mi cuenta|yo sol[oa]|a solas|solit[oa]|en solitario|momento en solitario)\b|\bsol[oa]\b(?!\s*(?:una vez|un rato|un momento|un poco|una noche|esta noche|esta manana|esta tarde|ese dia|esa noche|hoy|ayer|anoche|con\b|quiero|queria|fue\b|era\b|para\b|porque\b|eso\b))|\balone\b/;
+const SOLO_RE = /\b(?:masturbat\w*|masturb\w*|jerk(?:ed|ing)? off|jack(?:ed|ing)? off|by myself|on my own|just me|solo (?:session|moment|time)|me toque|me hice una paja|una paja|por mi cuenta|yo sol[oa]|a solas|solit[oa]|en solitario|momento en solitario)\b|(?<!guitar |guitarra |piano |violin |bateria |saxo |trompeta |flauta )\bsol[oa]\b(?!\s*(?:una vez|un rato|un momento|un poco|una noche|esta noche|esta manana|esta tarde|ese dia|esa noche|hoy|ayer|anoche|con\b|quiero|queria|fue\b|era\b|para\b|porque\b|eso\b|de (?:guitarra|piano|violin|bateria|saxo|trompeta|flauta)))|\balone\b/;
 const WE_RE = /\b(?:we|us|our|together|nosotros|juntos|lo hicimos|hicimos|fuimos|estuvimos)\b/;
 /** Another person taking part, named or not: in a first-person encounter log, a she/her/he/him
  * on stage IS the partner ("she stimulated me", "I made her finish"). Solo is a conclusion of
@@ -1004,7 +1021,11 @@ const NAME_STOP = new Set(
     // second string alone, string + array coerced the array to a
     // comma-joined string, and the set held single characters —
     // the stop list was dead code until Round 2.)
-    "solo sola music musica love amor pleasure placer wine vino friends amigos everyone todos"
+    "solo sola music musica love amor pleasure placer wine vino friends amigos everyone todos " +
+    // Count words are not people either: "my parents visited twice"
+    // offered the word after the cue — "visited" — as a partner
+    // named Twice (Round 3, B3-11).
+    "once twice thrice times veces rounds rondas"
   ).split(" "),
 );
 
@@ -1050,7 +1071,7 @@ function partnerCandidates(text: string, folded: string, partners: string[], bub
       // partner cue ("with April") still names the person.
       if (MONTHS[f] !== undefined) {
         const before = folded.slice(Math.max(0, start - 30), start);
-        if (!PARTNER_CUE.test(before) && /(?:back in|in|since|until|from|during|last|next|en|de|desde|hasta)\s*$/.test(before)) continue;
+        if (!PARTNER_CUE.test(before) && /(?:back in|in|since|until|from|during|last|next|en|de|desde|hasta|after|before|tras)\s*$/.test(before)) continue;
       }
       if (FUNCTION_NAMES.has(f)) {
         const capitalised = /^[A-ZÁÉÍÓÚÑÜ]/.test(text.slice(start, start + 1));
@@ -1286,7 +1307,7 @@ function readEntry(text: string, title: string, now: Date, ctx: BatchContext, st
     if (/^\s+(?:party|fiesta)\b/.test(folded.slice(h.end, h.end + 10))) return true;
     // A meeting point is a came-from too: "met at the office, then
     // the hotel" happened at the hotel (Round 2).
-    return /\b(?:after|despues de|from|back from|coming back from|on the way (?:back )?from|left|leaving|met|meet|de vuelta de|volviendo de|volvimos de|regrese de|regresamos de|saliendo de|salimos de|day|dia|shift|turno|jornada)\b/.test(clause);
+    return /\b(?:after|despues de|from|back from|coming back from|on the way (?:back )?from|left|leaving|met|meet|meetings?|saw|seen|vimos|vieron|vi|de vuelta de|volviendo de|volvimos de|regrese de|regresamos de|saliendo de|salimos de|day|dia|shift|turno|jornada)\b/.test(clause);
   };
   // A place the text only came FROM files no place at all: falling
   // back to it put the encounter at the office after "a rough day at
@@ -1774,10 +1795,18 @@ export function parseBatch(text: string, now = new Date(), ctx: BatchContext = {
       // aftermath word, or a partner on stage with no all-day frame.
       if (entry.problems.length > 0) {
         const src = fold(entry.source);
-        const aftermath = /\b(afterwards?|despues|al terminar|down there|ahi abajo|entre las piernas)\b/.test(src);
-        const dayFrame = /\b(all day|todo el dia|all week|toda la semana)\b/.test(src);
-        const partnerSign = /\b(?:she|her|ella)\b/.test(src);
-        if (aftermath || (partnerSign && !dayFrame)) return true;
+        // The aftermath exception asks WHOSE problem it is (Round 3,
+        // B3-11): her sister's back pain, plus the word "afterwards",
+        // filed a session for the owner. A foreign sentence's problem
+        // is never this encounter's aftermath — the exception is
+        // skipped for it, while the partner fallback below still
+        // judges the line on its own terms.
+        if (!foreignSentence(src)) {
+          const aftermath = /\b(afterwards?|despues|al terminar|down there|ahi abajo|entre las piernas)\b/.test(src);
+          const dayFrame = /\b(all day|todo el dia|all week|toda la semana)\b/.test(src);
+          const partnerSign = /\b(?:she|her|ella)\b/.test(src);
+          if (aftermath || (partnerSign && !dayFrame)) return true;
+        }
       }
       return Boolean(entry.partnerName) && entry.dateStated;
     });
