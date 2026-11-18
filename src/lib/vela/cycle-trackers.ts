@@ -68,6 +68,11 @@ export function cleanTracker(raw: unknown, fallbackId = FIRST_TRACKER_ID): Cycle
     // Sorted so equal trackers serialise identically (merges compare by content).
     for (const [key, at] of Object.entries(value.stamps as Record<string, unknown>).sort(([x], [y]) => (x < y ? -1 : 1))) {
       if (/^[sedr]:/.test(key) && isRealDate(key.slice(2)) && num(at)) stamps[key] = at as number;
+      /* The mute's stamp rides its own key (Round 3, RT3-H3-01): the
+       * date-shaped whitelist above dropped "q:mute" at every load, so
+       * any post-reload merge met two unstamped copies and the legacy
+       * one-way-door branch revived a mute the user had lifted. */
+      else if (key === "q:mute" && num(at)) stamps[key] = at as number;
     }
   }
   const partnerLink = cycle.perspective === "partner" && typeof value.partnerLink === "string" ? value.partnerLink.trim().slice(0, 60) : "";
@@ -122,7 +127,12 @@ export function cleanTrackers(rawCycles: unknown, rawLegacy: unknown): CycleTrac
   // and where two devices merge (mergeJournals resolves the overflow with
   // tombstones and a notice) — never by silent amputation at load, which
   // cost real histories their trackers (prejudice hunt V3-10).
-  return out;
+  /* Gate-born twins share their testimony HERE (Round 3, RT3-H3-03):
+   * the merge shares it, but an import or a backup restore never passes
+   * through the merge — without this, a dismissed question returned at
+   * every restore until the next sync. Sharing is idempotent, so the
+   * gate's own stability is untouched. */
+  return shareReasonsAcrossTwins(out);
 }
 
 /** Valid selection: the remembered id if it still exists, else the first visible tracker, else the first. */
@@ -268,11 +278,13 @@ export function mergeTracker(a: CycleTracker, b: CycleTracker): CycleTracker {
     if (sa || sb) stamps[key] = Math.max(sa, sb);
     let value: string | undefined;
     if (sa !== sb) value = sa > sb ? ea.get(key) : eb.get(key);
-    else if (key.startsWith("q:")) {
+    else if (key.startsWith("q:") && sa === 0 && sb === 0) {
       // Never stamped on either side (legacy): a mute is a one-way
-      // door — if either copy carries it, it stands. Stamped copies
-      // resolve by the stamp law above, so a later un-mute in
-      // Settings still revokes it.
+      // door — if either copy carries it, it stands. The branch is
+      // scoped to UNSTAMPED copies (Round 3, RT3-H3-01): it used to
+      // fire on any tie, so two stamped copies that happened to share
+      // a stamp also fell into the one-way door and a deliberate
+      // un-mute lost. Stamped ties resolve by the newer side below.
       value = ea.get(key) === "1" || eb.get(key) === "1" ? "1" : "0";
     } else if (key.startsWith("r:")) {
       // A reason carries its own testimony stamp (`at`). When neither side
@@ -357,20 +369,39 @@ export function mergeTrackerLists(newer: CycleTracker[], older: CycleTracker[], 
  * dismissal standing on a tie — is written to every twin, with its
  * stamp, so the question is answered once, for the person. Reasons for
  * starts a twin does not carry stay home. */
-function personGroupKey(tracker: CycleTracker): string | null {
-  if (tracker.perspective === "self") return "self";
-  if (tracker.ownerId) return `id:${tracker.ownerId}`;
+/* Every key under which a tracker names its person. A tracker carries
+ * its name AND, once bound, its ownerId — both name the same person, so
+ * grouping reads both (Round 3, RT3-H3-03): the old single-key rule
+ * filed a bound tracker under its id alone, and testimony recorded on
+ * it after the binding never reached the name twin it was born with. */
+function personGroupKeys(tracker: CycleTracker): string[] {
+  if (tracker.perspective === "self") return ["self"];
+  const keys: string[] = [];
+  if (tracker.ownerId) keys.push(`id:${tracker.ownerId}`);
   const name = (tracker.partnerLink || tracker.partnerName || "").trim().toLocaleLowerCase();
-  return name ? `name:${name}` : null;
+  if (name) keys.push(`name:${name}`);
+  return keys;
 }
 
-function shareReasonsAcrossTwins(trackers: CycleTracker[]): CycleTracker[] {
-  const groups = new Map<string, CycleTracker[]>();
-  for (const tracker of trackers) {
-    const key = personGroupKey(tracker);
-    if (!key) continue;
-    groups.set(key, [...(groups.get(key) ?? []), tracker]);
-  }
+export function shareReasonsAcrossTwins(trackers: CycleTracker[]): CycleTracker[] {
+  /* Twins are the connected components of the key graph: two trackers
+   * are one person's when they share ANY key, directly or through a
+   * third that shares one with each. */
+  const parent = trackers.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const byKey = new Map<string, number>();
+  trackers.forEach((tracker, i) => {
+    for (const key of personGroupKeys(tracker)) {
+      const first = byKey.get(key);
+      if (first === undefined) byKey.set(key, i);
+      else parent[find(i)] = find(first);
+    }
+  });
+  const groups = new Map<number, CycleTracker[]>();
+  trackers.forEach((tracker, i) => {
+    const root = find(i);
+    groups.set(root, [...(groups.get(root) ?? []), tracker]);
+  });
   const changed = new Map<string, CycleTracker>();
   for (const group of groups.values()) {
     if (group.length < 2) continue;

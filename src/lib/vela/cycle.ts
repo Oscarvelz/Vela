@@ -126,7 +126,11 @@ export function cleanCycle(raw: unknown): CycleSettings {
     // Threaded through the gate like every persisted field (the 2.1.27 rule):
     // a field cleanCycle does not name would be stripped at every unlock.
     ...(Object.keys(cleanReasons(value.reasons, starts)).length ? { reasons: cleanReasons(value.reasons, starts) } : {}),
-    ...(value.muteReasonAsks ? { muteReasonAsks: true } : {}),
+    /* Carried in BOTH states (Round 3, RT3-H3-01): naming the field only
+     * when true made "Don't ask again" a one-way door at the cleaner —
+     * the Settings switch wrote false and this gate dropped it, so the
+     * stored true showed through every patch forever. */
+    ...(typeof value.muteReasonAsks === "boolean" ? { muteReasonAsks: value.muteReasonAsks } : {}),
   };
 }
 

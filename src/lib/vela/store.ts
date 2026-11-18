@@ -32,6 +32,7 @@ import {
   newTrackerId,
   restamp,
   selectedId,
+  shareReasonsAcrossTwins,
   trackerTombstone,
   type CycleTracker,
 } from "./cycle-trackers";
@@ -2066,11 +2067,16 @@ export const useJournal = create<Store>((set, get) => {
       // Her cycle trackers become hers in fact: bind by the same name matching
       // the app already uses to assign phases (followsPartner), never by guess.
       const key = partnerKey(partner.name);
-      const cycles = (journal.settings.cycles ?? []).map((tracker) =>
+      const bound = (journal.settings.cycles ?? []).map((tracker) =>
         !tracker.ownerId && (partnerKey(tracker.partnerLink || "") === key || partnerKey(tracker.partnerName || "") === key)
           ? { ...tracker, ownerId: partner.id, metaAt: now, updatedAt: now }
           : tracker,
       );
+      /* The binding is a testimony door too (Round 3, RT3-H3-03): the
+       * twins' shared answers are re-shared across the bound list, so
+       * a dismissal either twin carries covers both from this moment —
+       * grouping reads the name as well as the new id. */
+      const cycles = shareReasonsAcrossTwins(bound);
       commit({
         ...journal,
         people: [owner, partner],
@@ -2430,19 +2436,47 @@ export const useJournal = create<Store>((set, get) => {
              * undo (RT2-H3-03): entries the current tracker carries
              * that belong to NEITHER the before-state nor the change
              * itself are the other device's, and the undo does not own
-             * them — they stay. Everything the change touched returns
-             * to the before-state, and the restamp makes that win. */
-            const owned = new Set<string>([
-              ...snap.starts.map((d) => `s:${d}`),
-              ...Object.keys(snap.ends).map((d) => `e:${d}`),
-              ...Object.keys(snap.reasons ?? {}).map((d) => `r:${d}`),
-              ...after.starts.map((d) => `s:${d}`),
-              ...Object.keys(after.ends).map((d) => `e:${d}`),
-              ...Object.keys(after.reasons ?? {}).map((d) => `r:${d}`),
-            ]);
-            for (const d of cycle.starts) if (!owned.has(`s:${d}`) && !starts.includes(d)) starts.push(d);
-            for (const [d, e] of Object.entries(cycle.ends)) if (!owned.has(`e:${d}`)) ends[d] = e;
-            for (const [d, r] of Object.entries(cycle.reasons ?? {})) if (!owned.has(`r:${d}`)) reasons[d] = r;
+             * them — they stay. Round 3 (RT3-H3-02) completed the law
+             * at the VALUE level: ownership is decided per entry by
+             * comparing the current value with the value the change
+             * itself left. An entry the merge rewrote after the change
+             * — a changed reason, a removed start, a re-added one —
+             * differs from the after-state, and the undo does not own
+             * it either: it keeps the merged value. Only entries the
+             * merge left exactly as the change left them return to the
+             * before-state, and the restamp makes that win. */
+            const entriesOf = (src: { starts: string[]; ends: Record<string, string>; reasons?: Record<string, CycleReason> }) => {
+              const map = new Map<string, string>();
+              for (const d of src.starts) map.set(`s:${d}`, "1");
+              for (const [d, e] of Object.entries(src.ends)) map.set(`e:${d}`, e);
+              for (const [d, r] of Object.entries(src.reasons ?? {})) map.set(`r:${d}`, JSON.stringify(r));
+              return map;
+            };
+            const afterEntries = entriesOf(after);
+            const currentEntries = entriesOf(cycle);
+            const keys = new Set([...afterEntries.keys(), ...currentEntries.keys()]);
+            for (const d of snap.starts) keys.add(`s:${d}`);
+            for (const d of Object.keys(snap.ends)) keys.add(`e:${d}`);
+            for (const d of Object.keys(snap.reasons ?? {})) keys.add(`r:${d}`);
+            const keptStarts: string[] = [];
+            const keptEnds: Record<string, string> = {};
+            const keptReasons: Record<string, CycleReason> = {};
+            for (const key of keys) {
+              const mergeTouched = currentEntries.get(key) !== afterEntries.get(key);
+              const date = key.slice(2);
+              if (mergeTouched) {
+                const value = currentEntries.get(key);
+                if (value === undefined) continue;
+                if (key.startsWith("s:")) keptStarts.push(date);
+                else if (key.startsWith("e:")) keptEnds[date] = value;
+                else keptReasons[date] = JSON.parse(value) as CycleReason;
+              } else if (key.startsWith("s:")) {
+                if (snap.starts.includes(date)) keptStarts.push(date);
+              } else if (key.startsWith("e:")) {
+                if (snap.ends[date] !== undefined) keptEnds[date] = snap.ends[date];
+              } else if (snap.reasons?.[date]) keptReasons[date] = snap.reasons[date];
+            }
+            return cleanCycle({ ...cycle, starts: keptStarts, ends: keptEnds, reasons: keptReasons });
           }
           return cleanCycle({ ...cycle, starts, ends, reasons });
         },
